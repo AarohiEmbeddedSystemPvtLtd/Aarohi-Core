@@ -2430,18 +2430,9 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty("DisplayName", displayName, column: null);
 
         // Method: GetTableDisplayName
-        /// <summary>
-        /// Gets the table's display name from extended properties; falls back to the table name.
-        /// </summary>
-        /// <returns>Display name string.</returns>
         public string GetTableDisplayName()
             => Convert.ToString(ReadExtendedProperty("DisplayName", column: null)) ?? Table;
 
-        // Method: RemoveTableDisplayName
-        /// <summary>
-        /// Removes the table-level "DisplayName" extended property (no-op if absent).
-        /// </summary>
-        /// <returns><c>true</c> on success.</returns>
         public bool RemoveTableDisplayName()
             => DropExtendedProperty("DisplayName", column: null);
 
@@ -2619,24 +2610,41 @@ FROM sys.fn_listextendedproperty
         #endregion
 
         #region DataGridShow Setters/Getters
-        // Method: SetColumnFormat
-        /// <summary>
-        /// Sets a column's display format hint (extended property "Format").
-        /// </summary>
-        /// <param name="column">Column name.</param>
-        /// <param name="format">Format string (e.g., "N2", "P1", "yyyy-MM-dd HH:mm").</param>
-        /// <returns><c>true</c> on success.</returns>
         public bool SetShowInDataGrid(string column, bool value)
             => UpsertExtendedProperty("DatagridShow", value, column);
 
-        // Method: GetColumnFormat
-        /// <summary>
-        /// Gets a column's display format hint (extended property "Format").
-        /// </summary>
-        /// <param name="column">Column name.</param>
-        /// <returns>Format string or <c>null</c> if not set.</returns>
         public bool? GetShowInDataGrid(string column)
             => Convert.ToBoolean(ReadExtendedProperty("DatagridShow", column));
+
+        #endregion
+
+        #region DefaultUnit Setters/Getters
+
+        public bool SetDefaultUnit(string column, string? value)
+            => UpsertExtendedProperty("DefaultUnit", value ?? string.Empty, column);
+
+        public string GetDefaultUnit(string column)
+            => Convert.ToString(ReadExtendedProperty("DefaultUnit", column)) ?? string.Empty;
+
+        #endregion
+
+        #region InputUnit Setters/Getters
+
+        public bool SetInputUnit(string column, string? value)
+            => UpsertExtendedProperty("InputUnit", value ?? string.Empty, column);
+
+        public string GetInputUnit(string column)
+            => Convert.ToString(ReadExtendedProperty("InputUnit", column)) ?? string.Empty;
+
+        #endregion
+
+        #region LastUsedUnit Setters/Getters
+
+        public bool SetLastUsedUnit(string column, string? value)
+            => UpsertExtendedProperty("LastUsedUnit", value ?? string.Empty, column);
+
+        public string GetLastUsedUnit(string column)
+            => Convert.ToString(ReadExtendedProperty("LastUsedUnit", column)) ?? string.Empty;
 
         #endregion
 
@@ -2716,6 +2724,8 @@ SELECT
     xp.DisplayName,
     xp.[Description],
     xp.[DefaultUnit],
+    xp.[InputUnit],
+    xp.[LastUsedUnit],
     xp.[Format],
     xp.[Parameter],
     xp.[Order],
@@ -2769,6 +2779,8 @@ OUTER APPLY (
         MAX(CASE WHEN ep.name='DisplayName' THEN CAST(ep.value AS nvarchar(256)) END) AS DisplayName,
         MAX(CASE WHEN ep.name='Description' THEN CAST(ep.value AS nvarchar(max)) END) AS [Description],
         MAX(CASE WHEN ep.name='DefaultUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [DefaultUnit],
+        MAX(CASE WHEN ep.name='InputUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [InputUnit],
+        MAX(CASE WHEN ep.name='LastUsedUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [LastUsedUnit],
         MAX(CASE WHEN ep.name='Format' THEN CAST(ep.value AS nvarchar(64)) END) AS [Format],
         MAX(CASE WHEN ep.name='Parameter' THEN CAST(ep.value AS nvarchar(256)) END) AS [Parameter],
         MAX(TRY_CAST(CASE WHEN ep.name='Order' THEN ep.value END AS int)) AS [Order],
@@ -2832,6 +2844,8 @@ ORDER BY c.column_id;";
                 DisplayName = rd["DisplayName"] as string,
                 Description = rd["Description"] as string,
                 DefaultUnit = rd["DefaultUnit"] as string,
+                InputUnit = rd["InputUnit"] as string,
+                LastUsedUnit = rd["LastUsedUnit"] as string,
                 Format = rd["Format"] as string,
                 Parameter = rd["Parameter"] as string,
                 Order = rd["Order"] as int?,
@@ -3287,6 +3301,8 @@ ORDER BY c.column_id;", cn);
             public string? Description { get; set; }
             public string? Unit { get; set; }
             public string? DefaultUnit { get; set; }
+            public string? InputUnit { get; set; }
+            public string? LastUsedUnit { get; set; }
             public bool? DatagridShow { get; set; }
             public bool? HideInCrudForm { get; set; }
             public string? Format { get; set; }
