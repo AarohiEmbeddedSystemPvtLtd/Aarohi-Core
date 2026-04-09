@@ -41,9 +41,7 @@
 	  <Compile Update="Classes\ExtendedDropDownList.cs">
 	    <SubType>Component</SubType>
 	  </Compile>
-	  <Compile Update="Classes\ExtendedTextBox.cs">
-	    <SubType>Component</SubType>
-	  </Compile>
+	  <Compile Update="Classes\ExtendedTextBox.cs" />
 	  <Compile Update="SQL\FormSqlConnectionManager.cs">
 	    <SubType>Form</SubType>
 	  </Compile>

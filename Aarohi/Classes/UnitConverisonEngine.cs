@@ -1,5 +1,6 @@
 ﻿using NCalc;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.Linq;
@@ -173,29 +174,29 @@ namespace Aarohi.Classes
         // ✅ NEW: get unit from parameter mapping table
         public static string GetUnitFromParameter(string parameter)
         {
+            var units = GetUnitsFromParameter(parameter);
+            return units.Count > 0 ? units[0] : string.Empty;
+        }
+
+        public static List<string> GetUnitsFromParameter(string parameter)
+        {
             if (string.IsNullOrWhiteSpace(parameter))
-                return string.Empty;
+                return new List<string>();
 
             EnsureParameterMappingReady();
 
             string key = parameter.Trim();
 
-            // Find all matches (case-insensitive)
-            var matches = dtParameterUnitMapping!.AsEnumerable()
+            return dtParameterUnitMapping!.AsEnumerable()
                 .Where(r => StrEq(r[sParameterCol], key))
-                .Select(r => Convert.ToString(r[sUnitsCol])?.Trim())
+                .Select(r => Convert.ToString(r[sUnitsCol]))
                 .Where(u => !string.IsNullOrWhiteSpace(u))
+                .SelectMany(u => u!
+                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
-            if (matches.Count == 0)
-                return string.Empty;
-
-            if (matches.Count > 1)
-                throw new InvalidOperationException(
-                    $"Multiple unit mappings found for parameter '{parameter}'. Units: {string.Join(", ", matches)}");
-
-            return matches[0]!;
         }
 
         private static void EnsureMappingReady()

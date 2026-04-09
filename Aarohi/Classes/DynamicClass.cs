@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -961,47 +962,113 @@ FROM @Actions;";
         /// <param name="top">Optional TOP N limit.</param>
         /// <param name="orderBy">Optional ORDER BY clause (without the keyword).</param>
         /// <returns>A <see cref="DataTable"/> with results; can be empty but not null.</returns>
-        public DataTable? Select(string? whereSql = null, IDictionary<string, object?>? parameters = null, int? top = null, string? orderBy = null, bool DisplayName = true)
-    => SafeExecute("SELECT", extras =>
+        public DataTable? Select(
+    string? whereSql = null,
+    IDictionary<string, object?>? parameters = null,
+    int? top = null,
+    string? orderBy = null,
+    bool DisplayName = true)
+=> SafeExecute("SELECT", extras =>
+{
+    EnsureIdent(Schema);
+    EnsureIdent(Table);
+
+    var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{Table}]"
+            + (string.IsNullOrWhiteSpace(whereSql) ? "" : " WHERE " + whereSql)
+            + (string.IsNullOrWhiteSpace(orderBy) ? "" : " ORDER BY " + orderBy);
+
+    using var cn = Open();
+    using var da = new SqlDataAdapter(sql, cn);
+
+    if (parameters != null)
     {
-        EnsureIdent(Schema);
-        EnsureIdent(Table);
+        da.SelectCommand!.Parameters.Clear();
 
-        var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{Table}]"
-                + (string.IsNullOrWhiteSpace(whereSql) ? "" : " WHERE " + whereSql)
-                + (string.IsNullOrWhiteSpace(orderBy) ? "" : " ORDER BY " + orderBy);
-
-        using var cn = Open();
-        using var da = new SqlDataAdapter(sql, cn);
-
-        if (parameters != null)
+        foreach (var kv in parameters)
         {
-            da.SelectCommand!.Parameters.Clear();
-            foreach (var kv in parameters)
+            var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
+            da.SelectCommand.Parameters.AddWithValue(name, kv.Value ?? DBNull.Value);
+        }
+    }
+
+    AddCommonExtras(extras,
+        ("sql", sql),
+        ("where", whereSql ?? ""),
+        ("params", parameters ?? new Dictionary<string, object?>()));
+
+    var dt = new DataTable();
+    da.Fill(dt);
+
+    dt = ReorderColumnsByMetadataOrder(dt);
+
+    var formats = GetFormatsFromMetadata();
+    dt = ApplyFormats(dt, formats);
+
+    if (DisplayName)
+        dt = ApplyDisplayNames(dt);
+
+    return dt;
+});
+
+        private Dictionary<string, string> GetFormatsFromMetadata()
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in GetColumns())
             {
-                var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-                var p = da.SelectCommand.Parameters.Add(name, SqlDbType.NVarChar);
-                p.Value = kv.Value ?? DBNull.Value;
+                var format = GetColumnProperty("Format", col.Name)?.ToString();
+
+                if (!string.IsNullOrWhiteSpace(format))
+                    dict[col.Name] = format;
+            }
+
+            return dict;
+        }
+
+        private object FormatValue(object value, string? format)
+        {
+            if (value == null || value == DBNull.Value || string.IsNullOrWhiteSpace(format))
+                return value;
+
+            try
+            {
+                return string.Format(CultureInfo.InvariantCulture, "{0:" + format + "}", value);
+            }
+            catch
+            {
+                return value;
             }
         }
 
-        AddCommonExtras(extras, ("sql", sql), ("where", whereSql ?? ""), ("params", parameters ?? new Dictionary<string, object?>()));
-
-        var dt = new DataTable();
-        da.Fill(dt);
-
-        dt = ReorderColumnsByMetadataOrder(dt);
-
-        if (DisplayName)
+        private DataTable ApplyFormats(DataTable source, Dictionary<string, string> columnFormats)
         {
-            dt = ApplyDisplayNames(dt);
+            var result = new DataTable();
+
+            foreach (DataColumn col in source.Columns)
+            {
+                if (columnFormats.ContainsKey(col.ColumnName))
+                    result.Columns.Add(col.ColumnName, typeof(string));
+                else
+                    result.Columns.Add(col.ColumnName, col.DataType);
+            }
+
+            foreach (DataRow row in source.Rows)
+            {
+                var newRow = result.NewRow();
+
+                foreach (DataColumn col in source.Columns)
+                {
+                    if (columnFormats.TryGetValue(col.ColumnName, out var format))
+                        newRow[col.ColumnName] = FormatValue(row[col], format) ?? DBNull.Value;
+                    else
+                        newRow[col.ColumnName] = row[col];
+                }
+
+                result.Rows.Add(newRow);
+            }
+
+            return result;
         }
-
-        return dt;
-    });
-
-
-
         public string[] GetColumnValues(
     string columnName,
     string? whereSql = null,
