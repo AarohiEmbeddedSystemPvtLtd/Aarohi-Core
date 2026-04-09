@@ -5,7 +5,7 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.11</Version>
+		<Version>1.0.14.12</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<Description>Test Screen Designer.</Description>

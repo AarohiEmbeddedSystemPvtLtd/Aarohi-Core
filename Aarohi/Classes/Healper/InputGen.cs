@@ -18,12 +18,6 @@ namespace Aarohi.Classes.Healper
             ExtendedTextBox = 1
         }
 
-        public enum DropDownInputMode
-        {
-            ComboBox = 0,
-            ExtendedDropDownList = 1
-        }
-
         public sealed class InputTypeInfo
         {
             public string BaseType = "varchar";
@@ -50,7 +44,6 @@ namespace Aarohi.Classes.Healper
             public bool Required;
             public InputTypeInfo? TypeInfo;
             public Color OriginalBackColor;
-            public Color? OriginalFillColor;
             public object? OriginalTag;
             public string Parameter = string.Empty;
             public string Format = string.Empty;
@@ -75,12 +68,10 @@ namespace Aarohi.Classes.Healper
             public IReadOnlyDictionary<string, Control> Inputs => _inputs;
 
             public TextInputMode TextMode { get; set; }
-            public DropDownInputMode DropDownMode { get; set; }
 
             internal Context(
                 ContainerControl container,
-                TextInputMode textMode = TextInputMode.ExtendedTextBox,
-                DropDownInputMode dropDownMode = DropDownInputMode.ExtendedDropDownList)
+                TextInputMode textMode = TextInputMode.ExtendedTextBox)
             {
                 _ep = new ErrorProvider
                 {
@@ -89,7 +80,6 @@ namespace Aarohi.Classes.Healper
                 };
 
                 TextMode = textMode;
-                DropDownMode = dropDownMode;
             }
 
             #region Lifetime
@@ -129,12 +119,6 @@ namespace Aarohi.Classes.Healper
                 return false;
             }
 
-            private static Color? GetFillColorIfAny(Control ctrl)
-            {
-                if (ctrl is ExtendedDropDownList ddl) return ddl.FillColor;
-                return null;
-            }
-
             private static string GetControlValueText(Control c)
             {
                 switch (c)
@@ -142,12 +126,10 @@ namespace Aarohi.Classes.Healper
                     case ExtendedTextBox etb:
                         return (etb.LeftText ?? string.Empty).Trim();
 
-                    case ExtendedDropDownList ddl:
-                        return (ddl.Value ?? ddl.Text ?? string.Empty).Trim();
-
                     case ComboBox cb:
                         if (cb.SelectedValue != null && cb.SelectedValue != DBNull.Value)
                             return Convert.ToString(cb.SelectedValue, CultureInfo.InvariantCulture)?.Trim() ?? string.Empty;
+
                         return (cb.SelectedItem?.ToString() ?? cb.Text ?? string.Empty).Trim();
 
                     default:
@@ -158,28 +140,21 @@ namespace Aarohi.Classes.Healper
             private static int FindItemIndex(ComboBox cb, string value)
             {
                 value = (value ?? string.Empty).Trim();
+
                 for (int i = 0; i < cb.Items.Count; i++)
                 {
                     if (string.Equals(cb.Items[i]?.ToString()?.Trim(), value, StringComparison.OrdinalIgnoreCase))
                         return i;
                 }
-                return -1;
-            }
 
-            private static int FindItemIndex(ExtendedDropDownList ddl, string value)
-            {
-                value = (value ?? string.Empty).Trim();
-                for (int i = 0; i < ddl.Items.Count; i++)
-                {
-                    if (string.Equals(ddl.Items[i]?.ToString()?.Trim(), value, StringComparison.OrdinalIgnoreCase))
-                        return i;
-                }
                 return -1;
             }
 
             private static string SafeToText(object? value)
             {
-                if (value == null || value == DBNull.Value) return string.Empty;
+                if (value == null || value == DBNull.Value)
+                    return string.Empty;
+
                 return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
             }
 
@@ -207,8 +182,7 @@ namespace Aarohi.Classes.Healper
                     }
                     catch
                     {
-                        // Keep the generator resilient. If parameter mapping is missing,
-                        // the control still gets created and behaves like a normal textbox.
+                        // Keep control creation resilient even if mapping is missing.
                     }
                 }
 
@@ -272,7 +246,6 @@ namespace Aarohi.Classes.Healper
                         ? ParseSqlType(dataType)
                         : null,
                     OriginalBackColor = ctrl.BackColor,
-                    OriginalFillColor = GetFillColorIfAny(ctrl),
                     OriginalTag = ctrl.Tag,
                     Unit = unit ?? string.Empty,
                     Parameter = parameter ?? string.Empty,
@@ -295,11 +268,6 @@ namespace Aarohi.Classes.Healper
                     AttachTextBoxNotify(tb);
                     ValidateControl(tb);
                 }
-                else if (ctrl is ExtendedDropDownList ddl)
-                {
-                    AttachDropDownNotify(ddl);
-                    ValidateControl(ddl);
-                }
                 else if (ctrl is ComboBox cb)
                 {
                     AttachComboNotify(cb);
@@ -316,6 +284,7 @@ namespace Aarohi.Classes.Healper
             private void GenericControl_TextChanged(object? sender, EventArgs e)
             {
                 if (SuppressChange || sender is not Control ctrl) return;
+
                 ValidateControl(ctrl);
                 NotifyChanged(ctrl);
             }
@@ -332,8 +301,8 @@ namespace Aarohi.Classes.Healper
             public ComboBox? GetComboBox(string table, string col) =>
                 _inputs.TryGetValue(K(table, col), out var c) ? c as ComboBox : null;
 
-            public ExtendedDropDownList? GetDropDown(string table, string col) =>
-                _inputs.TryGetValue(K(table, col), out var c) ? c as ExtendedDropDownList : null;
+            public ComboBox? GetDropDown(string table, string col) =>
+                _inputs.TryGetValue(K(table, col), out var c) ? c as ComboBox : null;
 
             public Control? GetTextInput(string table, string col)
             {
@@ -344,7 +313,7 @@ namespace Aarohi.Classes.Healper
             public Control? GetDropDownInput(string table, string col)
             {
                 var c = GetControl(table, col);
-                return c is ComboBox || c is ExtendedDropDownList || c is ExtendedTextBox ? c : null;
+                return c is ComboBox || c is ExtendedTextBox ? c : null;
             }
 
             #endregion
@@ -367,11 +336,6 @@ namespace Aarohi.Classes.Healper
                         tb.TextChanged -= TextBox_TextChanged;
                         tb.Validating -= TextBox_Validating;
                         tb.KeyPress -= TextBox_KeyPress_ByType;
-                        break;
-
-                    case ExtendedDropDownList ddl:
-                        ddl.SelectedIndexChanged -= DropDown_SelectedIndexChanged;
-                        ddl.CustomTextChanged -= DropDown_CustomTextChanged;
                         break;
 
                     case ComboBox cb:
@@ -462,29 +426,6 @@ namespace Aarohi.Classes.Healper
                     ValidateTypeOnly(tb);
             }
 
-            private void AttachDropDownNotify(ExtendedDropDownList ddl)
-            {
-                ddl.SelectedIndexChanged -= DropDown_SelectedIndexChanged;
-                ddl.SelectedIndexChanged += DropDown_SelectedIndexChanged;
-
-                ddl.CustomTextChanged -= DropDown_CustomTextChanged;
-                ddl.CustomTextChanged += DropDown_CustomTextChanged;
-            }
-
-            private void DropDown_SelectedIndexChanged(object? sender, EventArgs e)
-            {
-                if (SuppressChange || sender is not ExtendedDropDownList ddl) return;
-                ValidateControl(ddl);
-                NotifyChanged(ddl);
-            }
-
-            private void DropDown_CustomTextChanged(object? sender, EventArgs e)
-            {
-                if (SuppressChange || sender is not ExtendedDropDownList ddl) return;
-                ValidateControl(ddl);
-                NotifyChanged(ddl);
-            }
-
             private void AttachComboNotify(ComboBox cb)
             {
                 cb.SelectedIndexChanged -= ComboBox_SelectedIndexChanged;
@@ -497,6 +438,7 @@ namespace Aarohi.Classes.Healper
             private void ComboBox_SelectedIndexChanged(object? sender, EventArgs e)
             {
                 if (SuppressChange || sender is not ComboBox cb) return;
+
                 ValidateControl(cb);
                 NotifyChanged(cb);
             }
@@ -504,6 +446,7 @@ namespace Aarohi.Classes.Healper
             private void ComboBox_TextChanged(object? sender, EventArgs e)
             {
                 if (SuppressChange || sender is not ComboBox cb) return;
+
                 ValidateControl(cb);
                 NotifyChanged(cb);
             }
@@ -568,20 +511,28 @@ namespace Aarohi.Classes.Healper
 
                 string t = NormalizeType(meta.TypeInfo.BaseType);
 
-                if (char.IsControl(e.KeyChar)) return;
+                if (char.IsControl(e.KeyChar))
+                    return;
 
                 if (IsIntegerType(t))
                 {
-                    if (char.IsDigit(e.KeyChar)) return;
-                    if (e.KeyChar == '-' && tb.SelectionStart == 0 && !tb.Text.Contains("-")) return;
+                    if (char.IsDigit(e.KeyChar))
+                        return;
+
+                    if (e.KeyChar == '-' && tb.SelectionStart == 0 && !tb.Text.Contains("-"))
+                        return;
+
                     e.Handled = true;
                     return;
                 }
 
                 if (IsDecimalType(t))
                 {
-                    if (char.IsDigit(e.KeyChar)) return;
-                    if (e.KeyChar == '-' && tb.SelectionStart == 0 && !tb.Text.Contains("-")) return;
+                    if (char.IsDigit(e.KeyChar))
+                        return;
+
+                    if (e.KeyChar == '-' && tb.SelectionStart == 0 && !tb.Text.Contains("-"))
+                        return;
 
                     char decimalSeparator = '.';
                     if (e.KeyChar == decimalSeparator)
@@ -591,6 +542,7 @@ namespace Aarohi.Classes.Healper
                             e.Handled = true;
                             return;
                         }
+
                         return;
                     }
 
@@ -645,8 +597,11 @@ namespace Aarohi.Classes.Healper
                 string raw = GetControlValueText(ctrl);
                 if (string.IsNullOrWhiteSpace(raw))
                 {
-                    if (meta.Required) MarkInvalid(ctrl, "Required");
-                    else ClearInvalid(ctrl);
+                    if (meta.Required)
+                        MarkInvalid(ctrl, "Required");
+                    else
+                        ClearInvalid(ctrl);
+
                     return;
                 }
 
@@ -658,6 +613,7 @@ namespace Aarohi.Classes.Healper
                         MarkInvalid(ctrl, msg);
                     else
                         ClearInvalid(ctrl);
+
                     return;
                 }
 
@@ -667,6 +623,7 @@ namespace Aarohi.Classes.Healper
                         MarkInvalid(ctrl, msg);
                     else
                         ClearInvalid(ctrl);
+
                     return;
                 }
 
@@ -676,6 +633,7 @@ namespace Aarohi.Classes.Healper
                         MarkInvalid(ctrl, "Enter true/false or 1/0");
                     else
                         ClearInvalid(ctrl);
+
                     return;
                 }
 
@@ -690,6 +648,7 @@ namespace Aarohi.Classes.Healper
                     {
                         ClearInvalid(ctrl);
                     }
+
                     return;
                 }
 
@@ -816,29 +775,18 @@ namespace Aarohi.Classes.Healper
 
             private void ApplyInvalidAppearance(Control c)
             {
-                if (c is ExtendedDropDownList ddl)
-                {
-                    ddl.FillColor = Color.MistyRose;
-                    return;
-                }
-
                 c.BackColor = Color.MistyRose;
             }
 
             private void RestoreOriginalAppearance(Control c, FieldMeta m)
             {
-                if (c is ExtendedDropDownList ddl)
-                {
-                    ddl.FillColor = m.OriginalFillColor ?? Color.White;
-                    return;
-                }
-
                 c.BackColor = m.OriginalBackColor;
             }
 
             private void MarkInvalid(Control c, string message)
             {
                 if (!TryGetMeta(c, out _)) return;
+
                 _ep.SetError(c, message ?? "Invalid");
                 ApplyInvalidAppearance(c);
             }
@@ -846,6 +794,7 @@ namespace Aarohi.Classes.Healper
             private void ClearInvalid(Control c)
             {
                 if (!TryGetMeta(c, out var meta)) return;
+
                 _ep.SetError(c, string.Empty);
                 RestoreOriginalAppearance(c, meta);
             }
@@ -1067,15 +1016,11 @@ namespace Aarohi.Classes.Healper
                             else
                             {
                                 int idx = FindItemIndex(cb, newVal);
-                                if (idx >= 0) cb.SelectedIndex = idx;
-                                else cb.Text = newVal;
+                                if (idx >= 0)
+                                    cb.SelectedIndex = idx;
+                                else
+                                    cb.Text = newVal;
                             }
-                            break;
-
-                        case ExtendedDropDownList ddl:
-                            int ddlIndex = FindItemIndex(ddl, newVal);
-                            ddl.SelectedIndex = ddlIndex;
-                            if (ddlIndex < 0) ddl.Text = newVal;
                             break;
 
                         case ExtendedTextBox etb:
@@ -1109,9 +1054,6 @@ namespace Aarohi.Classes.Healper
                 if (ctrl is TextBox tb)
                     return tb.Text ?? string.Empty;
 
-                if (ctrl is ExtendedDropDownList ddl)
-                    return ddl.Value ?? ddl.Text ?? string.Empty;
-
                 if (ctrl is ComboBox cb)
                     return cb.SelectedValue ?? cb.SelectedItem?.ToString() ?? cb.Text ?? string.Empty;
 
@@ -1128,7 +1070,7 @@ namespace Aarohi.Classes.Healper
                 if (ctrl == null)
                     return false;
 
-                if (ctrl is ComboBox || ctrl is ExtendedDropDownList)
+                if (ctrl is ComboBox)
                     return SetComboValue(table, col, s, triggerRules);
 
                 if (ctrl is TextBox || ctrl is ExtendedTextBox)
@@ -1200,17 +1142,19 @@ namespace Aarohi.Classes.Healper
             #region UI Generator
 
             public Panel Gen(
-                string table,
-                string colName,
-                string inputName,
-                string Unit,
-                string Parameter,
-                string Format,
-                bool required,
-                Color titleColor,
-                string dataType = "varchar",
-                string[]? opt = null,
-                object? defaultValue = null)
+    string table,
+    string colName,
+    string inputName,
+    string Unit,
+    string DefaultUnit,
+    string SelectedUnit,
+    string Parameter,
+    string Format,
+    bool required,
+    Color titleColor,
+    string dataType = "varchar",
+    string[]? opt = null,
+    object? defaultValue = null)
             {
                 Panel panelHolder = new Panel
                 {
@@ -1218,7 +1162,7 @@ namespace Aarohi.Classes.Healper
                     Padding = new Padding(8, 8, 18, 8),
                     Location = new Point(9, 9),
                     Name = $"Panel_{table}_{colName}",
-                    Size = new Size(249, 70),
+                    Size = new Size(260, 70),
                     TabIndex = 0
                 };
 
@@ -1241,64 +1185,31 @@ namespace Aarohi.Classes.Healper
 
                 if (opt != null)
                 {
-                    if (DropDownMode == DropDownInputMode.ComboBox)
+                    ComboBox cb = new ComboBox
                     {
-                        ComboBox cb = new ComboBox
-                        {
-                            Dock = DockStyle.Bottom,
-                            Font = new Font("Gadugi", 14.0F, FontStyle.Regular, GraphicsUnit.Point, 0),
-                            Name = $"CB_{table}_{colName}",
-                            Size = new Size(249, 35),
-                            TabIndex = 0,
-                            DropDownStyle = ComboBoxStyle.DropDownList,
-                            FormattingEnabled = true
-                        };
+                        Dock = DockStyle.Bottom,
+                        Font = new Font("Gadugi", 12F, FontStyle.Regular, GraphicsUnit.Point, 0),
+                        Name = $"CB_{table}_{colName}",
+                        Size = new Size(249, 35),
+                        TabIndex = 0,
+                        DropDownStyle = ComboBoxStyle.DropDownList,
+                        FormattingEnabled = true
+                    };
 
-                        cb.Items.Clear();
-                        foreach (var s in opt)
-                            cb.Items.Add(s ?? string.Empty);
+                    cb.Items.Clear();
+                    foreach (var s in opt)
+                        cb.Items.Add(s ?? string.Empty);
 
-                        cb.SelectedIndex = -1;
-                        if (!IsNullOrWhite(defaultValue))
-                        {
-                            string dv = SafeToText(defaultValue).Trim();
-                            cb.SelectedIndex = FindItemIndex(cb, dv);
-                        }
+                    cb.SelectedIndex = -1;
 
-                        panelHolder.Controls.Add(cb);
-                        RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, Format);
-                    }
-                    else
+                    if (!IsNullOrWhite(defaultValue))
                     {
-                        ExtendedDropDownList ddl = new ExtendedDropDownList
-                        {
-                            Dock = DockStyle.Bottom,
-                            Font = new Font("Gadugi", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0),
-                            Name = $"DDL_{table}_{colName}",
-                            Size = new Size(249, 35),
-                            TabIndex = 0,
-                            CornerRadius = 8,
-                            FillColor = Color.White,
-                            BorderColor = Color.FromArgb(210, 210, 210),
-                            HoverBorderColor = Color.FromArgb(170, 170, 170),
-                            TextColor = Color.FromArgb(40, 40, 40)
-                        };
-
-                        ddl.Items.Clear();
-                        foreach (var s in opt)
-                            ddl.Items.Add(s ?? string.Empty);
-
-                        ddl.SelectedIndex = -1;
-                        if (!IsNullOrWhite(defaultValue))
-                        {
-                            string dv = SafeToText(defaultValue).Trim();
-                            ddl.SelectedIndex = FindItemIndex(ddl, dv);
-                            if (ddl.SelectedIndex < 0) ddl.Text = dv;
-                        }
-
-                        panelHolder.Controls.Add(ddl);
-                        RegisterExistingControl(table, colName, ddl, required, null, Unit, Parameter, Format);
+                        string dv = SafeToText(defaultValue).Trim();
+                        cb.SelectedIndex = FindItemIndex(cb, dv);
                     }
+
+                    panelHolder.Controls.Add(cb);
+                    RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, Format);
                 }
                 else
                 {
@@ -1338,14 +1249,33 @@ namespace Aarohi.Classes.Healper
                         };
 
                         etb.SetUnits(etbUnits);
+
+                        string actualDefaultUnit = string.IsNullOrWhiteSpace(DefaultUnit)
+                            ? etbUnits.FirstOrDefault() ?? string.Empty
+                            : DefaultUnit.Trim();
+
+                        string actualSelectedUnit = string.IsNullOrWhiteSpace(SelectedUnit)
+                            ? actualDefaultUnit
+                            : SelectedUnit.Trim();
+
                         etb.SetConversionContext(
                             ResolveQuantityName(colName, Parameter),
                             Parameter,
-                            etbUnits.Count > 0 ? etbUnits[0] : string.Empty,
+                            actualDefaultUnit,
                             string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
+
+                        etb.SetCurrentUnit(actualSelectedUnit, false);
 
                         panelHolder.Controls.Add(etb);
                         RegisterExistingControl(table, colName, etb, required, dataType, string.Join(",", etbUnits), Parameter, Format);
+
+                        etb.SetConversionContext(
+    ResolveQuantityName(colName, Parameter),
+    Parameter,
+    actualDefaultUnit,
+    string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
+
+                        etb.SetCurrentUnit(actualSelectedUnit, false);
                     }
                 }
 
@@ -1354,7 +1284,9 @@ namespace Aarohi.Classes.Healper
 
             private static bool IsNullOrWhite(object? v)
             {
-                if (v == null || v == DBNull.Value) return true;
+                if (v == null || v == DBNull.Value)
+                    return true;
+
                 return v is string s && string.IsNullOrWhiteSpace(s);
             }
 
@@ -1398,15 +1330,25 @@ namespace Aarohi.Classes.Healper
                     string dt = string.IsNullOrWhiteSpace(col.DataType) ? "varchar" : col.DataType;
                     string resolvedUnit = string.Join(",", ResolveUnits(unit, parameter));
 
+                    string defaultUnit = string.IsNullOrWhiteSpace(col.DefaultUnit)
+                        ? ResolveUnits(unit, parameter).FirstOrDefault() ?? string.Empty
+                        : col.DefaultUnit.Trim();
+
+                    string selectedUnit = string.IsNullOrWhiteSpace(col.LastUsedUnit)
+                        ? defaultUnit
+                        : col.LastUsedUnit.Trim(); 
+                    
                     object? defaultValue = col.DefaultValue;
 
                     Control p = Gen(
-                        table,
-                        col.Name,
-                        name,
-                        resolvedUnit,
-                        parameter,
-                        format,
+                        table: table,
+                        colName: col.Name,
+                        inputName: name,
+                        Unit: resolvedUnit,
+                        DefaultUnit: defaultUnit,
+                        SelectedUnit: selectedUnit,
+                        Parameter: parameter,
+                        Format: format,
                         required: !col.Nullable,
                         titleColor: titleColor,
                         dataType: dt,
@@ -1429,6 +1371,63 @@ namespace Aarohi.Classes.Healper
 
             #endregion
 
+            #region Last Used Unit Save
+
+            public int SaveLastUsedUnits(DynamicClass dc, string? onlyTable = null)
+            {
+                if (dc == null)
+                    throw new ArgumentNullException(nameof(dc));
+
+                int updatedCount = 0;
+
+                foreach (var kv in _metaByControl)
+                {
+                    if (kv.Key is not ExtendedTextBox etb)
+                        continue;
+
+                    FieldMeta meta = kv.Value;
+                    if (meta == null)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(meta.Column))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(onlyTable) &&
+                        !string.Equals(meta.Table, onlyTable, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string newLastUsedUnit = (etb.CurrentUnit ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(newLastUsedUnit))
+                        continue;
+
+                    dc.SetLastUsedUnit(meta.Column, newLastUsedUnit);
+                    updatedCount++;
+                }
+
+                return updatedCount;
+            }
+
+            public bool SaveLastUsedUnit(string table, string col, DynamicClass dc)
+            {
+                if (dc == null)
+                    throw new ArgumentNullException(nameof(dc));
+
+                var ctrl = GetExtendedTextBox(table, col);
+                if (ctrl == null)
+                    return false;
+
+                string newLastUsedUnit = (ctrl.CurrentUnit ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(newLastUsedUnit))
+                    return false;
+
+                dc.SetLastUsedUnit(col, newLastUsedUnit);
+                return true;
+            }
+
+            #endregion
+
             #region Type Parsing Helpers
 
             private static InputTypeInfo ParseSqlType(string dataType)
@@ -1437,7 +1436,13 @@ namespace Aarohi.Classes.Healper
 
                 var mMax = Regex.Match(dt, @"^(n?varchar)\s*\(\s*max\s*\)$", RegexOptions.IgnoreCase);
                 if (mMax.Success)
-                    return new InputTypeInfo { BaseType = mMax.Groups[1].Value.ToLowerInvariant(), MaxLen = null };
+                {
+                    return new InputTypeInfo
+                    {
+                        BaseType = mMax.Groups[1].Value.ToLowerInvariant(),
+                        MaxLen = null
+                    };
+                }
 
                 var mText = Regex.Match(dt, @"^(n?varchar|n?char|binary|varbinary)\s*\(\s*(\d+)\s*\)$", RegexOptions.IgnoreCase);
                 if (mText.Success)
@@ -1505,10 +1510,9 @@ namespace Aarohi.Classes.Healper
 
         public static Context CreateContext(
             ContainerControl container,
-            TextInputMode textMode = TextInputMode.ExtendedTextBox,
-            DropDownInputMode dropDownMode = DropDownInputMode.ExtendedDropDownList)
+            TextInputMode textMode = TextInputMode.ExtendedTextBox)
         {
-            return new Context(container, textMode, dropDownMode);
+            return new Context(container, textMode);
         }
     }
 }

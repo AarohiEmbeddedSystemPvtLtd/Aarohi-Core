@@ -34,6 +34,10 @@ namespace Aarohi.UserManagment
             PanelMainWrapperBorder = new Aarohi.ExtendedUI.ExtendedPanel();
             PanelMainWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
             PanelForm = new Panel();
+            LoadingWrapper = new Panel();
+            panel2 = new Panel();
+            lblStatus = new Label();
+            progressBar1 = new ProgressBar();
             LoginWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
             LoginElementWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
             PanelLoginElementWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
@@ -51,15 +55,13 @@ namespace Aarohi.UserManagment
             LoginButton = new Aarohi.ExtendedUI.ExtendedButton();
             PanelLoginLabelHolder = new Aarohi.ExtendedUI.ExtendedPanel();
             labelLogin = new Label();
-            label1 = new Label();
+            labelSoftName = new Label();
             panelLoadder = new Panel();
-            LoadingWrapper = new Panel();
-            panel2 = new Panel();
-            lblStatus = new Label();
-            progressBar1 = new ProgressBar();
             PanelMainWrapperBorder.SuspendLayout();
             PanelMainWrapper.SuspendLayout();
             PanelForm.SuspendLayout();
+            LoadingWrapper.SuspendLayout();
+            panel2.SuspendLayout();
             LoginWrapper.SuspendLayout();
             LoginElementWrapper.SuspendLayout();
             PanelLoginElementWrapper.SuspendLayout();
@@ -69,8 +71,6 @@ namespace Aarohi.UserManagment
             LoginButtonWrapper.SuspendLayout();
             LoginButtonPanel.SuspendLayout();
             PanelLoginLabelHolder.SuspendLayout();
-            LoadingWrapper.SuspendLayout();
-            panel2.SuspendLayout();
             SuspendLayout();
             // 
             // PanelMainWrapperBorder
@@ -131,6 +131,48 @@ namespace Aarohi.UserManagment
             PanelForm.Size = new Size(621, 426);
             PanelForm.TabIndex = 0;
             // 
+            // LoadingWrapper
+            // 
+            LoadingWrapper.BackColor = Color.White;
+            LoadingWrapper.Controls.Add(panel2);
+            LoadingWrapper.Dock = DockStyle.Fill;
+            LoadingWrapper.Location = new Point(10, 10);
+            LoadingWrapper.Name = "LoadingWrapper";
+            LoadingWrapper.Padding = new Padding(100, 190, 100, 190);
+            LoadingWrapper.Size = new Size(601, 406);
+            LoadingWrapper.TabIndex = 4;
+            LoadingWrapper.Visible = false;
+            // 
+            // panel2
+            // 
+            panel2.Controls.Add(lblStatus);
+            panel2.Controls.Add(progressBar1);
+            panel2.Dock = DockStyle.Fill;
+            panel2.Location = new Point(100, 190);
+            panel2.Name = "panel2";
+            panel2.Size = new Size(401, 26);
+            panel2.TabIndex = 0;
+            // 
+            // lblStatus
+            // 
+            lblStatus.BackColor = Color.White;
+            lblStatus.Dock = DockStyle.Fill;
+            lblStatus.FlatStyle = FlatStyle.System;
+            lblStatus.ForeColor = Color.MediumBlue;
+            lblStatus.Location = new Point(0, 0);
+            lblStatus.Name = "lblStatus";
+            lblStatus.Size = new Size(401, 14);
+            lblStatus.TabIndex = 2;
+            // 
+            // progressBar1
+            // 
+            progressBar1.BackColor = Color.White;
+            progressBar1.Dock = DockStyle.Bottom;
+            progressBar1.Location = new Point(0, 14);
+            progressBar1.Name = "progressBar1";
+            progressBar1.Size = new Size(401, 12);
+            progressBar1.TabIndex = 1;
+            // 
             // LoginWrapper
             // 
             LoginWrapper.BackColor = Color.White;
@@ -140,7 +182,7 @@ namespace Aarohi.UserManagment
             LoginWrapper.Controls.Add(LoginElementWrapper);
             LoginWrapper.Controls.Add(LoginButtonWrapper);
             LoginWrapper.Controls.Add(PanelLoginLabelHolder);
-            LoginWrapper.Controls.Add(label1);
+            LoginWrapper.Controls.Add(labelSoftName);
             LoginWrapper.CornerRadius = 50;
             LoginWrapper.CornerRadiusBottomLeft = 0;
             LoginWrapper.CornerRadiusBottomRight = 50;
@@ -457,18 +499,18 @@ namespace Aarohi.UserManagment
             labelLogin.Text = "Login";
             labelLogin.TextAlign = ContentAlignment.MiddleCenter;
             // 
-            // label1
+            // labelSoftName
             // 
-            label1.BackColor = Color.Transparent;
-            label1.Dock = DockStyle.Top;
-            label1.Font = new Font("Gadugi", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label1.ForeColor = Color.MediumBlue;
-            label1.Location = new Point(20, 20);
-            label1.Name = "label1";
-            label1.Size = new Size(561, 48);
-            label1.TabIndex = 0;
-            label1.Text = "IPTS";
-            label1.TextAlign = ContentAlignment.MiddleCenter;
+            labelSoftName.BackColor = Color.Transparent;
+            labelSoftName.Dock = DockStyle.Top;
+            labelSoftName.Font = new Font("Gadugi", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            labelSoftName.ForeColor = Color.MediumBlue;
+            labelSoftName.Location = new Point(20, 20);
+            labelSoftName.Name = "labelSoftName";
+            labelSoftName.Size = new Size(561, 48);
+            labelSoftName.TabIndex = 0;
+            labelSoftName.Text = "IPTS";
+            labelSoftName.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // panelLoadder
             // 
@@ -478,48 +520,6 @@ namespace Aarohi.UserManagment
             panelLoadder.Padding = new Padding(80);
             panelLoadder.Size = new Size(500, 426);
             panelLoadder.TabIndex = 0;
-            // 
-            // LoadingWrapper
-            // 
-            LoadingWrapper.BackColor = Color.White;
-            LoadingWrapper.Controls.Add(panel2);
-            LoadingWrapper.Dock = DockStyle.Fill;
-            LoadingWrapper.Location = new Point(10, 10);
-            LoadingWrapper.Name = "LoadingWrapper";
-            LoadingWrapper.Padding = new Padding(100, 190, 100, 190);
-            LoadingWrapper.Size = new Size(601, 406);
-            LoadingWrapper.TabIndex = 4;
-            LoadingWrapper.Visible = false;
-            // 
-            // panel2
-            // 
-            panel2.Controls.Add(lblStatus);
-            panel2.Controls.Add(progressBar1);
-            panel2.Dock = DockStyle.Fill;
-            panel2.Location = new Point(100, 190);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(401, 26);
-            panel2.TabIndex = 0;
-            // 
-            // lblStatus
-            // 
-            lblStatus.BackColor = Color.White;
-            lblStatus.Dock = DockStyle.Fill;
-            lblStatus.FlatStyle = FlatStyle.System;
-            lblStatus.ForeColor = Color.MediumBlue;
-            lblStatus.Location = new Point(0, 0);
-            lblStatus.Name = "lblStatus";
-            lblStatus.Size = new Size(401, 14);
-            lblStatus.TabIndex = 2;
-            // 
-            // progressBar1
-            // 
-            progressBar1.BackColor = Color.White;
-            progressBar1.Dock = DockStyle.Bottom;
-            progressBar1.Location = new Point(0, 14);
-            progressBar1.Name = "progressBar1";
-            progressBar1.Size = new Size(401, 12);
-            progressBar1.TabIndex = 1;
             // 
             // FormStartUp
             // 
@@ -537,6 +537,8 @@ namespace Aarohi.UserManagment
             PanelMainWrapperBorder.ResumeLayout(false);
             PanelMainWrapper.ResumeLayout(false);
             PanelForm.ResumeLayout(false);
+            LoadingWrapper.ResumeLayout(false);
+            panel2.ResumeLayout(false);
             LoginWrapper.ResumeLayout(false);
             LoginElementWrapper.ResumeLayout(false);
             PanelLoginElementWrapper.ResumeLayout(false);
@@ -550,8 +552,6 @@ namespace Aarohi.UserManagment
             LoginButtonPanel.ResumeLayout(false);
             LoginButtonPanel.PerformLayout();
             PanelLoginLabelHolder.ResumeLayout(false);
-            LoadingWrapper.ResumeLayout(false);
-            panel2.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -577,7 +577,7 @@ namespace Aarohi.UserManagment
         private ExtendedUI.ExtendedPanel extendedPanel1;
         private Label labelPassword;
         private TextBox textBox2;
-        private Label label1;
+        private Label labelSoftName;
         private Button button1;
         private Panel LoadingWrapper;
         private Panel panel2;

@@ -89,6 +89,11 @@ namespace Aarohi.UserManagment
             textBox2.UseSystemPasswordChar = true;
             button1.Text = "Show";
 
+            if(string.IsNullOrEmpty(DynamicClass.Soft_Name))
+                throw new ArgumentNullException(nameof(DynamicClass.Soft_Name));
+
+            labelSoftName.Text = DynamicClass.Soft_Name;
+
             // Make overlapped wrappers behave like a "single page"
             if (LoginWrapper != null) LoginWrapper.Dock = DockStyle.Fill;
             if (LoadingWrapper != null) LoadingWrapper.Dock = DockStyle.Fill;
