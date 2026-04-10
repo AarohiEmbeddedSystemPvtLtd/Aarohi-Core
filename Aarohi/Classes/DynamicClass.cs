@@ -3827,6 +3827,8 @@ ORDER BY c.column_id;", cn);
 
          if (validValues.Count > 0)
          {
+
+             
              var inParams = new List<string>();
 
              foreach (var val in validValues)

@@ -43,7 +43,7 @@ namespace Aarohi.UserManagment
             PanelLoginElementWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
             LoginUsernameWrapper = new Aarohi.ExtendedUI.ExtendedPanel();
             labelUsername = new Label();
-            textBox1 = new TextBox();
+            comboBoxUsername = new ComboBox();
             extendedPanel1 = new Aarohi.ExtendedUI.ExtendedPanel();
             labelPassword = new Label();
             textBox2 = new TextBox();
@@ -140,7 +140,7 @@ namespace Aarohi.UserManagment
             LoadingWrapper.Name = "LoadingWrapper";
             LoadingWrapper.Padding = new Padding(100, 190, 100, 190);
             LoadingWrapper.Size = new Size(601, 406);
-            LoadingWrapper.TabIndex = 4;
+            LoadingWrapper.TabIndex = 8;
             LoadingWrapper.Visible = false;
             // 
             // panel2
@@ -251,7 +251,7 @@ namespace Aarohi.UserManagment
             LoginUsernameWrapper.BorderColor = Color.Transparent;
             LoginUsernameWrapper.BorderWidth = 1;
             LoginUsernameWrapper.Controls.Add(labelUsername);
-            LoginUsernameWrapper.Controls.Add(textBox1);
+            LoginUsernameWrapper.Controls.Add(comboBoxUsername);
             LoginUsernameWrapper.DisplayMode = ExtendedUI.DisplayMode.Flex;
             LoginUsernameWrapper.Dock = DockStyle.Fill;
             LoginUsernameWrapper.GridAutoColumnWidth = false;
@@ -275,14 +275,15 @@ namespace Aarohi.UserManagment
             labelUsername.TabIndex = 0;
             labelUsername.Text = "User Name :";
             // 
-            // textBox1
+            // comboBoxUsername
             // 
-            textBox1.Font = new Font("Gadugi", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox1.Location = new Point(129, 11);
-            textBox1.Margin = new Padding(0);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(403, 33);
-            textBox1.TabIndex = 1;
+            comboBoxUsername.Font = new Font("Gadugi", 14.25F);
+            comboBoxUsername.FormattingEnabled = true;
+            comboBoxUsername.Location = new Point(129, 13);
+            comboBoxUsername.Margin = new Padding(0);
+            comboBoxUsername.Name = "comboBoxUsername";
+            comboBoxUsername.Size = new Size(390, 30);
+            comboBoxUsername.TabIndex = 1;
             // 
             // extendedPanel1
             // 
@@ -509,7 +510,7 @@ namespace Aarohi.UserManagment
             labelSoftName.Name = "labelSoftName";
             labelSoftName.Size = new Size(561, 48);
             labelSoftName.TabIndex = 0;
-            labelSoftName.Text = "IPTS";
+            labelSoftName.Text = "Soft Namw";
             labelSoftName.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // panelLoadder
@@ -573,12 +574,12 @@ namespace Aarohi.UserManagment
         private ExtendedUI.ExtendedPanel PanelLoginElementWrapper;
         private ExtendedUI.ExtendedPanel LoginUsernameWrapper;
         private Label labelUsername;
-        private TextBox textBox1;
         private ExtendedUI.ExtendedPanel extendedPanel1;
         private Label labelPassword;
         private TextBox textBox2;
         private Label labelSoftName;
         private Button button1;
+        private ComboBox comboBoxUsername;
         private Panel LoadingWrapper;
         private Panel panel2;
         private Label lblStatus;

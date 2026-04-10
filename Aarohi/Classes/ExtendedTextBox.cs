@@ -804,13 +804,14 @@ namespace Aarohi.Classes
 
         public bool SetDefaultValue(double defaultValue)
         {
-            if (string.IsNullOrWhiteSpace(QuantityName)) return false;
-            if (string.IsNullOrWhiteSpace(DefaultUnit)) return false;
-            if (string.IsNullOrWhiteSpace(CurrentUnit)) return false;
-
             double finalValue = defaultValue;
 
-            if (!string.Equals(CurrentUnit, DefaultUnit, StringComparison.OrdinalIgnoreCase))
+            bool hasUnitContext =
+                !string.IsNullOrWhiteSpace(QuantityName) &&
+                !string.IsNullOrWhiteSpace(DefaultUnit) &&
+                !string.IsNullOrWhiteSpace(CurrentUnit);
+
+            if (hasUnitContext && !string.Equals(CurrentUnit, DefaultUnit, StringComparison.OrdinalIgnoreCase))
             {
                 var result = UnitConverisonEngine.convert(
                     QuantityName!,
@@ -907,9 +908,14 @@ namespace Aarohi.Classes
             if (numericMode && TryParseDoubleAnyCulture(text, out double num))
             {
                 if (treatNumericAsDefaultUnit)
-                    SetDefaultValue(num);
+                {
+                    if (!SetDefaultValue(num))
+                        LeftText = num.ToString(NumberFormat, CultureInfo.CurrentCulture);
+                }
                 else
+                {
                     LeftText = num.ToString(NumberFormat, CultureInfo.CurrentCulture);
+                }
 
                 return;
             }

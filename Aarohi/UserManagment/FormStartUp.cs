@@ -46,6 +46,9 @@ namespace Aarohi.UserManagment
         private float _loginStartOpacity = 0.0f;
         private float _loginEndOpacity = 0.30f;
         private bool _loginFadeInitialized = false;
+        DynamicClass _userClass;
+        private string _LoginDataColumnName = string.Empty;
+        private string _PasswordDataColumnName = string.Empty;
 
         private enum StartupStage
         {
@@ -83,16 +86,31 @@ namespace Aarohi.UserManagment
 
         private bool _loginFlowRunning = false; // prevents double trigger
         private bool _isPasswordVisible = false;
-        public FormStartUp()
+        public FormStartUp(string dbo, string userTabelName, string LoginDataColumnName, string PasswordDataColumnName, bool WantRememberMe = false)
         {
             InitializeComponent();
             textBox2.UseSystemPasswordChar = true;
             button1.Text = "Show";
+            checkBoxRememberMe.Visible = WantRememberMe;
 
-            if(string.IsNullOrEmpty(DynamicClass.Soft_Name))
+            if(string.IsNullOrEmpty(dbo))
+                throw new ArgumentNullException(nameof(dbo));
+            if(string.IsNullOrEmpty(userTabelName))
+                throw new ArgumentNullException(nameof(userTabelName));
+
+            if(string.IsNullOrEmpty(LoginDataColumnName))
+                throw new ArgumentNullException(nameof(LoginDataColumnName));
+            if(string.IsNullOrEmpty(PasswordDataColumnName))
+                throw new ArgumentNullException(nameof(PasswordDataColumnName));
+
+            if (string.IsNullOrEmpty(DynamicClass.Soft_Name))
                 throw new ArgumentNullException(nameof(DynamicClass.Soft_Name));
 
+            _userClass = new DynamicClass("dbo", userTabelName);
+
             labelSoftName.Text = DynamicClass.Soft_Name;
+            _LoginDataColumnName = LoginDataColumnName;
+            _PasswordDataColumnName = PasswordDataColumnName;
 
             // Make overlapped wrappers behave like a "single page"
             if (LoginWrapper != null) LoginWrapper.Dock = DockStyle.Fill;
@@ -132,7 +150,7 @@ namespace Aarohi.UserManagment
         }
 
         // IMPORTANT: always call InitializeComponent
-        public FormStartUp(double guideFadeDuration) : this()
+        public FormStartUp(double guideFadeDuration, string dbo, string userTabelName, string LoginDataColumnName, string PasswordDataColumnName) : this(dbo, userTabelName, LoginDataColumnName, PasswordDataColumnName)
         {
             GuideFadeDuration = guideFadeDuration;
         }
@@ -162,22 +180,26 @@ namespace Aarohi.UserManagment
 
             ApplyRoundedCorners(_cornerRadius);
 
+            
             _stage = StartupStage.FormExpand;
             _stopwatch.Restart();
             _timer.Start();
 
-            // Added
-            if (RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC", false))
-            {
-                textBox1.Text = "Dev@Aarohi";
-                textBox2.Text = DateTime.Now.ToString("ddMMyyyyHH");
-            }
+
         }
 
         private void FormStartUp_Shown(object? sender, EventArgs e)
         {
             Shown -= FormStartUp_Shown;
+            comboBoxUsername.Items.AddRange(_userClass.GetColumnValues(_LoginDataColumnName));
 
+            // Added
+            if (RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC", false))
+            {
+                comboBoxUsername.Items.Add("Dev@Aarohi");
+                comboBoxUsername.SelectedItem = "Dev@Aarohi";
+                textBox2.Text = DateTime.Now.ToString("ddMMyyyyHH");
+            }
             // try auto login after UI is ready
             _ = TryAutoLoginAsync();
         }
@@ -411,7 +433,7 @@ namespace Aarohi.UserManagment
         {
             if (_loginFlowRunning) return;
 
-            string userName = textBox1.Text.Trim();
+            string userName = comboBoxUsername.SelectedItem.ToString();
             string password = textBox2.Text.Trim();
 
             if (string.IsNullOrWhiteSpace(userName))
@@ -474,37 +496,36 @@ namespace Aarohi.UserManagment
                     return false;
                 }
 
-                using (var dc = new DynamicClass("dbo", "Users"))
+
+                var values = _userClass.GetRowAsDictionary(_LoginDataColumnName, userName);
+
+                if (values == null || values.Count == 0)
                 {
-                    var values = dc.GetRowAsDictionary("UserName", userName);
-
-                    if (values == null || values.Count == 0)
-                    {
-                        MessageBox.Show("Username not found.", "Login Failed",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return false;
-                    }
-
-                    var dbUserName = values["UserName"]?.ToString() ?? string.Empty;
-                    var dbPassword = values["Password"]?.ToString() ?? string.Empty;
-
-
-                    if (!string.Equals(userName, dbUserName, StringComparison.Ordinal))
-                    {
-                        MessageBox.Show("Username does not match.", "Login Failed",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return false;
-                    }
-
-
-                    if (!string.Equals(password, dbPassword, StringComparison.Ordinal))
-                    {
-                        MessageBox.Show("Incorrect password.", "Login Failed",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return false;
-                    }
-
+                    MessageBox.Show("Username not found.", "Login Failed",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
                 }
+
+                var dbUserName = values[_LoginDataColumnName]?.ToString() ?? string.Empty;
+                var dbPassword = values[_PasswordDataColumnName]?.ToString() ?? string.Empty;
+
+
+                if (!string.Equals(userName, dbUserName, StringComparison.Ordinal))
+                {
+                    MessageBox.Show("Username does not match.", "Login Failed",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+
+
+                if (!string.Equals(password, dbPassword, StringComparison.Ordinal))
+                {
+                    MessageBox.Show("Incorrect password.", "Login Failed",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+
+
 
                 return true;
             }
@@ -541,7 +562,7 @@ namespace Aarohi.UserManagment
                     return false;
 
                 // restore UI
-                textBox1.Text = realName;
+                comboBoxUsername.SelectedItem = realName;
                 textBox2.Text = realPassword;
                 checkBoxRememberMe.Checked = true;
 

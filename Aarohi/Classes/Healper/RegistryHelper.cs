@@ -7,7 +7,7 @@ namespace Aarohi.Classes.Healper
 {
     public static class RegistryHelper
     {
-        private const string RootRegistryPath = @"Software\Aarohi Embedded Systems Pvt Ltd\IPTS";
+        private static string RootRegistryPath = $"Software\\Aarohi Embedded Systems Pvt Ltd\\{DynamicClass.Soft_Name}";
 
         public enum storeLocs
         {

@@ -20,8 +20,8 @@ namespace Aarohi.Classes
         private static string sTo = "ToUnit";
         private static string sFormula = "Formula";
 
-        // NEW: column names for parameter mapping table
-        private static string sParameterCol = "Perameter"; // keep your spelling as-is
+       
+        private static string sParameterCol = "Perameter"; 
         private static string sUnitsCol = "Units";
 
         public static DataTable? ConversionMapping
@@ -200,7 +200,7 @@ namespace Aarohi.Classes
         }
 
         private static void EnsureMappingReady()
-        {
+        { 
             if (dtMapping == null)
                 throw new InvalidOperationException("ConversionMapping DataTable is null. Set UnitConverisonEngine.ConversionMapping first.");
 

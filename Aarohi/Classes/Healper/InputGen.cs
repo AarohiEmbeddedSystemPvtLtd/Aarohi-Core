@@ -203,23 +203,48 @@ namespace Aarohi.Classes.Healper
                 List<string> units = ResolveUnits(meta.Unit, meta.Parameter);
                 etb.SetUnits(units);
 
-                string defaultUnit = units.Count > 0 ? units[0] : string.Empty;
-                string quantityName = ResolveQuantityName(meta.Column, meta.Parameter);
                 string format = string.IsNullOrWhiteSpace(meta.Format) ? "0.###" : meta.Format;
 
                 etb.AutoConvertOnUnitChange = true;
                 etb.AutoLoadUnitsFromParameter = false;
                 etb.ShowConversionErrorMessageBox = true;
-                etb.SetConversionContext(quantityName, meta.Parameter, defaultUnit, format);
+
+                if (units.Count > 0)
+                {
+                    string defaultUnit = units[0];
+                    string quantityName = ResolveQuantityName(meta.Column, meta.Parameter);
+                    etb.SetConversionContext(quantityName, meta.Parameter, defaultUnit, format);
+                }
+                else
+                {
+                    // Plain numeric field, no unit conversion context
+                    etb.SetConversionContext(null, null, null, format);
+                }
             }
 
             #endregion
 
             #region Register / Get Controls
 
+            private static InputTypeInfo? BuildTypeInfo(string? dataType, int? precision, int? scale)
+            {
+                if (string.IsNullOrWhiteSpace(dataType))
+                    return null;
+
+                InputTypeInfo info = ParseSqlType(dataType);
+
+                if (precision.HasValue)
+                    info.Precision = precision.Value;
+
+                if (scale.HasValue)
+                    info.Scale = scale.Value;
+
+                return info;
+            }
+
             public void RegisterExistingControl(string table, string col, Control ctrl, bool required, string? dataType = null)
             {
-                RegisterExistingControl(table, col, ctrl, required, dataType, unit: null, parameter: null, format: null);
+                RegisterExistingControl(table, col, ctrl, required, dataType, unit: null, parameter: null, format: null, precision: null, scale: null);
             }
 
             public void RegisterExistingControl(
@@ -230,7 +255,9 @@ namespace Aarohi.Classes.Healper
                 string? dataType,
                 string? unit,
                 string? parameter,
-                string? format)
+                string? format,
+                int? precision = null,
+                int? scale = null)
             {
                 if (ctrl == null) return;
 
@@ -242,8 +269,8 @@ namespace Aarohi.Classes.Healper
                     Table = table ?? string.Empty,
                     Column = col ?? string.Empty,
                     Required = required,
-                    TypeInfo = (ctrl is ExtendedTextBox || ctrl is TextBox) && !string.IsNullOrWhiteSpace(dataType)
-                        ? ParseSqlType(dataType)
+                    TypeInfo = (ctrl is ExtendedTextBox || ctrl is TextBox)
+                        ? BuildTypeInfo(dataType, precision, scale)
                         : null,
                     OriginalBackColor = ctrl.BackColor,
                     OriginalTag = ctrl.Tag,
@@ -883,19 +910,62 @@ namespace Aarohi.Classes.Healper
                 if (_inputs.TryGetValue(K(table, col), out var c) == false || c == null)
                     return DBNull.Value;
 
+                if (!TryGetMeta(c, out var meta) || meta.TypeInfo == null)
+                {
+                    string plainRaw = GetControlValueText(c);
+                    return string.IsNullOrWhiteSpace(plainRaw) ? DBNull.Value : plainRaw;
+                }
+
+                string t = NormalizeType(meta.TypeInfo.BaseType);
                 string raw = GetControlValueText(c);
+
                 if (string.IsNullOrWhiteSpace(raw))
                     return DBNull.Value;
 
-                if (!TryGetMeta(c, out var meta) || meta.TypeInfo == null)
-                    return raw;
+                // Only use unit conversion for ExtendedTextBox when it really has a valid unit context
+                if (c is ExtendedTextBox etb && (IsIntegerType(t) || IsDecimalType(t) || t == "float" || t == "real"))
+                {
+                    bool hasUnitContext =
+                        !string.IsNullOrWhiteSpace(etb.QuantityName) &&
+                        !string.IsNullOrWhiteSpace(etb.DefaultUnit) &&
+                        !string.IsNullOrWhiteSpace(etb.CurrentUnit);
 
-                string t = NormalizeType(meta.TypeInfo.BaseType);
+                    if (hasUnitContext)
+                    {
+                        if (etb.TryGetBothValues(
+                                out double currentValue,
+                                out string currentUnit,
+                                out double defaultValue,
+                                out string defaultUnit,
+                                out string? error))
+                        {
+                            raw = defaultValue.ToString(CultureInfo.InvariantCulture);
+                        }
+                        else
+                        {
+                            // Fallback to visible numeric text instead of returning NULL
+                            raw = GetControlValueText(c);
+                        }
+                    }
+                    else
+                    {
+                        // Plain numeric field with no unit system
+                        raw = GetControlValueText(c);
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(raw))
+                    return DBNull.Value;
 
                 if (IsIntegerType(t))
                 {
                     if (!long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long lv))
-                        return DBNull.Value;
+                    {
+                        if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal decLv))
+                            lv = Convert.ToInt64(Math.Round(decLv, 0, MidpointRounding.AwayFromZero));
+                        else
+                            return DBNull.Value;
+                    }
 
                     return t switch
                     {
@@ -912,23 +982,31 @@ namespace Aarohi.Classes.Healper
                         return DBNull.Value;
 
                     if (meta.TypeInfo.Scale.HasValue)
-                        dv = Math.Round(dv, meta.TypeInfo.Scale.Value);
+                        dv = Math.Round(dv, meta.TypeInfo.Scale.Value, MidpointRounding.AwayFromZero);
 
                     return dv;
                 }
 
                 if (t == "float")
                 {
-                    return double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double d)
-                        ? d
-                        : DBNull.Value;
+                    if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double d))
+                        return DBNull.Value;
+
+                    if (meta.TypeInfo.Scale.HasValue)
+                        d = Math.Round(d, meta.TypeInfo.Scale.Value, MidpointRounding.AwayFromZero);
+
+                    return d;
                 }
 
                 if (t == "real")
                 {
-                    return float.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)
-                        ? f
-                        : DBNull.Value;
+                    if (!float.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out float f))
+                        return DBNull.Value;
+
+                    if (meta.TypeInfo.Scale.HasValue)
+                        f = (float)Math.Round(f, meta.TypeInfo.Scale.Value, MidpointRounding.AwayFromZero);
+
+                    return f;
                 }
 
                 if (t == "bit")
@@ -967,8 +1045,22 @@ namespace Aarohi.Classes.Healper
                     switch (ctrl)
                     {
                         case ExtendedTextBox etb:
-                            etb.LeftText = newVal;
-                            break;
+                            {
+                                bool numericMode = false;
+
+                                if (TryGetMeta(etb, out var m) && m.TypeInfo != null)
+                                {
+                                    string sqlType = NormalizeType(m.TypeInfo.BaseType);
+                                    numericMode = IsIntegerType(sqlType) || IsDecimalType(sqlType) || sqlType == "float" || sqlType == "real";
+                                }
+
+                                if (numericMode)
+                                    etb.SetLeftTextRaw(newVal, numericMode: true, treatNumericAsDefaultUnit: true);
+                                else
+                                    etb.LeftText = newVal;
+
+                                break;
+                            }
 
                         case TextBox tb:
                             tb.Text = newVal;
@@ -1153,6 +1245,8 @@ namespace Aarohi.Classes.Healper
     bool required,
     Color titleColor,
     string dataType = "varchar",
+    int? precision = null,
+    int? scale = null,
     string[]? opt = null,
     object? defaultValue = null)
             {
@@ -1209,7 +1303,7 @@ namespace Aarohi.Classes.Healper
                     }
 
                     panelHolder.Controls.Add(cb);
-                    RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, Format);
+                    RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, Format, precision, scale);
                 }
                 else
                 {
@@ -1226,7 +1320,7 @@ namespace Aarohi.Classes.Healper
                         };
 
                         panelHolder.Controls.Add(tb);
-                        RegisterExistingControl(table, colName, tb, required, dataType, Unit, Parameter, Format);
+                        RegisterExistingControl(table, colName, tb, required, dataType, Unit, Parameter, Format, precision, scale);
                     }
                     else
                     {
@@ -1242,7 +1336,7 @@ namespace Aarohi.Classes.Healper
                             UseRightWidth = true,
                             RightWidth = 100,
                             LeftEditable = true,
-                            LeftText = !IsNullOrWhite(defaultValue) ? SafeToText(defaultValue) : string.Empty,
+                            LeftText = string.Empty,
                             AutoConvertOnUnitChange = true,
                             AutoLoadUnitsFromParameter = false,
                             NumberFormat = string.IsNullOrWhiteSpace(Format) ? "0.###" : Format
@@ -1264,22 +1358,55 @@ namespace Aarohi.Classes.Healper
                             actualDefaultUnit,
                             string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
 
+                        bool isNumericType = false;
+                        string normalizedDataType = NormalizeType(dataType);
+                        isNumericType = IsIntegerType(normalizedDataType) || IsDecimalType(normalizedDataType) || normalizedDataType == "float" || normalizedDataType == "real";
+
+                        // Set selected/display unit WITHOUT converting current text yet
                         etb.SetCurrentUnit(actualSelectedUnit, false);
+
+                        // Now load DB/default value and convert it for display
+                        SetExtendedTextBoxValueFromDefaultUnit(etb, defaultValue, isNumericType);
 
                         panelHolder.Controls.Add(etb);
-                        RegisterExistingControl(table, colName, etb, required, dataType, string.Join(",", etbUnits), Parameter, Format);
+                        RegisterExistingControl(table, colName, etb, required, dataType, string.Join(",", etbUnits), Parameter, Format, precision, scale);
 
+                        // Re-apply context because RegisterExistingControl configures ETB again
                         etb.SetConversionContext(
-    ResolveQuantityName(colName, Parameter),
-    Parameter,
-    actualDefaultUnit,
-    string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
+                            ResolveQuantityName(colName, Parameter),
+                            Parameter,
+                            actualDefaultUnit,
+                            string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
 
                         etb.SetCurrentUnit(actualSelectedUnit, false);
+                        SetExtendedTextBoxValueFromDefaultUnit(etb, defaultValue, isNumericType);
                     }
                 }
 
                 return panelHolder;
+            }
+
+            private void SetExtendedTextBoxValueFromDefaultUnit(ExtendedTextBox etb, object? value, bool numericMode)
+            {
+                if (etb == null)
+                    return;
+
+                if (value == null || value == DBNull.Value)
+                {
+                    etb.LeftText = string.Empty;
+                    return;
+                }
+
+                string text = SafeToText(value).Trim();
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    etb.LeftText = string.Empty;
+                    return;
+                }
+
+                // Value coming from DB is assumed to be in DEFAULT UNIT for numeric fields.
+                // For non-numeric fields we keep the raw text exactly as stored.
+                etb.SetLeftTextRaw(text, numericMode: numericMode, treatNumericAsDefaultUnit: true);
             }
 
             private static bool IsNullOrWhite(object? v)
@@ -1328,6 +1455,8 @@ namespace Aarohi.Classes.Healper
                     string parameter = string.IsNullOrEmpty(col.Parameter) ? string.Empty : col.Parameter;
                     string format = string.IsNullOrEmpty(col.Format) ? string.Empty : col.Format;
                     string dt = string.IsNullOrWhiteSpace(col.DataType) ? "varchar" : col.DataType;
+                    int? precision = col.Precision;
+                    int? scale = col.Scale;
                     string resolvedUnit = string.Join(",", ResolveUnits(unit, parameter));
 
                     string defaultUnit = string.IsNullOrWhiteSpace(col.DefaultUnit)
@@ -1336,8 +1465,8 @@ namespace Aarohi.Classes.Healper
 
                     string selectedUnit = string.IsNullOrWhiteSpace(col.LastUsedUnit)
                         ? defaultUnit
-                        : col.LastUsedUnit.Trim(); 
-                    
+                        : col.LastUsedUnit.Trim();
+
                     object? defaultValue = col.DefaultValue;
 
                     Control p = Gen(
@@ -1352,6 +1481,8 @@ namespace Aarohi.Classes.Healper
                         required: !col.Nullable,
                         titleColor: titleColor,
                         dataType: dt,
+                        precision: precision,
+                        scale: scale,
                         opt: col.HasOptions ? col.Options : null,
                         defaultValue: defaultValue);
 
@@ -1372,13 +1503,13 @@ namespace Aarohi.Classes.Healper
             #endregion
 
             #region Last Used Unit Save
-
             public int SaveLastUsedUnits(DynamicClass dc, string? onlyTable = null)
             {
                 if (dc == null)
                     throw new ArgumentNullException(nameof(dc));
 
                 int updatedCount = 0;
+                string targetTable = string.IsNullOrWhiteSpace(onlyTable) ? dc.Table : onlyTable;
 
                 foreach (var kv in _metaByControl)
                 {
@@ -1389,14 +1520,11 @@ namespace Aarohi.Classes.Healper
                     if (meta == null)
                         continue;
 
-                    if (string.IsNullOrWhiteSpace(meta.Column))
+                    if (string.IsNullOrWhiteSpace(meta.Column) || string.IsNullOrWhiteSpace(meta.Table))
                         continue;
 
-                    if (!string.IsNullOrWhiteSpace(onlyTable) &&
-                        !string.Equals(meta.Table, onlyTable, StringComparison.OrdinalIgnoreCase))
-                    {
+                    if (!string.Equals(meta.Table, targetTable, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    }
 
                     string newLastUsedUnit = (etb.CurrentUnit ?? string.Empty).Trim();
                     if (string.IsNullOrWhiteSpace(newLastUsedUnit))
@@ -1408,7 +1536,6 @@ namespace Aarohi.Classes.Healper
 
                 return updatedCount;
             }
-
             public bool SaveLastUsedUnit(string table, string col, DynamicClass dc)
             {
                 if (dc == null)
