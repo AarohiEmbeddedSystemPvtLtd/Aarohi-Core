@@ -967,7 +967,8 @@ FROM @Actions;";
     IDictionary<string, object?>? parameters = null,
     int? top = null,
     string? orderBy = null,
-    bool DisplayName = true)
+    bool DisplayName = true,
+    bool WantFormatingInDefault = true)
 => SafeExecute("SELECT", extras =>
 {
     EnsureIdent(Schema);
@@ -1001,8 +1002,11 @@ FROM @Actions;";
 
     dt = ReorderColumnsByMetadataOrder(dt);
 
-    var formats = GetFormatsFromMetadata();
-    dt = ApplyFormats(dt, formats);
+    if (WantFormatingInDefault)
+    {
+        var formats = GetFormatsFromMetadata();
+        dt = ApplyFormats(dt, formats);
+    }
 
     if (DisplayName)
         dt = ApplyDisplayNames(dt);
@@ -3747,8 +3751,8 @@ ORDER BY c.column_id;", cn);
 
         public enum ForeignFilterDirection
         {
-            BaseToReference,   // Base table has FK to other table
-            ReferenceToBase    // Other table has FK to base table
+            BaseToReference,
+            ReferenceToBase
         }
 
         public sealed class RelationFilter
@@ -3828,7 +3832,7 @@ ORDER BY c.column_id;", cn);
          if (validValues.Count > 0)
          {
 
-             
+
              var inParams = new List<string>();
 
              foreach (var val in validValues)
