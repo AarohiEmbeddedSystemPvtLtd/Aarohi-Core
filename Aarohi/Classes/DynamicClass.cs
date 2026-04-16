@@ -2730,6 +2730,8 @@ SELECT
     xp.[DefaultUnit],
     xp.[InputUnit],
     xp.[LastUsedUnit],
+    xp.[ShowUnit],
+    xp.[ReportUnit],
     xp.[Format],
     xp.[Parameter],
     xp.[Order],
@@ -2785,6 +2787,8 @@ OUTER APPLY (
         MAX(CASE WHEN ep.name='DefaultUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [DefaultUnit],
         MAX(CASE WHEN ep.name='InputUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [InputUnit],
         MAX(CASE WHEN ep.name='LastUsedUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [LastUsedUnit],
+        MAX(CASE WHEN ep.name='ShowUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [ShowUnit],
+        MAX(CASE WHEN ep.name='ReportUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [ReportUnit],
         MAX(CASE WHEN ep.name='Format' THEN CAST(ep.value AS nvarchar(64)) END) AS [Format],
         MAX(CASE WHEN ep.name='Parameter' THEN CAST(ep.value AS nvarchar(256)) END) AS [Parameter],
         MAX(TRY_CAST(CASE WHEN ep.name='Order' THEN ep.value END AS int)) AS [Order],
@@ -2849,6 +2853,8 @@ ORDER BY c.column_id;";
                 Description = rd["Description"] as string,
                 DefaultUnit = rd["DefaultUnit"] as string,
                 InputUnit = rd["InputUnit"] as string,
+                ReportUnit = rd["ReportUnit"] as string,
+                ShowUnit = rd["ShowUnit"] as string,
                 LastUsedUnit = rd["LastUsedUnit"] as string,
                 Format = rd["Format"] as string,
                 Parameter = rd["Parameter"] as string,
@@ -3307,6 +3313,8 @@ ORDER BY c.column_id;", cn);
             public string? DefaultUnit { get; set; }
             public string? InputUnit { get; set; }
             public string? LastUsedUnit { get; set; }
+            public string? ShowUnit { get; set; }
+            public string? ReportUnit { get; set; }
             public bool? DatagridShow { get; set; }
             public bool? HideInCrudForm { get; set; }
             public string? Format { get; set; }

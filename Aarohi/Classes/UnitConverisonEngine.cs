@@ -9,10 +9,7 @@ namespace Aarohi.Classes
 {
     public static class UnitConverisonEngine
     {
-        private static DataTable? dtMapping;
         private static DataTable? dtRules;
-
-        // Parameter -> Unit mapping table
         private static DataTable? dtParameterUnitMapping;
 
         private static string sQuantity = "Quantity";
@@ -20,15 +17,8 @@ namespace Aarohi.Classes
         private static string sTo = "ToUnit";
         private static string sFormula = "Formula";
 
-       
-        private static string sParameterCol = "Perameter"; 
+        private static string sParameterCol = "Perameter";
         private static string sUnitsCol = "Units";
-
-        public static DataTable? ConversionMapping
-        {
-            get => dtMapping;
-            set => dtMapping = value;
-        }
 
         public static DataTable? ConversionRules
         {
@@ -36,7 +26,6 @@ namespace Aarohi.Classes
             set => dtRules = value;
         }
 
-        // NEW: Parameter mapping table property
         public static DataTable? ParameterUnitMapping
         {
             get => dtParameterUnitMapping;
@@ -67,7 +56,6 @@ namespace Aarohi.Classes
             set => sFormula = value;
         }
 
-        // NEW: column name props for parameter mapping
         public static string ParameterColumnName
         {
             get => sParameterCol;
@@ -80,98 +68,73 @@ namespace Aarohi.Classes
             set => sUnitsCol = value;
         }
 
-        public static bool hasMapping(string fromUnit)
-        {
-            if (dtRules == null) return false;
-
-            return dtRules.AsEnumerable()
-                .Any(v => string.Equals(v[sFrom]?.ToString()?.Trim(), fromUnit, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public static (double value, string toUnit) convert(
-            string quantityValue,
-            object inputValue,
-            string fromUnit,
-            string toUnit
-        )
+        public static bool HasMapping(string fromUnit)
         {
             EnsureRulesReady();
 
-            double v = ToDouble(inputValue);
+            if (string.IsNullOrWhiteSpace(fromUnit))
+                return false;
 
-            var rule = dtRules!.AsEnumerable().FirstOrDefault(r =>
-                StrEq(r[sQuantity], quantityValue) &&
+            return dtRules!.AsEnumerable()
+                .Any(r => StrEq(r[sFrom], fromUnit));
+        }
+
+        public static (double value, string toUnit) convert(
+            string parameter,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
+        {
+            EnsureRulesReady();
+
+            if (string.IsNullOrWhiteSpace(parameter))
+                throw new ArgumentException("Parameter cannot be null or empty.", nameof(parameter));
+
+            if (string.IsNullOrWhiteSpace(fromUnit))
+                throw new ArgumentException("FromUnit cannot be null or empty.", nameof(fromUnit));
+
+            if (string.IsNullOrWhiteSpace(toUnit))
+                throw new ArgumentException("ToUnit cannot be null or empty.", nameof(toUnit));
+
+            double value = ToDouble(inputValue);
+
+            if (string.Equals(fromUnit.Trim(), toUnit.Trim(), StringComparison.OrdinalIgnoreCase))
+                return (value, toUnit.Trim());
+
+            DataRow? rule = dtRules!.AsEnumerable().FirstOrDefault(r =>
+                StrEq(r[sQuantity], parameter) &&
                 StrEq(r[sFrom], fromUnit) &&
-                StrEq(r[sTo], toUnit)
-            );
+                StrEq(r[sTo], toUnit));
 
             if (rule == null)
+            {
                 throw new InvalidOperationException(
-                    $"No rule found for {sQuantity}='{quantityValue}' {sFrom}='{fromUnit}' -> {sTo}='{toUnit}'."
-                );
+                    $"No conversion rule found for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}'.");
+            }
 
-            string formulaText = Convert.ToString(rule[sFormula])?.Trim() ?? "";
+            string formulaText = Convert.ToString(rule[sFormula])?.Trim() ?? string.Empty;
+
             if (string.IsNullOrWhiteSpace(formulaText))
+            {
                 throw new InvalidOperationException(
-                    $"Formula is empty for {sQuantity}='{quantityValue}', {sFrom}='{fromUnit}', {sTo}='{toUnit}'."
-                );
+                    $"Formula is empty for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}'.");
+            }
 
-            object? result = EvaluateFormula(formulaText, v);
-            double outVal = ToDouble(result!);
+            object? result = EvaluateFormula(formulaText, value);
+            double convertedValue = ToDouble(result!);
 
-            return (outVal, toUnit);
+            return (convertedValue, toUnit.Trim());
         }
 
-        public static (object? value, string toUnit) convert(string quantityValue, object inputValue, string? desiredToUnit = null)
+        public static double ConvertValue(
+            string quantity,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
         {
-            EnsureMappingReady();
-
-            double v = ToDouble(inputValue);
-
-            var rows = dtMapping!.AsEnumerable()
-                .Where(r => StrEq(r[sQuantity], quantityValue))
-                .ToList();
-
-            if (rows.Count == 0)
-                throw new InvalidOperationException($"No conversion rule found for {sQuantity}='{quantityValue}'.");
-
-            DataRow rule;
-
-            if (!string.IsNullOrWhiteSpace(desiredToUnit))
-            {
-                rule = rows.FirstOrDefault(r => StrEq(r[sTo], desiredToUnit!))
-                       ?? throw new InvalidOperationException(
-                           $"No rule found for {sQuantity}='{quantityValue}' with {sTo}='{desiredToUnit}'.");
-            }
-            else
-            {
-                if (rows.Count > 1)
-                {
-                    var options = string.Join(", ",
-                        rows.Select(r => Convert.ToString(r[sTo])?.Trim())
-                            .Where(x => !string.IsNullOrWhiteSpace(x))
-                            .Distinct(StringComparer.OrdinalIgnoreCase));
-
-                    throw new InvalidOperationException(
-                        $"Multiple rules found for {sQuantity}='{quantityValue}'. " +
-                        $"Specify desiredToUnit. Options: {options}");
-                }
-
-                rule = rows[0];
-            }
-
-            string toUnit = Convert.ToString(rule[sTo])?.Trim() ?? "";
-            string formulaText = Convert.ToString(rule[sFormula])?.Trim() ?? "";
-
-            if (string.IsNullOrWhiteSpace(formulaText))
-                throw new InvalidOperationException($"Formula is empty for {sQuantity}='{quantityValue}', {sTo}='{toUnit}'.");
-
-            object? result = EvaluateFormula(formulaText, v);
-
-            return (result, toUnit);
+            return convert(quantity, inputValue, fromUnit, toUnit).value;
         }
 
-        // ✅ NEW: get unit from parameter mapping table
         public static string GetUnitFromParameter(string parameter)
         {
             var units = GetUnitsFromParameter(parameter);
@@ -199,15 +162,19 @@ namespace Aarohi.Classes
                 .ToList();
         }
 
-        private static void EnsureMappingReady()
-        { 
-            if (dtMapping == null)
-                throw new InvalidOperationException("ConversionMapping DataTable is null. Set UnitConverisonEngine.ConversionMapping first.");
+        public static string[] GetAllParameters()
+        {
+            EnsureParameterMappingReady();
 
-            if (!dtMapping.Columns.Contains(sQuantity)) throw new InvalidOperationException($"Missing column '{sQuantity}' in ConversionMapping.");
-            if (!dtMapping.Columns.Contains(sFrom)) throw new InvalidOperationException($"Missing column '{sFrom}' in ConversionMapping.");
-            if (!dtMapping.Columns.Contains(sTo)) throw new InvalidOperationException($"Missing column '{sTo}' in ConversionMapping.");
-            if (!dtMapping.Columns.Contains(sFormula)) throw new InvalidOperationException($"Missing column '{sFormula}' in ConversionMapping.");
+            var list = dtParameterUnitMapping!.AsEnumerable()
+                .Select(r => Convert.ToString(r[sParameterCol])?.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            list.Insert(0, "--Select--");
+            return list.ToArray();
         }
 
         private static void EnsureRulesReady()
@@ -215,10 +182,17 @@ namespace Aarohi.Classes
             if (dtRules == null)
                 throw new InvalidOperationException("ConversionRules DataTable is null. Set UnitConverisonEngine.ConversionRules first.");
 
-            if (!dtRules.Columns.Contains(sQuantity)) throw new InvalidOperationException($"Missing column '{sQuantity}' in ConversionRules.");
-            if (!dtRules.Columns.Contains(sFrom)) throw new InvalidOperationException($"Missing column '{sFrom}' in ConversionRules.");
-            if (!dtRules.Columns.Contains(sTo)) throw new InvalidOperationException($"Missing column '{sTo}' in ConversionRules.");
-            if (!dtRules.Columns.Contains(sFormula)) throw new InvalidOperationException($"Missing column '{sFormula}' in ConversionRules.");
+            if (!dtRules.Columns.Contains(sQuantity))
+                throw new InvalidOperationException($"Missing column '{sQuantity}' in ConversionRules.");
+
+            if (!dtRules.Columns.Contains(sFrom))
+                throw new InvalidOperationException($"Missing column '{sFrom}' in ConversionRules.");
+
+            if (!dtRules.Columns.Contains(sTo))
+                throw new InvalidOperationException($"Missing column '{sTo}' in ConversionRules.");
+
+            if (!dtRules.Columns.Contains(sFormula))
+                throw new InvalidOperationException($"Missing column '{sFormula}' in ConversionRules.");
         }
 
         private static void EnsureParameterMappingReady()
@@ -235,8 +209,9 @@ namespace Aarohi.Classes
 
         private static bool StrEq(object? a, string b)
         {
-            string sa = Convert.ToString(a)?.Trim() ?? "";
-            return sa.Equals(b?.Trim() ?? "", StringComparison.OrdinalIgnoreCase);
+            string sa = Convert.ToString(a)?.Trim() ?? string.Empty;
+            string sb = b?.Trim() ?? string.Empty;
+            return sa.Equals(sb, StringComparison.OrdinalIgnoreCase);
         }
 
         private static double ToDouble(object v)
@@ -249,6 +224,8 @@ namespace Aarohi.Classes
             if (v is decimal m) return (double)m;
             if (v is int i) return i;
             if (v is long l) return l;
+            if (v is short s) return s;
+            if (v is byte b) return b;
 
             if (double.TryParse(Convert.ToString(v), NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed))
                 return parsed;
@@ -261,27 +238,12 @@ namespace Aarohi.Classes
             var exp = new Expression(formulaText, EvaluateOptions.IgnoreCase);
             exp.Parameters["v"] = v;
 
-            object? res = exp.Evaluate();
+            object? result = exp.Evaluate();
 
-            if (res is decimal dec) return (double)dec;
-            return res;
-        }
+            if (result is decimal dec)
+                return (double)dec;
 
-        public static string[] GetAllParameters()
-        {
-            EnsureParameterMappingReady();
-
-            var list = dtParameterUnitMapping!.AsEnumerable()
-                .Select(r => Convert.ToString(r[sParameterCol])?.Trim())
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            // Always first item
-            list.Insert(0, "--Select--");
-
-            return list.ToArray();
+            return result;
         }
     }
 }
