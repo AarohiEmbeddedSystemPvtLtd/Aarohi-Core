@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aarohi" Version="1.0.14.20" />
+    <PackageReference Include="Aarohi.Designer" Version="1.0.10" />
+    <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
+  </ItemGroup>
+
+</Project>
