@@ -1,11 +1,25 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <PackageId>Aarohi.WPF.Controls</PackageId>
+	  <Version>1.0.0.1</Version>
+	  <Authors>Aarohi Embedded Systems</Authors>
+	  <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
+	  <Description>WPF Test Screen Designer.</Description>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="iconaa.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Aarohi" Version="1.0.14.20" />
