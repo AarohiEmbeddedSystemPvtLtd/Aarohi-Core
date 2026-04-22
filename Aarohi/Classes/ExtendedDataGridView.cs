@@ -5,6 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.VisualStyles;
@@ -289,6 +290,18 @@ namespace Aarohi.Classes
         private int _rowMenuTargetIndex = -1;
 
         private DynamicClass _dynClass = new DynamicClass();
+        private CancellationTokenSource? _dynamicLoadCts;
+
+        [DefaultValue(50)]
+        public int DynamicSelectChunkSize { get; set; } = 50;
+
+        [DefaultValue(true)]
+        public bool DynamicSelectLoadInChunks { get; set; } = true;
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool IsDynamicSelectLoading { get; private set; }
+        public event Action<int, int>? DynamicSelectChunkLoaded;
+        public event Action<Exception>? DynamicSelectChunkLoadFailed;
 
         #endregion
 
@@ -342,9 +355,6 @@ namespace Aarohi.Classes
             ExtractForeignKeyColumns(dynamicClass);
             ExtractPrimaryKeyColumns(dynamicClass);
 
-            DataSource = dynamicClass.Select();
-            EnsureBindingLayer();
-
             // listen to header actions centrally
             this.HeaderCommand += OnHeaderCommand;
 
@@ -386,6 +396,7 @@ namespace Aarohi.Classes
             DoubleBuffered = true;
 
             BuildRowMenu();
+            LoadDynamicClassData(DynamicSelectChunkSize, keepFilters: false);
 
         }
 
@@ -1347,6 +1358,163 @@ namespace Aarohi.Classes
 
                 ReapplyFilters();
             }
+        }
+
+        public DataTable LoadDynamicClassData(
+            int? chunkSize = null,
+            string? whereSql = null,
+            IDictionary<string, object?>? parameters = null,
+            string? orderBy = null,
+            bool keepFilters = true)
+        {
+            _dynamicLoadCts?.Cancel();
+            _dynamicLoadCts?.Dispose();
+            _dynamicLoadCts = null;
+            IsDynamicSelectLoading = false;
+
+            var effectiveChunkSize = chunkSize ?? DynamicSelectChunkSize;
+            if (effectiveChunkSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(chunkSize), "chunkSize must be greater than or equal to 1.");
+
+            DataTable? firstChunk = DynamicSelectLoadInChunks
+                ? _dynClass.Select(whereSql, parameters, orderBy: orderBy, pageSize: effectiveChunkSize)
+                : _dynClass.Select(whereSql, parameters, orderBy: orderBy);
+
+            firstChunk ??= new DataTable(_dynClass.Table);
+            RebindData(firstChunk, keepFilters);
+
+            if (!DynamicSelectLoadInChunks || firstChunk.Rows.Count < effectiveChunkSize)
+                return firstChunk;
+
+            _dynamicLoadCts = new CancellationTokenSource();
+            IsDynamicSelectLoading = true;
+
+            _ = LoadRemainingDynamicClassChunksAsync(
+                whereSql,
+                parameters,
+                orderBy,
+                effectiveChunkSize,
+                _dynamicLoadCts.Token);
+
+            return firstChunk;
+        }
+
+        private async Task LoadRemainingDynamicClassChunksAsync(
+            string? whereSql,
+            IDictionary<string, object?>? parameters,
+            string? orderBy,
+            int chunkSize,
+            CancellationToken ct)
+        {
+            try
+            {
+                await foreach (var chunk in _dynClass.SelectChunksAsync(
+                    whereSql: whereSql,
+                    parameters: parameters,
+                    orderBy: orderBy,
+                    chunkSize: chunkSize,
+                    skipFirstChunk: true,
+                    ct: ct).ConfigureAwait(false))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await AppendChunkToBoundTableAsync(chunk, ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when refresh/dispose starts a new load.
+            }
+            catch (Exception ex)
+            {
+                DynamicSelectChunkLoadFailed?.Invoke(ex);
+            }
+            finally
+            {
+                IsDynamicSelectLoading = false;
+            }
+        }
+
+        private Task AppendChunkToBoundTableAsync(DataTable chunk, CancellationToken ct)
+        {
+            if (ct.IsCancellationRequested || IsDisposed || chunk.Rows.Count == 0)
+                return Task.CompletedTask;
+
+            var tcs = new TaskCompletionSource<object?>();
+
+            void AppendOnUi()
+            {
+                try
+                {
+                    if (ct.IsCancellationRequested || IsDisposed)
+                    {
+                        tcs.TrySetResult(null);
+                        return;
+                    }
+
+                    var target = _view?.Table;
+                    if (target == null)
+                    {
+                        tcs.TrySetResult(null);
+                        return;
+                    }
+
+                    target.BeginLoadData();
+                    try
+                    {
+                        foreach (DataRow row in chunk.Rows)
+                            target.ImportRow(row);
+                    }
+                    finally
+                    {
+                        target.EndLoadData();
+                    }
+
+                    ReapplyFilters();
+                    DynamicSelectChunkLoaded?.Invoke(target.Rows.Count, chunk.Rows.Count);
+                    tcs.TrySetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            }
+
+            if (InvokeRequired || !IsHandleCreated)
+            {
+                if (IsHandleCreated)
+                    BeginInvoke((Action)AppendOnUi);
+                else
+                {
+                    void Handler(object? sender, EventArgs e)
+                    {
+                        HandleCreated -= Handler;
+                        if (!IsDisposed)
+                            BeginInvoke((Action)AppendOnUi);
+                        else
+                            tcs.TrySetResult(null);
+                    }
+
+                    HandleCreated += Handler;
+                }
+            }
+            else
+            {
+                AppendOnUi();
+            }
+
+            return tcs.Task;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _dynamicLoadCts?.Cancel();
+                _dynamicLoadCts?.Dispose();
+                _dynamicLoadCts = null;
+            }
+
+            base.Dispose(disposing);
         }
 
         private void ApplyColumnVisibilityFromMetadata()

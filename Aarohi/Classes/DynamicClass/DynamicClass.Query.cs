@@ -21,14 +21,14 @@ namespace Aarohi.Classes
         #region Query / result shaping
         // Method: Select
         /// <summary>
-        /// Executes a parameterized <c>SELECT *</c> on the target table with optional WHERE/TOP/ORDER BY/pagination.
+        /// Executes a parameterized <c>SELECT *</c> on the target table with optional WHERE/TOP/ORDER BY/chunk limit.
         /// </summary>
         /// <param name="whereSql">Optional WHERE clause (without the keyword "WHERE").</param>
         /// <param name="parameters">Optional parameter map (name → value). Names may omit the '@'.</param>
         /// <param name="top">Optional TOP N limit.</param>
         /// <param name="orderBy">Optional ORDER BY clause (without the keyword).</param>
-        /// <param name="pageNumber">Optional 1-based page number. Requires <paramref name="pageSize"/>.</param>
-        /// <param name="pageSize">Optional rows per page. Requires <paramref name="pageNumber"/>.</param>
+        /// <param name="pageNumber">Optional 1-based page number for compatibility. If omitted with <paramref name="pageSize"/>, the first chunk is returned.</param>
+        /// <param name="pageSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
         /// <returns>A <see cref="DataTable"/> with results; can be empty but not null.</returns>
         public DataTable? Select(
     string? whereSql = null,
@@ -88,7 +88,7 @@ namespace Aarohi.Classes
                 ("resolvedWhere", resolvedWhereSql ?? ""),
                 ("orderBy", orderBy ?? ""),
                 ("resolvedOrderBy", resolvedOrderBy ?? ""),
-                ("pageNumber", pageNumber),
+                ("pageNumber", pageNumber ?? (hasPagination ? 1 : null)),
                 ("pageSize", pageSize),
                 ("offset", hasPagination ? offsetRows : null),
                 ("params", parameters ?? new Dictionary<string, object?>()));
@@ -123,13 +123,15 @@ namespace Aarohi.Classes
             if (!pageNumber.HasValue && !pageSize.HasValue)
                 return false;
 
-            if (!pageNumber.HasValue || !pageSize.HasValue)
-                throw new ArgumentException("Both pageNumber and pageSize are required for pagination.");
+            if (!pageSize.HasValue)
+                throw new ArgumentException("pageSize is required when pageNumber is used.");
 
             if (top.HasValue)
-                throw new InvalidOperationException("Use either top or pagination, not both.");
+                throw new InvalidOperationException("Use either top or chunk loading, not both.");
 
-            if (pageNumber.Value < 1)
+            var effectivePageNumber = pageNumber ?? 1;
+
+            if (effectivePageNumber < 1)
                 throw new ArgumentOutOfRangeException(nameof(pageNumber), "pageNumber must be greater than or equal to 1.");
 
             if (pageSize.Value < 1)
@@ -137,7 +139,7 @@ namespace Aarohi.Classes
 
             checked
             {
-                offsetRows = (pageNumber.Value - 1) * pageSize.Value;
+                offsetRows = (effectivePageNumber - 1) * pageSize.Value;
             }
 
             fetchRows = pageSize.Value;
@@ -161,6 +163,55 @@ namespace Aarohi.Classes
                 return QSafe(firstColumn);
 
             return "(SELECT 1)";
+        }
+
+        /// <summary>
+        /// Streams the result set in fixed-size chunks. The caller can bind the first chunk immediately
+        /// and append later chunks on the UI thread.
+        /// </summary>
+        public async IAsyncEnumerable<DataTable> SelectChunksAsync(
+            string? whereSql = null,
+            IDictionary<string, object?>? parameters = null,
+            string? orderBy = null,
+            int chunkSize = 50,
+            bool skipFirstChunk = false,
+            bool DisplayName = false,
+            bool WantFormatingInDefault = false,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            if (chunkSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(chunkSize), "chunkSize must be greater than or equal to 1.");
+
+            var pageNumber = skipFirstChunk ? 2 : 1;
+
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var chunk = await SelectAsync(
+                    whereSql: whereSql,
+                    parameters: parameters,
+                    top: null,
+                    orderBy: orderBy,
+                    ct: ct,
+                    pageNumber: pageNumber,
+                    pageSize: chunkSize,
+                    DisplayName: DisplayName,
+                    WantFormatingInDefault: WantFormatingInDefault).ConfigureAwait(false);
+
+                if (chunk == null || chunk.Rows.Count == 0)
+                    yield break;
+
+                yield return chunk;
+
+                if (chunk.Rows.Count < chunkSize)
+                    yield break;
+
+                checked
+                {
+                    pageNumber++;
+                }
+            }
         }
 
         private Dictionary<string, string> GetFormatsFromMetadata()
