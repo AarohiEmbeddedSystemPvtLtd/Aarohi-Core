@@ -14,8 +14,20 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <Description>A collection of highly functional, customizable, and themeable WPF UserControls designed for complex enterprise applications. Includes ExtendedDataGrid and ExtendedTextBox.
 
-## ExtendedDataGrid
-Wrapper around standard WPF DataGrid with built-in pagination, Excel-style column filtering, column visibility control, and row commands.
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <PackageId>Aarohi.WPF.Controls</PackageId>
+	  <Version>1.0.0.36</Version>
+	  <Authors>Aarohi Embedded Systems</Authors>
+	  <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
+	  <Description>WPF Test Screen Designer.</Description>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
 
 ## ExtendedTextBox
 Compound control consisting of a TextBox (for values) and a ComboBox (for units), designed for seamless value-unit pairs and automatic unit conversion.</Description>
