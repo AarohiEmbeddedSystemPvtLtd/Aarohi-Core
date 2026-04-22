@@ -67,6 +67,12 @@ namespace Aarohi.Globals
                     alt1
                 );
             }
-            }
+        }
+
+        public static class ValueHolders
+        {
+            public static string currentApp { get; set; }
+        }
+
     }
 }

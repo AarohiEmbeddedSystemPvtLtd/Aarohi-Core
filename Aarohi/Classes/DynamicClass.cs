@@ -967,7 +967,7 @@ FROM @Actions;";
     IDictionary<string, object?>? parameters = null,
     int? top = null,
     string? orderBy = null,
-    bool DisplayName = true,
+    bool DisplayName = false,
     bool WantFormatingInDefault = false)
         => SafeExecute("SELECT", extras =>
         {
@@ -1118,7 +1118,7 @@ FROM @Actions;";
             EnsureIdent(Table);
             EnsureIdent(columnName);
 
-            var dt = Select($"{Q(columnName)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1);
+            var dt = Select($"{Q(columnName)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1, DisplayName:false);
             if (dt == null || dt.Rows.Count == 0) return null;
 
             var row = dt.Rows[0];

@@ -17,6 +17,8 @@ namespace Aarohi.Core.DeviceManager.Models
 
         public string PlantName { get; set; } = string.Empty;
 
+        public string ProjectPath { get; set; } = string.Empty;
+
         public List<string> ProfileFiles { get; set; } = new();
 
         public List<string> DeviceFiles { get; set; } = new();

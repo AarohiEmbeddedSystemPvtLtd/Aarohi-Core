@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Security.Cryptography;
 using System.Text;
+using Aarohi.Globals;
 using Microsoft.Win32;
 
 namespace Aarohi.Classes.Healper
 {
     public static class RegistryHelper
     {
-        private static string RootRegistryPath = $"Software\\Aarohi Embedded Systems Pvt Ltd\\{DynamicClass.Soft_Name}";
+        private static string RootRegistryPath = $"Software\\Aarohi Embedded Systems Pvt Ltd\\{AGLobals.ValueHolders.currentApp}";
 
         public enum storeLocs
         {
