@@ -1,4 +1,5 @@
 ﻿using Aarohi.Classes.Healper;
+using Aarohi.Configuration;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,6 +13,17 @@ namespace Aarohi.UserManagment
 {
     public static class UserManager
     {
+        private static RootConfig _config;
+
+        public static void Configure(RootConfig config)
+        {
+            _config = config;
+        }
+
+        public static UserMappingConfig UserMap => _config.UserMapping;
+        public static PermissionMappingConfig PermissionMap => _config.PermissionMapping;
+        public static UserPermissionMappingConfig UserPermissionMap => _config.UserPermissionMapping;
+
         private static readonly string LoginInfoPath = Path.Combine(Environment.GetFolderPath
            (Environment.SpecialFolder.ApplicationData), "Aarohi", "IPTS_Git", "Login.info");
 
