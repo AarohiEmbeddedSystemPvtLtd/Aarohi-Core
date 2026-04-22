@@ -1,0 +1,26 @@
+# Version History
+
+## v1.0.0.36
+- Implemented robust DynamicResource based theming for ExtendedDataGrid.
+- Fixed horizontal scroll bar visibility in ExtendedDataGrid by forcing UpdateLayout.
+- Added Excel-style column filtering capabilities (Equals, Contains, StartsWith, EndsWith, GreaterThan, LessThan).
+- Integrated row-level Context Menu for CRUD operations (View, Edit, Delete).
+- Removed legacy hardcoded color values to support application-wide Light/Dark theme switching.
+- Centralized pagination styling and enabled proper theme inheritance for typography and text formatting.
+- Fixed ExtendedDataGrid rendering issues and scroll bindings.
+
+## Previous Features & Controls
+
+### ExtendedDataGrid
+- Built-in pagination with customizable page sizes.
+- Advanced Excel-style dropdowns on column headers for sorting and filtering.
+- Toggle column visibility easily via a dedicated UI panel.
+- Fully integrates with your application's DynamicResource theme keys.
+- Built-in context menu and row commands.
+- Optimized for large datasets using UI virtualization while safely supporting horizontal scrolling.
+
+### ExtendedTextBox
+- Dedicated LeftText property for the value and an Items collection for the dropdown units.
+- Automatically converts the numerical value in the TextBox when the user changes the unit in the ComboBox.
+- Optional strict numeric and decimal validation (LeftNumericOnly="True", LeftAllowDecimal="True").
+- Configurable layout with explicit widths for the text and combo boxes (LeftWidth, RightWidth).
