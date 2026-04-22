@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <!-- Package Identity -->
+        <PackageId>Aarohi.Wpf.Controls</PackageId>
+        <Version>1.0.0.48</Version>
+        <Authors>Aarohi Embedded Systems</Authors>
+        <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageIcon>Aarohi.jpg</PackageIcon>
+
+        <!-- Package Description -->
+        <Description>A collection of highly functional, customizable, and themeable WPF UserControls designed for complex enterprise applications. Includes ExtendedDataGrid with full font and color customization, and ExtendedTextBox for seamless value-unit pairs with automatic unit conversion.</Description>
+        <PackageTags>WPF;DataGrid;TextBox;UI;Controls;Theme;Aarohi</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Dependencies -->
+        <PackageReference Include="Aarohi" Version="1.0.14.20" />
+        <PackageReference Include="Aarohi.Designer" Version="1.0.10" />
+        <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
+        
+        <!-- Package Icon -->
+        <None Include="Resources\Images\Aarohi.jpg" Pack="true" PackagePath="." />
+    </ItemGroup>
+</Project>

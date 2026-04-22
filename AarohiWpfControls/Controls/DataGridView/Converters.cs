@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
+namespace AarohiWpfControls.Controls.DataGridView
 {
     /// <summary>
     /// Converts boolean values to Visibility (True = Visible, False = Collapsed)

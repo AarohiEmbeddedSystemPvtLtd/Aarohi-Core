@@ -11,7 +11,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
+namespace AarohiWpfControls.Controls.DataGridView
 {
     public partial class ExtendedDataGrid : UserControl
     {
@@ -84,6 +84,75 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             set => SetValue(AllowMultiSelectProperty, value);
         }
 
+        public static readonly DependencyProperty HeaderFontFamilyProperty = DependencyProperty.Register(nameof(HeaderFontFamily), typeof(FontFamily), typeof(ExtendedDataGrid), new PropertyMetadata(new FontFamily("Segoe UI")));
+        public FontFamily HeaderFontFamily { get => (FontFamily)GetValue(HeaderFontFamilyProperty); set => SetValue(HeaderFontFamilyProperty, value); }
+
+        public static readonly DependencyProperty HeaderFontSizeProperty = DependencyProperty.Register(nameof(HeaderFontSize), typeof(double), typeof(ExtendedDataGrid), new PropertyMetadata(12.0, OnHeaderPropertyChanged));
+        public double HeaderFontSize { get => (double)GetValue(HeaderFontSizeProperty); set => SetValue(HeaderFontSizeProperty, value); }
+
+        public static readonly DependencyProperty HeaderFontWeightProperty = DependencyProperty.Register(nameof(HeaderFontWeight), typeof(FontWeight), typeof(ExtendedDataGrid), new PropertyMetadata(FontWeights.SemiBold, OnHeaderPropertyChanged));
+        public FontWeight HeaderFontWeight { get => (FontWeight)GetValue(HeaderFontWeightProperty); set => SetValue(HeaderFontWeightProperty, value); }
+
+        public static readonly DependencyProperty HeaderFontStyleProperty = DependencyProperty.Register(nameof(HeaderFontStyle), typeof(FontStyle), typeof(ExtendedDataGrid), new PropertyMetadata(FontStyles.Normal, OnHeaderPropertyChanged));
+        public FontStyle HeaderFontStyle { get => (FontStyle)GetValue(HeaderFontStyleProperty); set => SetValue(HeaderFontStyleProperty, value); }
+
+        public static readonly DependencyProperty DataRowFontFamilyProperty = DependencyProperty.Register(nameof(DataRowFontFamily), typeof(FontFamily), typeof(ExtendedDataGrid), new PropertyMetadata(new FontFamily("Segoe UI")));
+        public FontFamily DataRowFontFamily { get => (FontFamily)GetValue(DataRowFontFamilyProperty); set => SetValue(DataRowFontFamilyProperty, value); }
+
+        public static readonly DependencyProperty DataRowFontSizeProperty = DependencyProperty.Register(nameof(DataRowFontSize), typeof(double), typeof(ExtendedDataGrid), new PropertyMetadata(11.0, OnRowPropertyChanged));
+        public double DataRowFontSize { get => (double)GetValue(DataRowFontSizeProperty); set => SetValue(DataRowFontSizeProperty, value); }
+
+        public static readonly DependencyProperty DataRowFontWeightProperty = DependencyProperty.Register(nameof(DataRowFontWeight), typeof(FontWeight), typeof(ExtendedDataGrid), new PropertyMetadata(FontWeights.Normal, OnRowPropertyChanged));
+        public FontWeight DataRowFontWeight { get => (FontWeight)GetValue(DataRowFontWeightProperty); set => SetValue(DataRowFontWeightProperty, value); }
+
+        public static readonly DependencyProperty DataRowFontStyleProperty = DependencyProperty.Register(nameof(DataRowFontStyle), typeof(FontStyle), typeof(ExtendedDataGrid), new PropertyMetadata(FontStyles.Normal, OnRowPropertyChanged));
+        public FontStyle DataRowFontStyle { get => (FontStyle)GetValue(DataRowFontStyleProperty); set => SetValue(DataRowFontStyleProperty, value); }
+
+        public static readonly DependencyProperty GridRowHeightProperty = DependencyProperty.Register(nameof(GridRowHeight), typeof(double), typeof(ExtendedDataGrid), new PropertyMetadata(double.NaN, OnGridSizeChanged));
+        public double GridRowHeight { get => (double)GetValue(GridRowHeightProperty); set => SetValue(GridRowHeightProperty, value); }
+
+        public static readonly DependencyProperty GridColumnHeaderHeightProperty = DependencyProperty.Register(nameof(GridColumnHeaderHeight), typeof(double), typeof(ExtendedDataGrid), new PropertyMetadata(double.NaN, OnGridSizeChanged));
+        public double GridColumnHeaderHeight { get => (double)GetValue(GridColumnHeaderHeightProperty); set => SetValue(GridColumnHeaderHeightProperty, value); }
+
+        public static readonly DependencyProperty GridColumnWidthProperty = DependencyProperty.Register(nameof(GridColumnWidth), typeof(DataGridLength), typeof(ExtendedDataGrid), new PropertyMetadata(DataGridLength.Auto));
+        public DataGridLength GridColumnWidth { get => (DataGridLength)GetValue(GridColumnWidthProperty); set => SetValue(GridColumnWidthProperty, value); }
+
+        public static readonly DependencyProperty HeaderBackgroundProperty = DependencyProperty.Register(nameof(HeaderBackground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnHeaderPropertyChanged));
+        public Brush HeaderBackground { get => (Brush)GetValue(HeaderBackgroundProperty); set => SetValue(HeaderBackgroundProperty, value); }
+
+        public static readonly DependencyProperty HeaderForegroundProperty = DependencyProperty.Register(nameof(HeaderForeground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnHeaderPropertyChanged));
+        public Brush HeaderForeground { get => (Brush)GetValue(HeaderForegroundProperty); set => SetValue(HeaderForegroundProperty, value); }
+
+        public static readonly DependencyProperty RowBackgroundProperty = DependencyProperty.Register(nameof(RowBackground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnRowPropertyChanged));
+        public Brush RowBackground { get => (Brush)GetValue(RowBackgroundProperty); set => SetValue(RowBackgroundProperty, value); }
+
+        public static readonly DependencyProperty RowForegroundProperty = DependencyProperty.Register(nameof(RowForeground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnRowPropertyChanged));
+        public Brush RowForeground { get => (Brush)GetValue(RowForegroundProperty); set => SetValue(RowForegroundProperty, value); }
+
+        public static readonly DependencyProperty AlternateRowBackgroundProperty = DependencyProperty.Register(nameof(AlternateRowBackground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnRowPropertyChanged));
+        public Brush AlternateRowBackground { get => (Brush)GetValue(AlternateRowBackgroundProperty); set => SetValue(AlternateRowBackgroundProperty, value); }
+
+        public static readonly DependencyProperty SelectedRowBackgroundProperty = DependencyProperty.Register(nameof(SelectedRowBackground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnRowPropertyChanged));
+        public Brush SelectedRowBackground { get => (Brush)GetValue(SelectedRowBackgroundProperty); set => SetValue(SelectedRowBackgroundProperty, value); }
+
+        public static readonly DependencyProperty SelectedRowForegroundProperty = DependencyProperty.Register(nameof(SelectedRowForeground), typeof(Brush), typeof(ExtendedDataGrid), new PropertyMetadata(null, OnRowPropertyChanged));
+        public Brush SelectedRowForeground { get => (Brush)GetValue(SelectedRowForegroundProperty); set => SetValue(SelectedRowForegroundProperty, value); }
+
+        private static void OnHeaderPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) { }
+        private static void OnRowPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) { }
+        private static void OnGridSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ExtendedDataGrid grid && grid.PART_Grid != null)
+            {
+                if (e.Property == GridRowHeightProperty && !double.IsNaN((double)e.NewValue))
+                    grid.PART_Grid.RowHeight = (double)e.NewValue;
+                else if (e.Property == GridColumnHeaderHeightProperty && !double.IsNaN((double)e.NewValue))
+                    grid.PART_Grid.ColumnHeaderHeight = (double)e.NewValue;
+            }
+        }
+        private void UpdateHeaderStyle() { }
+        private void UpdateRowStyle() { }
+
         #endregion
 
         #region Constructor
@@ -100,8 +169,37 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             _contextMenuRow = null;
 
             InitializeComponent();
+            InitializeThemeDefaults();
             InitializePageSizeCombo();
             UpdatePaginationUI();
+            Loaded += ExtendedDataGrid_Loaded;
+        }
+
+        private void InitializeThemeDefaults()
+        {
+            if (HeaderBackground == null && TryFindResource("CardHeaderBgBrush") is Brush headerBg)
+                HeaderBackground = headerBg;
+            if (HeaderForeground == null && TryFindResource("TextBrush") is Brush headerFg)
+                HeaderForeground = headerFg;
+            if (RowBackground == null && TryFindResource("CardBgBrush") is Brush rowBg)
+                RowBackground = rowBg;
+            if (RowForeground == null && TryFindResource("TextBrush") is Brush rowFg)
+                RowForeground = rowFg;
+            if (AlternateRowBackground == null && TryFindResource("PanelBgBrush") is Brush altBg)
+                AlternateRowBackground = altBg;
+            if (SelectedRowBackground == null && TryFindResource("AccentBrush") is Brush selBg)
+                SelectedRowBackground = selBg;
+            if (SelectedRowForeground == null && TryFindResource("CardBgBrush") is Brush selFg)
+                SelectedRowForeground = selFg;
+        }
+
+        private void ExtendedDataGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (PART_Grid != null)
+            {
+                PART_Grid.RowHeight = !double.IsNaN(GridRowHeight) ? GridRowHeight : double.NaN;
+                PART_Grid.ColumnHeaderHeight = !double.IsNaN(GridColumnHeaderHeight) ? GridColumnHeaderHeight : double.NaN;
+            }
         }
 
         #endregion

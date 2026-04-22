@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes;
+using Aarohi.Classes;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -16,7 +16,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace Aarohi.Wpf.Controls.Lib.Controls.TextBox
+namespace AarohiWpfControls.Controls.TextBox
 {
     /// <summary>
     /// Interaction logic for ExtendedTextBox.xaml
