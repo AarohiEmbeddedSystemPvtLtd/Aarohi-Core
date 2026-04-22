@@ -130,6 +130,9 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.TextBox
         {
             InitializeComponent();
             Items = new ObservableCollection<string>();
+            // THEME FIX: Link the internal unit-dropdown to the App's theme resources
+            cmbRight.SetResourceReference(ComboBox.BackgroundProperty, "PanelBgBrush");
+            cmbRight.SetResourceReference(ComboBox.ForegroundProperty, "TextBrush");
         }
 
         // -------------------------------------------------
