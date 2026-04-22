@@ -406,15 +406,15 @@ namespace Aarohi.Classes
 
         // Method: SelectAsync
         /// <summary>
-        /// Asynchronously executes a <c>SELECT *</c> on the target table with optional WHERE/TOP/ORDER BY/pagination.
+        /// Asynchronously executes a <c>SELECT *</c> on the target table with optional WHERE/TOP/ORDER BY/chunk limit.
         /// </summary>
         /// <param name="whereSql">Optional WHERE clause (without the keyword).</param>
         /// <param name="parameters">Optional parameters (name → value).</param>
         /// <param name="top">Optional TOP N.</param>
         /// <param name="orderBy">Optional ORDER BY (without the keyword).</param>
         /// <param name="ct">Cancellation token.</param>
-        /// <param name="pageNumber">Optional 1-based page number. Requires <paramref name="pageSize"/>.</param>
-        /// <param name="pageSize">Optional rows per page. Requires <paramref name="pageNumber"/>.</param>
+        /// <param name="pageNumber">Optional 1-based page number for compatibility. If omitted with <paramref name="pageSize"/>, the first chunk is returned.</param>
+        /// <param name="pageSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
         /// <returns>A populated <see cref="DataTable"/>.</returns>
         public async Task<DataTable?> SelectAsync(
             string? whereSql = null,
@@ -423,7 +423,9 @@ namespace Aarohi.Classes
             string? orderBy = null,
             CancellationToken ct = default,
             int? pageNumber = null,
-            int? pageSize = null)
+            int? pageSize = null,
+            bool DisplayName = false,
+            bool WantFormatingInDefault = false)
         => await SafeExecuteAsync("SELECT_ASYNC", async extras =>
         {
             EnsureIdent(Schema);
@@ -472,7 +474,7 @@ namespace Aarohi.Classes
                 ("resolvedWhere", resolvedWhereSql ?? ""),
                 ("orderBy", orderBy ?? ""),
                 ("resolvedOrderBy", resolvedOrderBy ?? ""),
-                ("pageNumber", pageNumber),
+                ("pageNumber", pageNumber ?? (hasPagination ? 1 : null)),
                 ("pageSize", pageSize),
                 ("offset", hasPagination ? offsetRows : null),
                 ("params", parameters ?? new Dictionary<string, object?>()));
@@ -480,6 +482,18 @@ namespace Aarohi.Classes
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             var dt = new DataTable();
             dt.Load(reader);
+
+            dt = ReorderColumnsByMetadataOrder(dt);
+
+            if (WantFormatingInDefault)
+            {
+                var formats = GetFormatsFromMetadata();
+                dt = ApplyFormats(dt, formats);
+            }
+
+            if (DisplayName)
+                dt = ApplyDisplayNames(dt);
+
             return dt;
         }).ConfigureAwait(false);
 

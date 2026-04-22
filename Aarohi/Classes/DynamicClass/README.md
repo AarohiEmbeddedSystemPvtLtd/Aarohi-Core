@@ -22,7 +22,7 @@ The class is split into partial files by responsibility:
 | File | Purpose |
 | --- | --- |
 | `DynamicClass.cs` | Core properties, connection factory, constructor, dispose |
-| `DynamicClass.Query.cs` | Select queries, pagination, display names, formatting |
+| `DynamicClass.Query.cs` | Select queries, chunk loading, display names, formatting |
 | `DynamicClass.Crud.cs` | Sync insert, update, save, delete, bulk insert/upsert |
 | `DynamicClass.CrudAsync.cs` | Async insert, update, save, delete, bulk insert, select |
 | `DynamicClass.SchemaDefinition.cs` | Create/drop/ensure table, add/alter/drop columns, options |
@@ -42,7 +42,7 @@ It can:
 - Create or ensure a table from `SchemaSpec`.
 - Add, alter, rename, and drop columns.
 - Insert, update by key, save/upsert, delete by key.
-- Select rows with optional `WHERE`, `ORDER BY`, `TOP`, and pagination.
+- Select rows with optional `WHERE`, `ORDER BY`, `TOP`, and chunk loading.
 - Read table/column metadata from SQL Server.
 - Store UI and software metadata in SQL Server extended properties.
 - Use software-friendly names through the `Soft_Used_Name` extended property.
@@ -130,33 +130,56 @@ var rows = dc.Select(
     orderBy: "{Id} DESC");
 ```
 
-## Select And Pagination
+## Select And Chunk Loading
 
-`Select` supports optional filtering, ordering, display names, formatting, and pagination.
+`Select` supports optional filtering, ordering, display names, formatting, and first-chunk loading.
 
 ```csharp
 DataTable? rows = dc.Select(
     whereSql: "{Status} = @status",
     parameters: new Dictionary<string, object?> { ["status"] = "Active" },
     orderBy: "{CreatedOn} DESC",
-    pageNumber: 1,
     pageSize: 50);
 ```
 
 Rules:
 
-- `pageNumber` starts at `1`.
-- `pageNumber` and `pageSize` must be used together.
-- `top` and pagination cannot be used together.
-- SQL Server pagination requires ordering. If no `orderBy` is provided, `DynamicClass` orders by key column, then first column.
+- `pageSize` alone returns the first chunk.
+- `top` and chunk loading cannot be used together.
+- SQL Server chunk loading requires ordering. If no `orderBy` is provided, `DynamicClass` orders by key column, then first column.
+- `pageNumber` is still accepted only for compatibility with older/manual paging code.
 
 Async version:
 
 ```csharp
 DataTable? rows = await dc.SelectAsync(
     orderBy: "{CreatedOn} DESC",
-    pageNumber: 2,
     pageSize: 50);
+```
+
+Load all data in chunks:
+
+```csharp
+await foreach (DataTable chunk in dc.SelectChunksAsync(
+    orderBy: "{CreatedOn} DESC",
+    chunkSize: 50,
+    ct: cancellationToken))
+{
+    // Bind the first chunk immediately, then append each later chunk on the UI thread.
+}
+```
+
+With the WPF `ChunkedDataGrid` control:
+
+```csharp
+var first = dc.Select(orderBy: "{CreatedOn} DESC", pageSize: grid.ChunkSize);
+grid.BindTable(first ?? new DataTable());
+
+await grid.AppendChunksAsync(dc.SelectChunksAsync(
+    orderBy: "{CreatedOn} DESC",
+    chunkSize: grid.ChunkSize,
+    skipFirstChunk: true,
+    ct: cancellationToken), cancellationToken);
 ```
 
 ## Insert, Update, Save, Delete
@@ -334,9 +357,8 @@ DataTable? firstPage = machine.Select(
     whereSql: "{Status} = @status",
     parameters: new Dictionary<string, object?> { ["status"] = "Active" },
     orderBy: "{Created} DESC",
-    pageNumber: 1,
     pageSize: 25,
     DisplayName: true);
 ```
 
-This example writes using the soft column name `Name`, filters with `{Status}`, orders with `{Created}`, and returns the first page of 25 rows.
+This example writes using the soft column name `Name`, filters with `{Status}`, orders with `{Created}`, and returns the first chunk of 25 rows.
