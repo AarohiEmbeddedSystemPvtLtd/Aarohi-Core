@@ -8,7 +8,7 @@
 		<Version>1.0.14.21</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
-		<Description>Test Screen Designer.</Description>
+		<Description>Aarohi Core.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<PackageIcon>icon.png</PackageIcon>
@@ -31,7 +31,7 @@
 
 	<ItemGroup>
 		<None Include="snap7.dll" CopyToOutputDirectory="PreserveNewest" />
-		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x64/native" />
+		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x86/native" />
 	</ItemGroup>
 
 	<ItemGroup>

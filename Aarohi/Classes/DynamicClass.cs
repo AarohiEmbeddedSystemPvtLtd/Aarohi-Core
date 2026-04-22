@@ -967,52 +967,52 @@ FROM @Actions;";
     IDictionary<string, object?>? parameters = null,
     int? top = null,
     string? orderBy = null,
-    bool DisplayName = true,
-    bool WantFormatingInDefault = true)
-=> SafeExecute("SELECT", extras =>
-{
-    EnsureIdent(Schema);
-    EnsureIdent(Table);
-
-    var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{Table}]"
-            + (string.IsNullOrWhiteSpace(whereSql) ? "" : " WHERE " + whereSql)
-            + (string.IsNullOrWhiteSpace(orderBy) ? "" : " ORDER BY " + orderBy);
-
-    using var cn = Open();
-    using var da = new SqlDataAdapter(sql, cn);
-
-    if (parameters != null)
-    {
-        da.SelectCommand!.Parameters.Clear();
-
-        foreach (var kv in parameters)
+    bool DisplayName = false,
+    bool WantFormatingInDefault = false)
+        => SafeExecute("SELECT", extras =>
         {
-            var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-            da.SelectCommand.Parameters.AddWithValue(name, kv.Value ?? DBNull.Value);
-        }
-    }
+            EnsureIdent(Schema);
+            EnsureIdent(Table);
 
-    AddCommonExtras(extras,
-        ("sql", sql),
-        ("where", whereSql ?? ""),
-        ("params", parameters ?? new Dictionary<string, object?>()));
+            var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{Table}]"
+                    + (string.IsNullOrWhiteSpace(whereSql) ? "" : " WHERE " + whereSql)
+                    + (string.IsNullOrWhiteSpace(orderBy) ? "" : " ORDER BY " + orderBy);
 
-    var dt = new DataTable();
-    da.Fill(dt);
+            using var cn = Open();
+            using var da = new SqlDataAdapter(sql, cn);
 
-    dt = ReorderColumnsByMetadataOrder(dt);
+            if (parameters != null)
+            {
+                da.SelectCommand!.Parameters.Clear();
 
-    if (WantFormatingInDefault)
-    {
-        var formats = GetFormatsFromMetadata();
-        dt = ApplyFormats(dt, formats);
-    }
+                foreach (var kv in parameters)
+                {
+                    var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
+                    da.SelectCommand.Parameters.AddWithValue(name, kv.Value ?? DBNull.Value);
+                }
+            }
 
-    if (DisplayName)
-        dt = ApplyDisplayNames(dt);
+            AddCommonExtras(extras,
+                ("sql", sql),
+                ("where", whereSql ?? ""),
+                ("params", parameters ?? new Dictionary<string, object?>()));
 
-    return dt;
-});
+            var dt = new DataTable();
+            da.Fill(dt);
+
+            dt = ReorderColumnsByMetadataOrder(dt);
+
+            if (WantFormatingInDefault)
+            {
+                var formats = GetFormatsFromMetadata();
+                dt = ApplyFormats(dt, formats);
+            }
+
+            if (DisplayName)
+                dt = ApplyDisplayNames(dt);
+
+            return dt;
+        });
 
         private Dictionary<string, string> GetFormatsFromMetadata()
         {
@@ -1079,7 +1079,7 @@ FROM @Actions;";
     IDictionary<string, object?>? parameters = null,
     bool distinct = true)
         {
-            var dt = Select(whereSql, parameters);
+            var dt = Select(whereSql, parameters, DisplayName: false);
             var values = GetColumnValuesFromDataTable(dt!, columnName);
 
             if (distinct)
@@ -1118,7 +1118,7 @@ FROM @Actions;";
             EnsureIdent(Table);
             EnsureIdent(columnName);
 
-            var dt = Select($"{Q(columnName)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1);
+            var dt = Select($"{Q(columnName)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1, DisplayName:false);
             if (dt == null || dt.Rows.Count == 0) return null;
 
             var row = dt.Rows[0];
@@ -2829,6 +2829,7 @@ ORDER BY c.column_id;";
         {
             var ci = new ColumnInfo
             {
+                ParentTable = this.Table,
                 Name = rd["ColumnName"].ToString(),
                 DataType = rd["DataType"].ToString(),
 
@@ -2897,7 +2898,8 @@ ORDER BY c.column_id;";
             {
                 if (displayNameMap.TryGetValue(col.ColumnName, out var disp))
                 {
-                    col.Caption = disp;
+                    col.Caption = col.ColumnName;
+                    col.ColumnName = disp;
                 }
             }
 
@@ -3285,6 +3287,7 @@ ORDER BY c.column_id;", cn);
 
         public sealed class ColumnInfo
         {
+            public string ParentTable { get; set; }
             public bool IsPrimaryKey { get; set; }
             public string Name { get; set; } = "";
             public string DataType { get; set; } = "";

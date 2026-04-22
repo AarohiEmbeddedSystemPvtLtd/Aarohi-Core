@@ -23,12 +23,19 @@ namespace Aarohi.Core.PLC
         public int ConnectTimeoutMs { get; set; } = 3000;
 
         public bool IsConnected { get { lock (_sync) return _client.Connected(); } }
+        public string LastError { get; private set; } = string.Empty;
 
         public enum PlcAccess { Read, Write, ReadWrite }
         public enum PlcDataType { Bool, Int16, UInt16, Int32, UInt32, Real, Byte, Word, DWord, DInt, DWordU, S7String, CharArray }
         public Action<string>? Logger { get; set; }
 
         private void Log(string s) { try { Logger?.Invoke(s); } catch { } }
+        private void SetLastError(string message)
+        {
+            LastError = message ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(LastError))
+                Log(LastError);
+        }
 
         public int SubscriptionCount
         {
@@ -146,6 +153,7 @@ namespace Aarohi.Core.PLC
         public void PollOnce()
         {
             EnsureConnected();
+            LastError = string.Empty;
 
             List<KeyValuePair<int, List<Sub>>> groups;
             lock (_subsSync)
@@ -183,7 +191,7 @@ namespace Aarohi.Core.PLC
                         int rc = _client.DBRead(db, readStart, readSize, rbuf);
                         if (rc != 0)
                         {
-                            Log($"PollOnce[DB{db}]: DBRead failed rc={rc} '{_client.ErrorText(rc)}'");
+                            SetLastError($"PollOnce[DB{db}]: DBRead failed rc={rc} '{_client.ErrorText(rc)}'");
                         }
                         else
                         {
@@ -199,7 +207,7 @@ namespace Aarohi.Core.PLC
                 }
                 catch (Exception ex)
                 {
-                    Log($"PollOnce[DB{db}]: READ phase exception: {ex.Message}");
+                    SetLastError($"PollOnce[DB{db}]: READ phase exception: {ex.Message}");
                 }
 
                 // ---------- WRITE ----------
@@ -222,7 +230,7 @@ namespace Aarohi.Core.PLC
                         int rcR = _client.DBRead(db, wStart, wSize, wbuf);
                         if (rcR != 0)
                         {
-                            Log($"PollOnce[DB{db}]: prewrite DBRead failed rc={rcR} '{_client.ErrorText(rcR)}'");
+                            SetLastError($"PollOnce[DB{db}]: prewrite DBRead failed rc={rcR} '{_client.ErrorText(rcR)}'");
                             continue;
                         }
 
@@ -236,7 +244,7 @@ namespace Aarohi.Core.PLC
                         int rcW = _client.DBWrite(db, wStart, wSize, wbuf);
                         if (rcW != 0)
                         {
-                            Log($"PollOnce[DB{db}]: DBWrite failed rc={rcW} '{_client.ErrorText(rcW)}'");
+                            SetLastError($"PollOnce[DB{db}]: DBWrite failed rc={rcW} '{_client.ErrorText(rcW)}'");
                         }
                         else
                         {
@@ -246,8 +254,24 @@ namespace Aarohi.Core.PLC
                 }
                 catch (Exception ex)
                 {
-                    Log($"PollOnce[DB{db}]: WRITE phase exception: {ex.Message}");
+                    SetLastError($"PollOnce[DB{db}]: WRITE phase exception: {ex.Message}");
                 }
+            }
+        }
+
+        public bool TryPollOnce(out string? error)
+        {
+            try
+            {
+                PollOnce();
+                error = string.IsNullOrWhiteSpace(LastError) ? null : LastError;
+                return error == null;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                SetLastError(error);
+                return false;
             }
         }
 
