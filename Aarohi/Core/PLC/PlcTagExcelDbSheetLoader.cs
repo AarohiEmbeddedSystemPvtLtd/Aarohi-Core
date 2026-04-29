@@ -356,12 +356,5 @@ namespace Aarohi.Core.PLC
         private static string Append(string? a, string b)
             => string.IsNullOrWhiteSpace(a) ? b : a + " | " + b;
 
-        // Trial Change
-
-        private static void addingNewFunc()
-        {
-            decimal d = 48484;
-            decimal dr = 48484;
-        }
     }
 }
