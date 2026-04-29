@@ -1111,8 +1111,8 @@ FROM @Actions;";
         }
 
         public Dictionary<string, object?>? GetRowAsDictionary(
-    string columnName,
-    object? value)
+        string columnName,
+        object? value)
         {
             EnsureIdent(Schema);
             EnsureIdent(Table);

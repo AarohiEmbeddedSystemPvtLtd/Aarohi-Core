@@ -14,6 +14,7 @@ namespace Aarohi.Configuration
 
         public class UserPermissionColumns
         {
+            public string Id { get; set; }
             public string UserId { get; set; }
             public string PermissionId { get; set; }
         }
