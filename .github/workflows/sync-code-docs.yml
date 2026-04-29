@@ -165,11 +165,22 @@ jobs:
           echo "HTTP status: $http_status"
           echo "Response body:"
           cat "$response_file" || true
+          {
+            echo "## Sync Code Docs"
+            echo ""
+            echo "- curl exit code: $curl_exit"
+            echo "- HTTP status: $http_status"
+            echo ""
+            echo "### Response body"
+            echo ""
+            cat "$response_file" || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$curl_exit" -ne 0 ]; then
             exit "$curl_exit"
           fi
 
           if [ "${http_status#2}" = "$http_status" ]; then
+            echo "Doc server rejected the sync request." >&2
             exit 1
           fi
