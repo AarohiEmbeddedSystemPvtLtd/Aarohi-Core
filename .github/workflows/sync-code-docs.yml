@@ -12,6 +12,8 @@ permissions:
 jobs:
   sync-docs:
     runs-on: ubuntu-latest
+    env:
+      DOCS_SITE_SYNC_URL: ${{ secrets.DOCS_SITE_SYNC_URL || 'http://103.105.233.156/api/github/docs-sync/' }}
 
     steps:
       - name: Checkout repository
@@ -150,9 +152,18 @@ jobs:
 
       - name: Send payload to doc server
         env:
-          DOCS_SITE_SYNC_URL: ${{ secrets.DOCS_SITE_SYNC_URL }}
           DOCS_SYNC_SECRET: ${{ secrets.DOCS_SYNC_SECRET }}
         run: |
+          if [ -z "$DOCS_SITE_SYNC_URL" ]; then
+            echo "DOCS_SITE_SYNC_URL is not set." >&2
+            exit 1
+          fi
+
+          if [ -z "$DOCS_SYNC_SECRET" ]; then
+            echo "DOCS_SYNC_SECRET is not set." >&2
+            exit 1
+          fi
+
           curl --fail-with-body -sS -X POST "$DOCS_SITE_SYNC_URL" \
             -H "Content-Type: application/json" \
             -H "X-Docs-Secret: $DOCS_SYNC_SECRET" \
