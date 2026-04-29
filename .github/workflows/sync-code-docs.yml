@@ -14,14 +14,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug start
-        run: |
-          echo "Workflow started"
-          echo "Repo: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "SHA: ${{ github.sha }}"
-
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -154,34 +146,14 @@ jobs:
 
           with open("payload.json", "w", encoding="utf-8") as f:
               json.dump(payload, f, indent=2)
-
-          print(json.dumps(payload, indent=2))
           PY
-
-      - name: Show payload preview
-        run: |
-          echo "Payload preview:"
-          python - <<'PY'
-          from pathlib import Path
-          text = Path("payload.json").read_text(encoding="utf-8")
-          print(text[:4000])
-          PY
-
-      - name: Upload debug artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: docs-sync-debug
-          path: |
-            changed_files.txt
-            payload.json
 
       - name: Send payload to doc server
         env:
           DOCS_SITE_SYNC_URL: ${{ secrets.DOCS_SITE_SYNC_URL }}
           DOCS_SYNC_SECRET: ${{ secrets.DOCS_SYNC_SECRET }}
         run: |
-          curl -sS -X POST "$DOCS_SITE_SYNC_URL" \
+          curl --fail-with-body -sS -X POST "$DOCS_SITE_SYNC_URL" \
             -H "Content-Type: application/json" \
             -H "X-Docs-Secret: $DOCS_SYNC_SECRET" \
-            --data-binary @payload.json \
-            -w "\nHTTP_STATUS:%{http_code}\n"
+            --data-binary @payload.json
