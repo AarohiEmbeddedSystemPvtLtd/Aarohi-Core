@@ -1377,7 +1377,7 @@ namespace Aarohi.Classes
                 throw new ArgumentOutOfRangeException(nameof(chunkSize), "chunkSize must be greater than or equal to 1.");
 
             DataTable? firstChunk = DynamicSelectLoadInChunks
-                ? _dynClass.Select(whereSql, parameters, orderBy: orderBy, pageSize: effectiveChunkSize)
+                ? _dynClass.Select(whereSql, parameters, orderBy: orderBy, chunkSize: effectiveChunkSize)
                 : _dynClass.Select(whereSql, parameters, orderBy: orderBy);
 
             firstChunk ??= new DataTable(_dynClass.Table);

@@ -27,8 +27,11 @@ namespace Aarohi.Classes
         /// <param name="parameters">Optional parameter map (name → value). Names may omit the '@'.</param>
         /// <param name="top">Optional TOP N limit.</param>
         /// <param name="orderBy">Optional ORDER BY clause (without the keyword).</param>
-        /// <param name="pageNumber">Optional 1-based page number for compatibility. If omitted with <paramref name="pageSize"/>, the first chunk is returned.</param>
-        /// <param name="pageSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
+        /// <param name="pageNumber">Optional 1-based page number kept for compatibility. Prefer <paramref name="chunkNumber"/>.</param>
+        /// <param name="pageSize">Optional chunk size kept for compatibility. Prefer <paramref name="chunkSize"/>.</param>
+        /// <param name="chunkNumber">Optional 1-based chunk number. If omitted with <paramref name="chunkSize"/>, the first chunk is returned.</param>
+        /// <param name="chunkSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
+        /// <param name="chunkOffset">Optional zero-based row offset for variable-size chunk loading. Use with <paramref name="chunkSize"/>.</param>
         /// <returns>A <see cref="DataTable"/> with results; can be empty but not null.</returns>
         public DataTable? Select(
     string? whereSql = null,
@@ -38,29 +41,43 @@ namespace Aarohi.Classes
     bool DisplayName = false,
     bool WantFormatingInDefault = false,
     int? pageNumber = null,
-    int? pageSize = null)
+    int? pageSize = null,
+    int? chunkNumber = null,
+    int? chunkSize = null,
+    int? chunkOffset = null)
         => SafeExecute("SELECT", extras =>
         {
             EnsureIdent(Schema);
             var physicalTable = ResolveTableName();
             var resolvedWhereSql = ResolveSqlNamePlaceholders(whereSql);
             var resolvedOrderBy = ResolveSqlNamePlaceholders(orderBy);
-            var hasPagination = TryBuildPagination(pageNumber, pageSize, top, out var offsetRows, out var fetchRows);
+            var hasChunkWindow = TryBuildChunkWindow(
+                pageNumber,
+                pageSize,
+                chunkNumber,
+                chunkSize,
+                chunkOffset,
+                top,
+                out var offsetRows,
+                out var fetchRows,
+                out var effectiveChunkNumber,
+                out var effectiveChunkSize,
+                out var effectiveChunkOffset);
             var orderClause = "";
 
-            if (!string.IsNullOrWhiteSpace(resolvedOrderBy) || hasPagination)
+            if (!string.IsNullOrWhiteSpace(resolvedOrderBy) || hasChunkWindow)
             {
-                var columns = hasPagination && string.IsNullOrWhiteSpace(resolvedOrderBy)
+                var columns = hasChunkWindow && string.IsNullOrWhiteSpace(resolvedOrderBy)
                     ? GetColumns() ?? new List<ColumnInfo>()
                     : new List<ColumnInfo>();
 
-                orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasPagination);
+                orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasChunkWindow);
             }
 
             var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{physicalTable}]"
                     + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
                     + orderClause
-                    + (hasPagination ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_page_size ROWS ONLY" : "");
+                    + (hasChunkWindow ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_chunk_size ROWS ONLY" : "");
 
             using var cn = Open();
             using var da = new SqlDataAdapter(sql, cn);
@@ -76,10 +93,10 @@ namespace Aarohi.Classes
                 }
             }
 
-            if (hasPagination)
+            if (hasChunkWindow)
             {
                 da.SelectCommand!.Parameters.Add("@__dc_offset", SqlDbType.Int).Value = offsetRows;
-                da.SelectCommand.Parameters.Add("@__dc_page_size", SqlDbType.Int).Value = fetchRows;
+                da.SelectCommand.Parameters.Add("@__dc_chunk_size", SqlDbType.Int).Value = fetchRows;
             }
 
             AddCommonExtras(extras,
@@ -88,9 +105,12 @@ namespace Aarohi.Classes
                 ("resolvedWhere", resolvedWhereSql ?? ""),
                 ("orderBy", orderBy ?? ""),
                 ("resolvedOrderBy", resolvedOrderBy ?? ""),
-                ("pageNumber", pageNumber ?? (hasPagination ? 1 : null)),
+                ("pageNumber", pageNumber),
                 ("pageSize", pageSize),
-                ("offset", hasPagination ? offsetRows : null),
+                ("chunkNumber", hasChunkWindow ? effectiveChunkNumber : null),
+                ("chunkSize", hasChunkWindow ? effectiveChunkSize : null),
+                ("chunkOffset", hasChunkWindow ? effectiveChunkOffset : null),
+                ("offset", hasChunkWindow ? offsetRows : null),
                 ("params", parameters ?? new Dictionary<string, object?>()));
 
             var dt = new DataTable();
@@ -110,39 +130,72 @@ namespace Aarohi.Classes
             return dt;
         });
 
-        private bool TryBuildPagination(
+        private bool TryBuildChunkWindow(
             int? pageNumber,
             int? pageSize,
+            int? chunkNumber,
+            int? chunkSize,
+            int? chunkOffset,
             int? top,
             out int offsetRows,
-            out int fetchRows)
+            out int fetchRows,
+            out int effectiveChunkNumber,
+            out int effectiveChunkSize,
+            out int effectiveChunkOffset)
         {
             offsetRows = 0;
             fetchRows = 0;
+            effectiveChunkNumber = 0;
+            effectiveChunkSize = 0;
+            effectiveChunkOffset = 0;
 
-            if (!pageNumber.HasValue && !pageSize.HasValue)
+            if (pageNumber.HasValue && chunkNumber.HasValue && pageNumber.Value != chunkNumber.Value)
+                throw new ArgumentException("Use either pageNumber or chunkNumber, not both with different values.");
+
+            if (pageSize.HasValue && chunkSize.HasValue && pageSize.Value != chunkSize.Value)
+                throw new ArgumentException("Use either pageSize or chunkSize, not both with different values.");
+
+            chunkNumber ??= pageNumber;
+            chunkSize ??= pageSize;
+
+            if (chunkOffset.HasValue && (pageNumber.HasValue || chunkNumber.HasValue))
+                throw new ArgumentException("Use either chunkOffset or chunkNumber, not both.");
+
+            if (!chunkNumber.HasValue && !chunkSize.HasValue && !chunkOffset.HasValue)
                 return false;
 
-            if (!pageSize.HasValue)
-                throw new ArgumentException("pageSize is required when pageNumber is used.");
+            if (!chunkSize.HasValue)
+                throw new ArgumentException("chunkSize is required when chunkNumber or chunkOffset is used.");
 
             if (top.HasValue)
                 throw new InvalidOperationException("Use either top or chunk loading, not both.");
 
-            var effectivePageNumber = pageNumber ?? 1;
+            effectiveChunkNumber = chunkNumber ?? (chunkOffset.HasValue ? 0 : 1);
 
-            if (effectivePageNumber < 1)
-                throw new ArgumentOutOfRangeException(nameof(pageNumber), "pageNumber must be greater than or equal to 1.");
+            if (!chunkOffset.HasValue && effectiveChunkNumber < 1)
+                throw new ArgumentOutOfRangeException(nameof(chunkNumber), "chunkNumber must be greater than or equal to 1.");
 
-            if (pageSize.Value < 1)
-                throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be greater than or equal to 1.");
+            if (chunkSize.Value < 1)
+                throw new ArgumentOutOfRangeException(nameof(chunkSize), "chunkSize must be greater than or equal to 1.");
 
-            checked
+            if (chunkOffset.HasValue)
             {
-                offsetRows = (effectivePageNumber - 1) * pageSize.Value;
+                if (chunkOffset.Value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(chunkOffset), "chunkOffset must be greater than or equal to 0.");
+
+                offsetRows = chunkOffset.Value;
+            }
+            else
+            {
+                checked
+                {
+                    offsetRows = (effectiveChunkNumber - 1) * chunkSize.Value;
+                }
             }
 
-            fetchRows = pageSize.Value;
+            effectiveChunkSize = chunkSize.Value;
+            effectiveChunkOffset = offsetRows;
+            fetchRows = effectiveChunkSize;
             return true;
         }
 
@@ -182,7 +235,7 @@ namespace Aarohi.Classes
             if (chunkSize < 1)
                 throw new ArgumentOutOfRangeException(nameof(chunkSize), "chunkSize must be greater than or equal to 1.");
 
-            var pageNumber = skipFirstChunk ? 2 : 1;
+            var chunkNumber = skipFirstChunk ? 2 : 1;
 
             while (true)
             {
@@ -194,8 +247,8 @@ namespace Aarohi.Classes
                     top: null,
                     orderBy: orderBy,
                     ct: ct,
-                    pageNumber: pageNumber,
-                    pageSize: chunkSize,
+                    chunkNumber: chunkNumber,
+                    chunkSize: chunkSize,
                     DisplayName: DisplayName,
                     WantFormatingInDefault: WantFormatingInDefault).ConfigureAwait(false);
 
@@ -209,7 +262,7 @@ namespace Aarohi.Classes
 
                 checked
                 {
-                    pageNumber++;
+                    chunkNumber++;
                 }
             }
         }

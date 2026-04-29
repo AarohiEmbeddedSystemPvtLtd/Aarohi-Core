@@ -413,8 +413,11 @@ namespace Aarohi.Classes
         /// <param name="top">Optional TOP N.</param>
         /// <param name="orderBy">Optional ORDER BY (without the keyword).</param>
         /// <param name="ct">Cancellation token.</param>
-        /// <param name="pageNumber">Optional 1-based page number for compatibility. If omitted with <paramref name="pageSize"/>, the first chunk is returned.</param>
-        /// <param name="pageSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
+        /// <param name="pageNumber">Optional 1-based page number kept for compatibility. Prefer <paramref name="chunkNumber"/>.</param>
+        /// <param name="pageSize">Optional chunk size kept for compatibility. Prefer <paramref name="chunkSize"/>.</param>
+        /// <param name="chunkNumber">Optional 1-based chunk number. If omitted with <paramref name="chunkSize"/>, the first chunk is returned.</param>
+        /// <param name="chunkSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
+        /// <param name="chunkOffset">Optional zero-based row offset for variable-size chunk loading. Use with <paramref name="chunkSize"/>.</param>
         /// <returns>A populated <see cref="DataTable"/>.</returns>
         public async Task<DataTable?> SelectAsync(
             string? whereSql = null,
@@ -425,29 +428,43 @@ namespace Aarohi.Classes
             int? pageNumber = null,
             int? pageSize = null,
             bool DisplayName = false,
-            bool WantFormatingInDefault = false)
+            bool WantFormatingInDefault = false,
+            int? chunkNumber = null,
+            int? chunkSize = null,
+            int? chunkOffset = null)
         => await SafeExecuteAsync("SELECT_ASYNC", async extras =>
         {
             EnsureIdent(Schema);
             var physicalTable = ResolveTableName();
             var resolvedWhereSql = ResolveSqlNamePlaceholders(whereSql);
             var resolvedOrderBy = ResolveSqlNamePlaceholders(orderBy);
-            var hasPagination = TryBuildPagination(pageNumber, pageSize, top, out var offsetRows, out var fetchRows);
+            var hasChunkWindow = TryBuildChunkWindow(
+                pageNumber,
+                pageSize,
+                chunkNumber,
+                chunkSize,
+                chunkOffset,
+                top,
+                out var offsetRows,
+                out var fetchRows,
+                out var effectiveChunkNumber,
+                out var effectiveChunkSize,
+                out var effectiveChunkOffset);
             var orderClause = "";
 
-            if (!string.IsNullOrWhiteSpace(resolvedOrderBy) || hasPagination)
+            if (!string.IsNullOrWhiteSpace(resolvedOrderBy) || hasChunkWindow)
             {
-                var columns = hasPagination && string.IsNullOrWhiteSpace(resolvedOrderBy)
+                var columns = hasChunkWindow && string.IsNullOrWhiteSpace(resolvedOrderBy)
                     ? GetColumns() ?? new List<ColumnInfo>()
                     : new List<ColumnInfo>();
 
-                orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasPagination);
+                orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasChunkWindow);
             }
 
             var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{physicalTable}]"
                     + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
                     + orderClause
-                    + (hasPagination ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_page_size ROWS ONLY" : "");
+                    + (hasChunkWindow ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_chunk_size ROWS ONLY" : "");
 
             using var cn = await OpenAsync(ct).ConfigureAwait(false);
             using var cmd = new SqlCommand(sql, cn);
@@ -462,10 +479,10 @@ namespace Aarohi.Classes
                 }
             }
 
-            if (hasPagination)
+            if (hasChunkWindow)
             {
                 cmd.Parameters.Add("@__dc_offset", SqlDbType.Int).Value = offsetRows;
-                cmd.Parameters.Add("@__dc_page_size", SqlDbType.Int).Value = fetchRows;
+                cmd.Parameters.Add("@__dc_chunk_size", SqlDbType.Int).Value = fetchRows;
             }
 
             AddCommonExtras(extras,
@@ -474,9 +491,12 @@ namespace Aarohi.Classes
                 ("resolvedWhere", resolvedWhereSql ?? ""),
                 ("orderBy", orderBy ?? ""),
                 ("resolvedOrderBy", resolvedOrderBy ?? ""),
-                ("pageNumber", pageNumber ?? (hasPagination ? 1 : null)),
+                ("pageNumber", pageNumber),
                 ("pageSize", pageSize),
-                ("offset", hasPagination ? offsetRows : null),
+                ("chunkNumber", hasChunkWindow ? effectiveChunkNumber : null),
+                ("chunkSize", hasChunkWindow ? effectiveChunkSize : null),
+                ("chunkOffset", hasChunkWindow ? effectiveChunkOffset : null),
+                ("offset", hasChunkWindow ? offsetRows : null),
                 ("params", parameters ?? new Dictionary<string, object?>()));
 
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);

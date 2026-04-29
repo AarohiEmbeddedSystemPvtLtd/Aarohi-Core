@@ -7,7 +7,7 @@
 		<GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
         <!-- 1. Package Identity (Essential for NuGet) -->
         <PackageId>Aarohi.Wpf.Controls</PackageId>  
-        <Version>1.0.0.36</Version>
+        <Version>1.0.0.71</Version>
         <Authors>Aarohi Embedded Systems</Authors>
         <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -34,7 +34,6 @@ Compound control consisting of a TextBox (for values) and a ComboBox (for units)
         <PackageTags>WPF;DataGrid;TextBox;UI;Controls;Theme;Aarohi</PackageTags>
         <!-- 2. Package Icon -->
         <PackageIcon>Aarohi.jpg</PackageIcon>
-        <PackageReadmeFile>Version History.txt</PackageReadmeFile>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
@@ -45,6 +44,5 @@ Compound control consisting of a TextBox (for values) and a ComboBox (for units)
         <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
         <!-- 3. Corrected Image Path: Removed leading backslash -->
         <None Include="Resources\Images\Aarohi.jpg" Pack="true" PackagePath="." />
-        <None Include="Version History.txt" Pack="true" PackagePath="\" />
     </ItemGroup>
 </Project>
