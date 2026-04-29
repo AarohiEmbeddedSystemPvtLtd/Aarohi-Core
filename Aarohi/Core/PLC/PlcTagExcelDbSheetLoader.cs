@@ -360,7 +360,7 @@ namespace Aarohi.Core.PLC
 
         private static void addingNewFunc()
         {
-
+            decimal d = 48484;
         }
     }
 }

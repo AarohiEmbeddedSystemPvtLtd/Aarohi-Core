@@ -1,172 +1,33 @@
-name: Sync Code Docs
+- name: Debug start
+          run: |
+            echo "Workflow started"
+            echo "Repo: ${{ github.repository }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Event: ${{ github.event_name }}"
+            echo "SHA: ${{ github.sha }}"
 
-on:
-  push:
-    branches:
-      - "**"
+        - name: Show changed files count
+          run: |
+            echo "Changed files file:"
+            cat changed_files.txt || true
+            echo "Payload preview:"
+            cat payload.json | head -n 80
 
-  workflow_dispatch:
+        - name: Upload debug artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: docs-sync-debug
+            path: |
+              changed_files.txt
+              payload.json
 
-permissions:
-  contents: read
-
-jobs:
-  sync-docs:
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Build changed files payload
-        shell: bash
-        run: |
-          BEFORE="${{ github.event.before }}"
-          AFTER="${{ github.sha }}"
-
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            git diff-tree --no-commit-id --name-status -r "$AFTER" > changed_files.txt || true
-          else
-            git diff --name-status --find-renames "$BEFORE" "$AFTER" > changed_files.txt || true
-          fi
-
-          echo "Changed files:"
-          cat changed_files.txt || true
-
-          python3 <<'PY'
-          import json
-          from pathlib import Path
-
-          MAX_FILE_SIZE = 200000
-
-          ALLOWED_EXTENSIONS = {
-              ".cs",
-              ".xaml",
-              ".xml",
-              ".json",
-              ".sql",
-              ".md",
-              ".py",
-              ".js",
-              ".ts",
-              ".html",
-              ".css",
-              ".csproj",
-              ".sln",
-              ".config",
-              ".yml",
-              ".yaml",
-          }
-
-          IGNORED_PARTS = {
-              "/bin/",
-              "/obj/",
-              "/.git/",
-              "/node_modules/",
-              "/packages/",
-              "/dist/",
-              "/build/",
-              "/.vs/",
-          }
-
-          def should_process_file(file_path: str) -> bool:
-              normalized = "/" + file_path.replace("\\", "/").lower()
-
-              if any(part in normalized for part in IGNORED_PARTS):
-                  return False
-
-              suffix = Path(file_path).suffix.lower()
-              return suffix in ALLOWED_EXTENSIONS
-
-          def is_probably_text(path: Path) -> bool:
-              try:
-                  raw = path.read_bytes()[:2048]
-              except Exception:
-                  return False
-
-              if b"\x00" in raw:
-                  return False
-
-              try:
-                  raw.decode("utf-8")
-                  return True
-              except UnicodeDecodeError:
-                  return False
-
-          def read_file_content(file_path: str):
-              path = Path(file_path)
-
-              if not path.exists() or not path.is_file():
-                  return None
-
-              if path.stat().st_size > MAX_FILE_SIZE:
-                  return None
-
-              if not is_probably_text(path):
-                  return None
-
-              return path.read_text(encoding="utf-8", errors="replace")
-
-          changes = []
-
-          with open("changed_files.txt", "r", encoding="utf-8") as f:
-              for line in f:
-                  line = line.strip()
-
-                  if not line:
-                      continue
-
-                  parts = line.split("\t")
-                  status_raw = parts[0]
-                  status = status_raw[0]
-
-                  if status == "R" and len(parts) >= 3:
-                      old_path = parts[1]
-                      file_path = parts[2]
-                  elif len(parts) >= 2:
-                      old_path = ""
-                      file_path = parts[1]
-                  else:
-                      continue
-
-                  if not should_process_file(file_path):
-                      continue
-
-                  file_content = None
-
-                  if status != "D":
-                      file_content = read_file_content(file_path)
-
-                  changes.append({
-                      "status": status,
-                      "status_raw": status_raw,
-                      "old_path": old_path,
-                      "file_path": file_path,
-                      "file_content": file_content,
-                  })
-
-          payload = {
-              "repository": "${{ github.repository }}",
-              "branch": "${{ github.ref_name }}",
-              "commit_sha": "${{ github.sha }}",
-              "actor": "${{ github.actor }}",
-              "changes": changes,
-          }
-
-          with open("payload.json", "w", encoding="utf-8") as f:
-              json.dump(payload, f, indent=2)
-
-          print(json.dumps(payload, indent=2))
-          PY
-
-      - name: Send payload to doc server
-        env:
-          DOCS_SITE_SYNC_URL: ${{ secrets.DOCS_SITE_SYNC_URL }}
-          DOCS_SYNC_SECRET: ${{ secrets.DOCS_SYNC_SECRET }}
-        run: |
-          curl --fail-with-body -X POST "$DOCS_SITE_SYNC_URL" \
-            -H "Content-Type: application/json" \
-            -H "X-Docs-Secret: $DOCS_SYNC_SECRET" \
-            --data-binary @payload.json
+        - name: Send payload to doc server
+          env:
+            DOCS_SITE_SYNC_URL: ${{ secrets.DOCS_SITE_SYNC_URL }}
+            DOCS_SYNC_SECRET: ${{ secrets.DOCS_SYNC_SECRET }}
+          run: |
+            curl -sS -X POST "$DOCS_SITE_SYNC_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Docs-Secret: $DOCS_SYNC_SECRET" \
+              --data-binary @payload.json \
+              -w "\nHTTP_STATUS:%{http_code}\n"
