@@ -36,8 +36,12 @@ jobs:
           echo "Changed files:"
           cat changed_files.txt || true
 
+          export BEFORE AFTER
+
           python3 <<'PY'
           import json
+          import os
+          import subprocess
           from pathlib import Path
 
           MAX_FILE_SIZE = 200000
@@ -102,6 +106,36 @@ jobs:
                   return None
               return path.read_text(encoding="utf-8", errors="replace")
 
+          def read_generated_change_doc(file_path: str, old_path: str, status: str):
+              target_path = old_path if status == "D" and old_path else file_path
+              before = os.environ.get("BEFORE", "")
+              after = os.environ.get("AFTER", "")
+
+              if not before or not after or not target_path:
+                  return None
+
+              result = subprocess.run(
+                  [
+                      "git",
+                      "diff",
+                      "--unified=0",
+                      "--no-color",
+                      "--find-renames",
+                      before,
+                      after,
+                      "--",
+                      target_path,
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+
+              if result.returncode not in (0, 1):
+                  return None
+
+              diff_text = result.stdout.strip()
+              return diff_text or None
+
           changes = []
 
           with open("changed_files.txt", "r", encoding="utf-8") as f:
@@ -127,8 +161,10 @@ jobs:
                       continue
 
                   file_content = None
+                  generated_change_doc = None
                   if status != "D":
                       file_content = read_file_content(file_path)
+                  generated_change_doc = read_generated_change_doc(file_path, old_path, status)
 
                   changes.append({
                       "status": status,
@@ -136,6 +172,7 @@ jobs:
                       "old_path": old_path,
                       "file_path": file_path,
                       "file_content": file_content,
+                      "generated_change_doc": generated_change_doc,
                   })
 
           payload = {
