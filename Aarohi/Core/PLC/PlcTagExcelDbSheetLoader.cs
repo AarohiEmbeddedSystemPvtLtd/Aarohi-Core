@@ -357,5 +357,10 @@ namespace Aarohi.Core.PLC
             => string.IsNullOrWhiteSpace(a) ? b : a + " | " + b;
 
         // Trial Change
+
+        private static void addingNewFunc()
+        {
+
+        }
     }
 }
