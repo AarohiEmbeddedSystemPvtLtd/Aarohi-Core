@@ -26,7 +26,7 @@ namespace AarohiWpfControls.Helper_Classes
             }
             catch
             {
-                return value; // Fallback to original data if conversion fails
+                return value;
             }
         }
 
