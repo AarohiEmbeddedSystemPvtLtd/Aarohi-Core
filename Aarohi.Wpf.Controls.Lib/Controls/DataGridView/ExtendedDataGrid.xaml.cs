@@ -20,9 +20,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
         private DataTable _sourceData;
         private DataView _filteredView;
         private List<DataRowView> _allRows;
-        private int _currentPage = 1;
-        private int _pageSize = 50;
-        private int _totalPages = 1;
         private DataGridColumnHeader _currentFilterColumn;
 
         private readonly Dictionary<string, string> _columnFilters = new(StringComparer.OrdinalIgnoreCase);
@@ -53,26 +50,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
 
         #region Dependency Properties
 
-        public static readonly DependencyProperty PageSizeProperty =
-            DependencyProperty.Register(nameof(PageSize), typeof(int), typeof(ExtendedDataGrid),
-                new PropertyMetadata(50, (d, e) => ((ExtendedDataGrid)d).OnPageSizeChanged((int)e.NewValue)));
-
-        public int PageSize
-        {
-            get => (int)GetValue(PageSizeProperty);
-            set => SetValue(PageSizeProperty, value);
-        }
-
-        public static readonly DependencyProperty EnablePaginationProperty =
-            DependencyProperty.Register(nameof(EnablePagination), typeof(bool), typeof(ExtendedDataGrid),
-                new PropertyMetadata(true));
-
-        public bool EnablePagination
-        {
-            get => (bool)GetValue(EnablePaginationProperty);
-            set => SetValue(EnablePaginationProperty, value);
-        }
-
         public static readonly DependencyProperty AllowMultiSelectProperty =
             DependencyProperty.Register(nameof(AllowMultiSelect), typeof(bool), typeof(ExtendedDataGrid),
                 new PropertyMetadata(true, (d, e) => ((ExtendedDataGrid)d).PART_Grid.SelectionMode =
@@ -93,15 +70,11 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             _sourceData = new DataTable();
             _filteredView = new DataView(_sourceData);
             _allRows = new List<DataRowView>();
-            _currentPage = 1;
-            _pageSize = 50;
-            _totalPages = 1;
             _currentFilterColumn = null;
             _contextMenuRow = null;
 
             InitializeComponent();
-            InitializePageSizeCombo();
-            UpdatePaginationUI();
+            UpdateFooterState();
         }
 
         #endregion
@@ -114,7 +87,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             _allRows = new List<DataRowView>();
             _columnFilters.Clear();
             _fixedFilters.Clear();
-            _currentPage = 1;
             _filteredView = new DataView(_sourceData);
             _allRows = _filteredView.Cast<DataRowView>().ToList();
             
@@ -170,7 +142,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             else
                 _columnFilters[column] = expr;
 
-            _currentPage = 1;
             ApplyCombinedFilter();
         }
 
@@ -184,7 +155,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             else
                 _columnFilters[column] = expr;
 
-            _currentPage = 1;
             ApplyCombinedFilter();
         }
 
@@ -201,7 +171,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
                 if (includeFixed) _fixedFilters.Remove(column);
             }
 
-            _currentPage = 1;
             ApplyCombinedFilter();
         }
 
@@ -218,116 +187,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
                 _foreignKeyColumns[column] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             _foreignKeyColumns[column][refTable] = refColumn;
-        }
-
-        public DataGrid GetInternalGrid() => PART_Grid;
-
-        #endregion
-
-        #region Pagination
-
-        private void OnPageSizeChanged(int newSize)
-        {
-            _pageSize = newSize;
-            _currentPage = 1;
-            RefreshGrid();
-        }
-
-        private void InitializePageSizeCombo()
-        {
-            if (PART_PageSizeCombo != null)
-                PART_PageSizeCombo.SelectedIndex = 1;
-        }
-
-        private void PageSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (PART_PageSizeCombo.SelectedItem is ComboBoxItem item)
-            {
-                string content = item.Content.ToString();
-                if (content == "All")
-                {
-                    _pageSize = int.MaxValue;
-                }
-                else if (int.TryParse(content, out int size))
-                {
-                    _pageSize = size;
-                }
-
-                _currentPage = 1;
-                RefreshGrid();
-            }
-        }
-
-        private void FirstPage_Click(object sender, RoutedEventArgs e)
-        {
-            _currentPage = 1;
-            RefreshGrid();
-        }
-
-        private void PrevPage_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentPage > 1)
-            {
-                _currentPage--;
-                RefreshGrid();
-            }
-        }
-
-        private void NextPage_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentPage < _totalPages)
-            {
-                _currentPage++;
-                RefreshGrid();
-            }
-        }
-
-        private void LastPage_Click(object sender, RoutedEventArgs e)
-        {
-            _currentPage = _totalPages;
-            RefreshGrid();
-        }
-
-        private void PageInput_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Return)
-            {
-                if (int.TryParse(PART_PageInput.Text, out int page) && page > 0 && page <= _totalPages)
-                {
-                    _currentPage = page;
-                    RefreshGrid();
-                }
-                e.Handled = true;
-            }
-        }
-
-        private void PageInput_LostFocus(object sender, RoutedEventArgs e)
-        {
-            UpdatePaginationUI();
-        }
-
-        private void UpdatePaginationUI()
-        {
-            if (PART_PageInput == null || PART_PageTotal == null) return;
-
-            int totalRows = _allRows?.Count ?? 0;
-            _totalPages = _pageSize == int.MaxValue ? 1 : Math.Max(1, (totalRows + _pageSize - 1) / _pageSize);
-
-            if (_currentPage > _totalPages)
-                _currentPage = _totalPages;
-
-            PART_PageInput.Text = _currentPage.ToString();
-            PART_PageTotal.Text = $" of {_totalPages}";
-            if (PART_RowInfo != null) PART_RowInfo.Text = $"{totalRows} rows";
-
-            if (PART_FirstPage != null) PART_FirstPage.IsEnabled = _currentPage > 1;
-            if (PART_PrevPage != null) PART_PrevPage.IsEnabled = _currentPage > 1;
-            if (PART_NextPage != null) PART_NextPage.IsEnabled = _currentPage < _totalPages;
-            if (PART_LastPage != null) PART_LastPage.IsEnabled = _currentPage < _totalPages;
-
-            bool hasFilters = _columnFilters.Count > 0 || _fixedFilters.Count > 0;
-            if (PART_FilterBadge != null) PART_FilterBadge.Visibility = hasFilters ? Visibility.Visible : Visibility.Collapsed;
-            if (PART_ClearAllFiltersBtn != null) PART_ClearAllFiltersBtn.Visibility = hasFilters ? Visibility.Visible : Visibility.Collapsed;
         }
 
         #endregion
@@ -365,7 +224,7 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
         {
             if (PART_Grid == null) return;
 
-            UpdatePaginationUI();
+            UpdateFooterState();
 
             if (_allRows == null || _allRows.Count == 0)
             {
@@ -373,10 +232,7 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
                 return;
             }
 
-            int skip = (_currentPage - 1) * _pageSize;
-            var pageData = _allRows.Skip(skip).Take(_pageSize).ToList();
-
-            PART_Grid.ItemsSource = pageData;
+            PART_Grid.ItemsSource = _allRows;
 
             // ADD THIS: Forces the ScrollViewer to re-evaluate the new column widths
             PART_Grid.UpdateLayout();
@@ -397,6 +253,16 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
                 if (result != null) return result;
             }
             return null;
+        }
+
+        private void UpdateFooterState()
+        {
+            int totalRows = _allRows?.Count ?? 0;
+            if (PART_RowInfo != null) PART_RowInfo.Text = $"{totalRows} rows";
+
+            bool hasFilters = _columnFilters.Count > 0 || _fixedFilters.Count > 0;
+            if (PART_FilterBadge != null) PART_FilterBadge.Visibility = hasFilters ? Visibility.Visible : Visibility.Collapsed;
+            if (PART_ClearAllFiltersBtn != null) PART_ClearAllFiltersBtn.Visibility = hasFilters ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private string BuildFilterExpr(string columnName, string op, string rawValue)
@@ -584,7 +450,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
                 _columnFilters[column] = expr;
             }
 
-            _currentPage = 1;
             ApplyCombinedFilter();
         }
 
@@ -596,7 +461,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
             if (!string.IsNullOrWhiteSpace(colName))
             {
                 _columnFilters.Remove(colName);
-                _currentPage = 1;
                 ApplyCombinedFilter();
                 PART_FilterPopup.IsOpen = false;
             }
@@ -605,7 +469,6 @@ namespace Aarohi.Wpf.Controls.Lib.Controls.DataGridView
         private void Filter_ClearAll_Click(object sender, RoutedEventArgs e)
         {
             _columnFilters.Clear();
-            _currentPage = 1;
             ApplyCombinedFilter();
             if (PART_FilterPopup != null)
                 PART_FilterPopup.IsOpen = false;

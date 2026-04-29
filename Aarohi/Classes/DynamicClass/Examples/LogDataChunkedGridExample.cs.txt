@@ -1,0 +1,107 @@
+// Example: load SQL table dbo.Log_Data into a WinForms DataGridView.
+//
+// This is a .cs.txt example file so it is not compiled by the SDK project.
+// Move the code into your Form class and rename controls/columns as needed.
+
+using Aarohi.Classes;
+using Microsoft.Data.SqlClient;
+using System;
+using System.Data;
+using System.Threading;
+using System.Windows.Forms;
+
+public partial class LogViewerForm : Form
+{
+    private ChunkedTable? _logTable;
+    private CancellationTokenSource? _logLoadCts;
+
+    public LogViewerForm()
+    {
+        InitializeComponent();
+    }
+
+    private async void btnLoadLogs_Click(object sender, EventArgs e)
+    {
+        btnLoadLogs.Enabled = false;
+
+        _logLoadCts?.Cancel();
+        _logLoadCts?.Dispose();
+        _logLoadCts = new CancellationTokenSource();
+
+        try
+        {
+            DynamicClass.ConnectionFactory = () =>
+                new SqlConnection(
+                    "Server=.;Database=YourDatabaseName;Trusted_Connection=True;TrustServerCertificate=True;");
+
+            var logs = new DynamicClass("dbo", "Log_Data", "Id");
+
+            _logTable = await logs.SelectChunkedTableAsync(
+                orderBy: "{Id} ASC",
+                chunkSize: 150,
+                backgroundChunkSize: 1000,
+                loadRemainingInBackground: true,
+                ct: _logLoadCts.Token);
+
+            _logTable.Updated += LogTable_Updated;
+
+            dataGridView1.AutoGenerateColumns = true;
+            dataGridView1.DataSource = _logTable.FirstChunkData;
+
+            lblRowsLoaded.Text =
+                $"Loaded {_logTable.FirstChunkData.Rows.Count} first rows. Loading remaining rows...";
+        }
+        catch (OperationCanceledException)
+        {
+            lblRowsLoaded.Text = "Log load cancelled.";
+        }
+        catch (Exception ex)
+        {
+            lblRowsLoaded.Text = "Log load failed.";
+            MessageBox.Show(ex.Message, "Load Log_Data", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            btnLoadLogs.Enabled = true;
+        }
+    }
+
+    private void LogTable_Updated(object? sender, ChunkedTableUpdatedEventArgs e)
+    {
+        if (sender is not ChunkedTable table)
+            return;
+
+        if (!e.Success)
+        {
+            lblRowsLoaded.Text = $"Load failed after {table.AllRowsData.Rows.Count} rows.";
+            return;
+        }
+
+        lblRowsLoaded.Text =
+            $"Loaded {table.AllRowsData.Rows.Count} rows total " +
+            $"({table.AfterFirstChunkData.Rows.Count} background rows).";
+
+        if (e.IsFinalChunk || table.IsComplete)
+        {
+            dataGridView1.DataSource = null;
+            dataGridView1.DataSource = table.AllRowsData;
+
+            lblRowsLoaded.Text = $"Completed. Total rows: {table.AllRowsData.Rows.Count}.";
+        }
+    }
+
+    private void btnCancelLoad_Click(object sender, EventArgs e)
+    {
+        _logLoadCts?.Cancel();
+        _logTable?.CancelBackgroundLoad();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _logLoadCts?.Cancel();
+        _logTable?.CancelBackgroundLoad();
+        _logLoadCts?.Dispose();
+
+        base.OnFormClosing(e);
+    }
+}

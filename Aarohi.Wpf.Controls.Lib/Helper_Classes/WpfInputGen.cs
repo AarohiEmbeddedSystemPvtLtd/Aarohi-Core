@@ -1,5 +1,5 @@
-﻿using Aarohi.Classes;
-using Aarohi.Wpf.Controls.Lib.Controls.TextBox;
+using Aarohi.Classes;
+using AarohiWpfControls.Controls.TextBox;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,9 +11,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using static Aarohi.Globals.AGLobals;
-using ExtendedTextBox = Aarohi.Wpf.Controls.Lib.Controls.TextBox.ExtendedTextBox;
+using ExtendedTextBox = AarohiWpfControls.Controls.TextBox.ExtendedTextBox;
 
-namespace Aarohi.Wpf.Controls.Lib.Helper_Classes
+namespace AarohiWpfControls.Helper_Classes
 {
     public class WpfInputGen
     {

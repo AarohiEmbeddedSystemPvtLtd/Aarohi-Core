@@ -1,0 +1,84 @@
+﻿<UserControl x:Class="AarohiWpfControls.Controls.UserBadge.Avatar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:AarohiWpfControls.Controls.UserBadge"
+             mc:Ignorable="d" d:DesignHeight="48"
+             d:DesignWidth="240">
+    <Border x:Name="MainBorder"
+            Background="{Binding BackgroundBrush, ElementName=root}"
+            BorderBrush="{Binding BorderBrushEx, ElementName=root}"
+            BorderThickness="1"
+            CornerRadius="14"
+            Padding="8,6"
+            SnapsToDevicePixels="True">
+
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="10"
+                              ShadowDepth="1"
+                              Opacity="0.08"/>
+        </Border.Effect>
+
+        <Border.ToolTip>
+            <ToolTip Background="{Binding ToolTipBackgroundBrush, ElementName=root}"
+                     Foreground="{Binding ToolTipTextBrush, ElementName=root}"
+                     BorderBrush="{Binding ToolTipBorderBrush, ElementName=root}"
+                     BorderThickness="1"
+                     Padding="10,7"
+                     Placement="Mouse">
+                <StackPanel>
+                    <TextBlock Text="{Binding UserName, ElementName=root}"
+                               FontSize="12"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Email, ElementName=root}"
+                               Margin="0,2,0,0"
+                               FontSize="11"/>
+                </StackPanel>
+            </ToolTip>
+        </Border.ToolTip>
+
+        <Grid VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Avatar -->
+            <Border Grid.Column="0"
+                    Width="32"
+                    Height="32"
+                    CornerRadius="16"
+                    Background="{Binding AvatarBackgroundBrush, ElementName=root}"
+                    BorderBrush="{Binding AvatarBorderBrush, ElementName=root}"
+                    BorderThickness="1"
+                    VerticalAlignment="Center">
+                <TextBlock Text="{Binding AvatarText, ElementName=root}"
+                           Foreground="{Binding AvatarTextBrush, ElementName=root}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           FontWeight="Bold"/>
+            </Border>
+
+            <!-- Text area -->
+            <StackPanel Grid.Column="2"
+                        VerticalAlignment="Center">
+                <TextBlock Text="{Binding UserName, ElementName=root}"
+                           Foreground="{Binding TextBrush, ElementName=root}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <TextBlock x:Name="txtSecondary"
+                           Text="{Binding SecondaryText, ElementName=root}"
+                           Foreground="{Binding SecondaryTextBrush, ElementName=root}"
+                           FontSize="11"
+                           Margin="0,1,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
