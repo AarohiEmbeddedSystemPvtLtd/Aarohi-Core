@@ -164,7 +164,21 @@ jobs:
             exit 1
           fi
 
-          curl --fail-with-body -sS -X POST "$DOCS_SITE_SYNC_URL" \
+          response_file="response.txt"
+          http_status="$(curl -sS -o "$response_file" -w "%{http_code}" -X POST "$DOCS_SITE_SYNC_URL" \
             -H "Content-Type: application/json" \
             -H "X-Docs-Secret: $DOCS_SYNC_SECRET" \
-            --data-binary @payload.json
+            --data-binary @payload.json)"
+
+          echo "HTTP status: $http_status"
+          echo "Response body:"
+          cat "$response_file" || true
+
+          case "$http_status" in
+            2??)
+              exit 0
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
