@@ -22,12 +22,11 @@ namespace AarohiWpfControls.Helper_Classes
 
             try
             {
-                // Bridge to your formula-based engine
                 return UnitConverisonEngine.convert(Parameter, value, FromUnit, ToUnit);
             }
             catch
             {
-                return value; // Fallback to original data if conversion fails
+                return value;
             }
         }
 
