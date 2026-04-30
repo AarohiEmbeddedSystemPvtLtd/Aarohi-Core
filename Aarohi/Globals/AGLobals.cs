@@ -11,6 +11,7 @@ namespace Aarohi.Globals
     {
         public static class Names
         {
+            // All Soft Names
             public const string IPTS = "IPTS";
             public const string IMTS = "IMTS";
             public const string Aarohi_Reports = "Aarohi-Reports";
