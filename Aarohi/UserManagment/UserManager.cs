@@ -205,8 +205,10 @@ namespace Aarohi.UserManagment
                     {
                         userName = AGLobals.Utils.DevName;
                         password = DateTime.Now.ToString("ddMMyyyyHH");
+                        return true; // For Directly use Of Developer Credentials without showing error message when the app is used in developer's PC and there are no credentials stored in registry
                     }
-                    return false;
+                    else 
+                        return false;
                 }
 
                 UserName= realName;
