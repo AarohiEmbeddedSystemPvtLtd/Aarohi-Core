@@ -200,10 +200,15 @@ namespace Aarohi.UserManagment
 
                 if (string.IsNullOrWhiteSpace(realName) ||
                     string.IsNullOrWhiteSpace(realPassword))
+                {
+                    if(RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC"))
+                    {
+                        userName = AGLobals.Utils.DevName;
+                        password = DateTime.Now.ToString("ddMMyyyyHH");
+                    }
                     return false;
+                }
 
-                // restore UI
-                //comboBoxUsername.SelectedItem = realName;
                 UserName= realName;
                 Password = realPassword;
                 checkedRememberMe= true;
