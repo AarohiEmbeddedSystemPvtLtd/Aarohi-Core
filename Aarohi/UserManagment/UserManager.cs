@@ -2,6 +2,8 @@
 using Aarohi.Classes.Healper;
 using Aarohi.Configuration;
 using Aarohi.Globals;
+using Aarohi.Networking;
+using DocumentFormat.OpenXml.Office.CustomXsn;
 using Microsoft.Data.SqlClient;
 using Microsoft.Win32;
 using System;
@@ -9,12 +11,14 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using static Aarohi.Classes.Healper.RegistryHelper;
+using static Aarohi.Networking.MailHelpers;
 using static Aarohi.UserManagment.FormStartUp;
 
 namespace Aarohi.UserManagment
@@ -27,12 +31,14 @@ namespace Aarohi.UserManagment
         private static string _PasswordDataColumnName;
         private static bool _loginFlowRunning = false;
         public static event EventHandler<LoginSuccessEventArgs>? LoginSuccess;
+        public static event EventHandler<EventArgs>? OTPProcedureStart;
+        public static event EventHandler<EventArgs>? OTPProcedureStop;
         private static string UserName;
         private static string Password;
         private static bool checkedRememberMe = false;
 
-
-
+        private static string generatedOtp;
+        private static DateTime otpExpiry;
 
         public static void Configure(RootConfig config)
         {
@@ -204,9 +210,9 @@ namespace Aarohi.UserManagment
 
                 // restore UI
                 //comboBoxUsername.SelectedItem = realName;
-                UserName= realName;
+                UserName = realName;
                 Password = realPassword;
-                checkedRememberMe= true;
+                checkedRememberMe = true;
 
                 if (!TryAuthenticate(realName, realPassword))
                 {
@@ -251,6 +257,244 @@ namespace Aarohi.UserManagment
             }
         }
 
+        public async static void AddUserProcedure(string username, string mail, string pass, string pass2, bool isOtpEnabled)
+        {
+            if (_userClass.GetColumnValues(_config.UserMapping.Columns.Email).Contains(mail))
+            {
+                throw new Exception("Email already exists in the database.");
+            }
 
+            string errors = string.Empty;
+            bool isValid = true;
+            if (string.IsNullOrWhiteSpace(mail))
+            {
+                errors += "- Email is required.\n";
+                isValid = false;
+            }
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                errors += "- Username is required.\n";
+                isValid = false;
+            }
+            if (string.IsNullOrWhiteSpace(pass))
+            {
+                errors += "- Password is required.\n";
+                isValid = false;
+            }
+            if (string.IsNullOrWhiteSpace(pass2))
+            {
+                errors += "- Confirm Password is required.\n";
+                isValid = false;
+            }
+
+            if (!isValid)
+            {
+                throw new Exception("Please fill in the following required fields:\n" + errors);
+            }
+
+            if (!MailAddress.TryCreate(mail.Trim(), out _))
+            {
+                throw new Exception("Invalid email format.\nExample: user@gmail.com");
+            }
+
+            if (pass != pass2)
+            {
+                throw new Exception("Passwords do not match. Please make sure both passwords are the same.");
+            }
+
+            bool isDomainValid = await HasValidEmailDomain(mail.Trim());
+            if (!isDomainValid)
+            {
+                throw new Exception("Email domain does not exist or is not valid.");
+            }
+
+            if (isOtpEnabled)
+            {
+                OTPProcedureStart.Invoke(null, new EventArgs());
+
+                Random rnd = new Random();
+                generatedOtp = rnd.Next(100000, 999999).ToString();
+                otpExpiry = DateTime.Now.AddMinutes(5);
+
+                await SendOtpEmail(mail.Trim(), "Aarohi Embedded Systems Pvt. Ltd.", "Email Verification Code", MailTemplates.OtpEmailBody(generatedOtp));
+
+                OTPProcedureStop.Invoke(null, new EventArgs());
+            }
+        }
+
+        public static bool VerifyOtp(string inputOtp)
+        {
+            if (DateTime.Now > otpExpiry)
+            {
+                throw new Exception("OTP has expired. Please request a new one.");
+            }
+            if (inputOtp != generatedOtp)
+            {
+                throw new Exception("Invalid OTP. Please check the code sent to your email and try again.");
+            }
+            return true;
+
+        }
+
+        public static bool SaveUser(string username, string mail, string pass, string role, int? parentId)
+        {
+            try
+            {
+                using (DynamicClass userClass = new DynamicClass(UserMap.Schema,UserMap.Table,UserMap.Columns.Id))
+                {
+                   string hashedPass = HashPassword(pass);
+
+                    // Add values
+                    userClass.Values.Add(UserMap.Columns.Name, username);
+                    userClass.Values.Add(UserMap.Columns.Email, mail);
+                    userClass.Values.Add(UserMap.Columns.Password, hashedPass);
+                    userClass.Values.Add(UserMap.Columns.Role, role);
+                    userClass.Values.Add(UserMap.Columns.ParentId, parentId);
+                    // Save to database (IMPORTANT LINE)
+                    userClass.Insert();   // or Save() depending on your class
+                    
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle error (log or show message)
+                MessageBox.Show("An error occurred while saving the user. Please try again.\n\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        public static bool DeleteUserProcedure(int selectedUserID, int? parentID)
+        {
+            try
+            {
+                var umap = UserManager.UserMap;
+                var upmap = UserManager.UserPermissionMap;
+
+                using DynamicClass dcUsers =
+                    new DynamicClass(umap.Schema, umap.Table, umap.Columns.Id);
+
+                using DynamicClass dcUserPermissions =
+                    new DynamicClass(upmap.Schema, upmap.Table, upmap.Columns.UserId);
+
+                //  STEP 0: CHECK IF USER IS ROOT (ParentId == NULL)
+                DataTable selectedUser = dcUsers.Select($"{umap.Columns.Id} = {selectedUserID}");
+
+                if (selectedUser == null || selectedUser.Rows.Count == 0)
+                    throw new Exception("User not found.");
+
+                DataRow selectedRow = selectedUser.Rows[0];
+
+                if (selectedRow[umap.Columns.ParentId] == DBNull.Value)
+                {
+                   throw new Exception("Cannot delete root user. Please reassign child users to another parent before deleting.");
+                }
+
+                //  STEP 1: GET CHILD USERS
+                DataTable dtUsers = dcUsers
+                    .Select($"{umap.Columns.ParentId} = {selectedUserID}") ?? new DataTable();
+
+                foreach (DataRow row in dtUsers.Rows)
+                {
+                    var childId = row[umap.Columns.Id];
+                    if (childId == DBNull.Value) continue;
+
+                    DataTable fullUser = dcUsers.Select($"{umap.Columns.Id} = {childId}");
+                    if (fullUser == null || fullUser.Rows.Count == 0)
+                        continue;
+
+                    DataRow userRow = fullUser.Rows[0];
+
+                    dcUsers.Values.Clear();
+
+                    foreach (DataColumn col in fullUser.Columns)
+                    {
+                        dcUsers.Values[col.ColumnName] =
+                            userRow[col] == DBNull.Value ? DBNull.Value : userRow[col];
+                    }
+
+                    //  Reassign parent
+                    dcUsers.Values[umap.Columns.ParentId] = parentID ?? (object)DBNull.Value;
+
+                    var result = dcUsers.Save(false, false);
+
+                    if (result == null)
+                        throw new Exception("Failed to update child user: " + childId);
+                }
+
+                //  STEP 2: DELETE USER PERMISSIONS
+                DataTable dtPerms = dcUserPermissions
+                    .Select($"{upmap.Columns.UserId} = {selectedUserID}") ?? new DataTable();
+
+                foreach (DataRow row in dtPerms.Rows)
+                {
+                    var permUserId = row[upmap.Columns.UserId];
+                    if (permUserId == DBNull.Value) continue;
+
+                    dcUserPermissions.DeleteByKey(permUserId);
+                }
+
+                //  STEP 3: DELETE USER
+                dcUsers.DeleteByKey(selectedUserID);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+              MessageBox.Show("You cannot delete the root user.\n\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+        public static DataTable ViewUserProcedure(int userId)
+        {
+            try
+            {
+                var umap = UserManager.UserMap;
+
+                using DynamicClass dcUsers =
+                    new DynamicClass(umap.Schema, umap.Table, umap.Columns.Id);
+
+                DataTable dt = dcUsers.Select($"{umap.Columns.Id} = {userId}");
+
+                return dt;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error fetching user data.\n\n" + ex.Message);
+            }
+        }
+
+        public static bool UpdateUser(int userId, string username, string email, string pass, string role, int? parentId)
+        {
+            try
+            {
+                var umap = UserManager.UserMap;
+
+                using DynamicClass dcUsers =
+                    new DynamicClass(umap.Schema, umap.Table, umap.Columns.Id);
+
+                dcUsers.Values.Clear();
+
+                dcUsers.Values[umap.Columns.Id] = userId;
+                dcUsers.Values[umap.Columns.Name] = username;
+                dcUsers.Values[umap.Columns.Email] = email;
+                dcUsers.Values[umap.Columns.Role] = role;
+                dcUsers.Values[umap.Columns.ParentId] = parentId ?? (object)DBNull.Value;
+
+                // 🔐 Only update password if entered
+                if (!string.IsNullOrWhiteSpace(pass))
+                {
+                    dcUsers.Values[umap.Columns.Password] = HashPassword(pass);
+                }
+
+                var result = dcUsers.Save(false, false);
+
+                return result != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }
