@@ -16,7 +16,6 @@ namespace Aarohi.Globals
             public const string Aarohi_Reports = "Aarohi-Reports";
             public const string Device_Manager = "Device Manager";
             public const string IMTS_Routine = "IMTS Routine";
-            public const string VPN_Manager = "VPN Manager";
         }
 
         public static class PipeNames
