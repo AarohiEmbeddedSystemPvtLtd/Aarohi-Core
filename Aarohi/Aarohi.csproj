@@ -21,6 +21,7 @@
   <ItemGroup>
     <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
