@@ -12,6 +12,8 @@ namespace Aarohi.Core.DeviceManager.Models
 
         public string DeviceName { get; set; } = string.Empty;
 
+        public string DeviceTagName { get; set; } = string.Empty;
+
         public Guid? ProfileId { get; set; }
 
         public Guid? RegisterId { get; set; }

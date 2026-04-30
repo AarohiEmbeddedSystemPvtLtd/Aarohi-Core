@@ -624,15 +624,23 @@ namespace Aarohi.Classes
                 var dyn = Tables[tableName];
                 var useAutoJoin = _autoJoinByTable.TryGetValue(tableName, out var flag) && flag;
 
-                DataTable? data = useAutoJoin ? dyn.AutoSelectWithJoins() : dyn.Select();
+                DataTable? data;
+                if (useAutoJoin)
+                {
+                    data = dyn.AutoSelectWithJoins();
+                    if (data != null)
+                        dataGrid.RebindData(data, keepFilters: true);
+                }
+                else
+                {
+                    data = dataGrid.LoadDynamicClassData(keepFilters: true);
+                }
+
                 if (data == null)
                 {
                     MessageBox.Show("No data returned for the table.");
                     return;
                 }
-
-                // One line does rebind + auto re-apply internal filters
-                dataGrid.RebindData(data, keepFilters: true);
 
                 // If the page-level option is active, enforce it as a fixed filter
                 string? selectedOption = null;

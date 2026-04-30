@@ -206,11 +206,18 @@ namespace Aarohi.UserManagment
 
                 if (string.IsNullOrWhiteSpace(realName) ||
                     string.IsNullOrWhiteSpace(realPassword))
-                    return false;
+                {
+                    if(RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC"))
+                    {
+                        userName = AGLobals.Utils.DevName;
+                        password = DateTime.Now.ToString("ddMMyyyyHH");
+                        return true; // For Directly use Of Developer Credentials without showing error message when the app is used in developer's PC and there are no credentials stored in registry
+                    }
+                    else 
+                        return false;
+                }
 
-                // restore UI
-                //comboBoxUsername.SelectedItem = realName;
-                UserName = realName;
+                UserName= realName;
                 Password = realPassword;
                 checkedRememberMe = true;
 

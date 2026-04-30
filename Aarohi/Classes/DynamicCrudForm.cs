@@ -76,7 +76,7 @@ namespace Aarohi.Classes
 
         private void refresh()
         {
-            _edgv.RebindData(_dc.Select(), true);
+            _edgv.LoadDynamicClassData(keepFilters: true);
         }
 
     }
