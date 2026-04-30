@@ -1,4 +1,5 @@
 ﻿using Aarohi.Core.Logger;
+using Aarohi.Globals;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
 using System;
@@ -17,6 +18,13 @@ namespace Aarohi.Classes
 {
     public sealed partial class DynamicClass : IDisposable
     {
+        //removed column added 
+
+        private void TestingFunction()
+        {
+            // in this testing sequence will be executed 
+            var x = AGLobals.ValueHolders.currentApp;
+        }
 
         #region Fields
         // ---------- Global config ----------
