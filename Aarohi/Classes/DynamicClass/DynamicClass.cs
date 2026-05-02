@@ -18,6 +18,14 @@ namespace Aarohi.Classes
 {
     public sealed partial class DynamicClass : IDisposable
     {
+        //removed column added 
+
+        private void TestingFunction()
+        {
+            // in this testing sequence will be executed 
+            var x = AGLobals.ValueHolders.currentApp;
+        }
+
         #region Fields
         // ---------- Global config ----------
         public static bool LogInfo { get; set; } = true;
