@@ -23,7 +23,7 @@ namespace Aarohi.Globals
         {
             public const string CommunictionPipe = "AarohiCommunicationServicePipe";
         }
-        
+
         public static class ServicesNames
         {
             public const string CommunicationService = "CommunicationService";
@@ -72,7 +72,17 @@ namespace Aarohi.Globals
 
         public static class ValueHolders
         {
-            public static string currentApp { get; set; }
+            private static string _currentApp = string.Empty;
+            public static string currentApp 
+            { 
+                get 
+                { 
+                    return string.IsNullOrEmpty(_currentApp) 
+                        ? throw new Exception("Current App is not found!\nset current app using 'AGLobals.ValueHolders.currentAp'") 
+                        : _currentApp; 
+                } 
+                set => _currentApp = value;
+            }
         }
 
     }

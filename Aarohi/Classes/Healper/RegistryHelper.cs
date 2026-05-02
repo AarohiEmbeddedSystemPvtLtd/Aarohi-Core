@@ -35,6 +35,9 @@ namespace Aarohi.Classes.Healper
 
                 case storeLocs.Miscellaneous:
                     return $@"{RootRegistryPath}\Miscellaneous";
+                
+                case storeLocs.Paths:
+                    return $@"{RootRegistryPath}\Paths";
 
                 case storeLocs.root:
                 default:
