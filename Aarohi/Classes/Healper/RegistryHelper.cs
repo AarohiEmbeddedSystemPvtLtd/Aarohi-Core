@@ -16,7 +16,8 @@ namespace Aarohi.Classes.Healper
             Settings,
             Credentials,
             Miscellaneous,
-            root
+            root,
+            Paths
         }
 
         private static string GetRegistryPath(storeLocs location)
