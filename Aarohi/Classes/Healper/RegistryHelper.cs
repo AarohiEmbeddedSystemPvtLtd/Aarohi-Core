@@ -9,7 +9,13 @@ namespace Aarohi.Classes.Healper
 {
     public static class RegistryHelper
     {
-        private static string RootRegistryPath = $"Software\\Aarohi Embedded Systems Pvt Ltd\\{AGLobals.ValueHolders.currentApp}";
+        private static string RootRegistryPath
+        {
+            get
+            {
+                return $@"Software\Aarohi Embedded Systems Pvt Ltd\{AGLobals.ValueHolders.currentApp}";
+            }
+        }
 
         public enum storeLocs
         {
