@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Sql;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,7 +18,12 @@ namespace Aarohi.SQL
     {
         private readonly string _appName;
         private readonly string _regPath;
+
+        private bool isClosedFromSave = false;
         public string? SavedConnectionString { get; private set; }
+
+        private bool _isDatabaseLoading = false;
+        private string _lastDatabaseLoadKey = "";
 
         public FormSqlConnectionManager(string appName)
         {
@@ -81,6 +87,7 @@ namespace Aarohi.SQL
 
         private async void FormSqlConnectionManager_Load(object sender, EventArgs e)
         {
+            isClosedFromSave = false;
             PanelDataHolderWrapper.Enabled = false;
             ButtonSave.Enabled = false;
 
@@ -218,8 +225,78 @@ namespace Aarohi.SQL
             comboBoxHostname.SelectAll();
         }
 
+        //private async void ComboboxDatabaseName_DropDown(object sender, EventArgs e)
+        //{
+        //    string server = comboBoxHostname.Text?.Trim();
+
+        //    if (string.IsNullOrEmpty(server))
+        //    {
+        //        MessageBox.Show("Please select or enter SQL Server host first.");
+        //        return;
+        //    }
+
+        //    bool useWindowsAuth = comboBoxAuth.SelectedIndex == 0;
+
+        //    string userName = textBoxUserName.Text.Trim();
+        //    string password = textBoxPassword.Text;
+
+        //    if (!useWindowsAuth)
+        //    {
+        //        if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+        //        {
+        //            MessageBox.Show("Please enter SQL Server user name and password.");
+        //            return;
+        //        }
+        //    }
+
+        //    ComboboxDatabaseName.Enabled = false;
+        //    ComboboxDatabaseName.Items.Clear();
+        //    ComboboxDatabaseName.Items.Add("Loading...");
+        //    ComboboxDatabaseName.SelectedIndex = 0;
+
+        //    List<string> dbs;
+
+        //    try
+        //    {
+        //        dbs = await GetDatabaseListAsync(server, useWindowsAuth, userName, password);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        ComboboxDatabaseName.Items.Clear();
+        //        ComboboxDatabaseName.Items.Add("Error");
+        //        ComboboxDatabaseName.SelectedIndex = 0;
+        //        ComboboxDatabaseName.Enabled = true;
+
+        //        MessageBox.Show(
+        //            "Unable to read databases from server:\n" + ex.Message,
+        //            "SQL Error",
+        //            MessageBoxButtons.OK,
+        //            MessageBoxIcon.Error);
+
+        //        return;
+        //    }
+
+        //    ComboboxDatabaseName.Items.Clear();
+
+        //    if (dbs.Count == 0)
+        //    {
+        //        ComboboxDatabaseName.Items.Add("(No databases found)");
+        //        ComboboxDatabaseName.SelectedIndex = 0;
+        //    }
+        //    else
+        //    {
+        //        ComboboxDatabaseName.Items.AddRange(dbs.Cast<object>().ToArray());
+        //        ComboboxDatabaseName.SelectedIndex = 0;
+        //    }
+
+        //    ComboboxDatabaseName.Enabled = true;
+        //}
+
         private async void ComboboxDatabaseName_DropDown(object sender, EventArgs e)
         {
+            if (_isDatabaseLoading)
+                return;
+
             string server = comboBoxHostname.Text?.Trim();
 
             if (string.IsNullOrEmpty(server))
@@ -229,7 +306,6 @@ namespace Aarohi.SQL
             }
 
             bool useWindowsAuth = comboBoxAuth.SelectedIndex == 0;
-
             string userName = textBoxUserName.Text.Trim();
             string password = textBoxPassword.Text;
 
@@ -242,47 +318,72 @@ namespace Aarohi.SQL
                 }
             }
 
-            ComboboxDatabaseName.Enabled = false;
-            ComboboxDatabaseName.Items.Clear();
-            ComboboxDatabaseName.Items.Add("Loading...");
-            ComboboxDatabaseName.SelectedIndex = 0;
+            string loadKey = $"{server}|{useWindowsAuth}|{userName}";
 
-            List<string> dbs;
+            // Important:
+            // If database list is already loaded for same server/auth,
+            // do not reload again. Let user select normally.
+            if (ComboboxDatabaseName.Items.Count > 0 && _lastDatabaseLoadKey == loadKey)
+                return;
+
+            string previousSelection = ComboboxDatabaseName.SelectedItem?.ToString();
 
             try
             {
-                dbs = await GetDatabaseListAsync(server, useWindowsAuth, userName, password);
+                _isDatabaseLoading = true;
+
+                ComboboxDatabaseName.Items.Clear();
+                ComboboxDatabaseName.Items.Add("Loading...");
+                ComboboxDatabaseName.SelectedIndex = 0;
+
+                List<string> dbs = await GetDatabaseListAsync(server, useWindowsAuth, userName, password);
+
+                ComboboxDatabaseName.Items.Clear();
+
+                if (dbs.Count == 0)
+                {
+                    ComboboxDatabaseName.Items.Add("(No databases found)");
+                    ComboboxDatabaseName.SelectedIndex = 0;
+                    return;
+                }
+
+                ComboboxDatabaseName.Items.AddRange(dbs.Cast<object>().ToArray());
+
+                // Do not force index 0 always
+                if (!string.IsNullOrWhiteSpace(previousSelection) && dbs.Contains(previousSelection))
+                {
+                    ComboboxDatabaseName.SelectedItem = previousSelection;
+                }
+                else
+                {
+                    ComboboxDatabaseName.SelectedIndex = -1; // user can select manually
+                }
+
+                _lastDatabaseLoadKey = loadKey;
+
+                // Open dropdown again after loading
+                BeginInvoke(new Action(() =>
+                {
+                    if (!ComboboxDatabaseName.IsDisposed)
+                        ComboboxDatabaseName.DroppedDown = true;
+                }));
             }
             catch (Exception ex)
             {
                 ComboboxDatabaseName.Items.Clear();
                 ComboboxDatabaseName.Items.Add("Error");
                 ComboboxDatabaseName.SelectedIndex = 0;
-                ComboboxDatabaseName.Enabled = true;
 
                 MessageBox.Show(
                     "Unable to read databases from server:\n" + ex.Message,
                     "SQL Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
-
-                return;
             }
-
-            ComboboxDatabaseName.Items.Clear();
-
-            if (dbs.Count == 0)
+            finally
             {
-                ComboboxDatabaseName.Items.Add("(No databases found)");
-                ComboboxDatabaseName.SelectedIndex = 0;
+                _isDatabaseLoading = false;
             }
-            else
-            {
-                ComboboxDatabaseName.Items.AddRange(dbs.Cast<object>().ToArray());
-                ComboboxDatabaseName.SelectedIndex = 0;
-            }
-
-            ComboboxDatabaseName.Enabled = true;
         }
 
         private Task<List<string>> GetDatabaseListAsync(string server,
@@ -429,13 +530,14 @@ namespace Aarohi.SQL
                 SaveSqlSettings(_regPath, server, database, useWindowsAuth, userName, password);
                 SavedConnectionString = BuildConnectionString(useMasterDb: false);
 
-                this.DialogResult = DialogResult.OK;
+                //this.DialogResult = DialogResult.OK;
+                isClosedFromSave = true;
                 this.Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to save settings to Registry:\n" + ex.Message,
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                isClosedFromSave = false;
+                MessageBox.Show("Failed to save settings to Registry:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -454,53 +556,69 @@ namespace Aarohi.SQL
             ButtonSave.Enabled = false;
 
             string connString;
+            string DBName = comboBoxAuth.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(DBName))
+            {
+                try
+                {
+                    connString = BuildConnectionString(useMasterDb: false);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Validation Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
-            try
-            {
-                connString = BuildConnectionString(useMasterDb: false);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Validation Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    ButtonTestConnection.Enabled = true;
+                    return;
+                }
 
-                ButtonTestConnection.Enabled = true;
-                return;
-            }
+                try
+                {
+                    using var con = new SqlConnection(connString);
+                    await con.OpenAsync();
 
-            try
-            {
-                using var con = new SqlConnection(connString);
-                await con.OpenAsync();
+                    MessageBox.Show("Connection successful!", "SQL Connection",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                MessageBox.Show("Connection successful!", "SQL Connection",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                ButtonSave.Enabled = true;
+                    ButtonSave.Enabled = true;
+                }
+                catch (SqlException ex)
+                {
+                    MessageBox.Show("Failed to connect to SQL Server.\n\n" +
+                        "Message: " + ex.Message,
+                        "SQL Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        "Unexpected error while testing connection:\n" + ex.Message,
+                        "Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    ButtonTestConnection.Enabled = true;
+                }
             }
-            catch (SqlException ex)
-            {
-                MessageBox.Show(
-                    "Failed to connect to SQL Server.\n\n" +
-                    "Message: " + ex.Message,
-                    "SQL Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    "Unexpected error while testing connection:\n" + ex.Message,
-                    "Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            finally
-            {
-                ButtonTestConnection.Enabled = true;
-            }
+            else
+                MessageBox.Show("Please select or enter SQL Server Database first.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
+        private void FormSqlConnectionManager_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (isClosedFromSave == true)
+            {
+                isClosedFromSave = false;
+                DialogResult = DialogResult.OK;
+            }
+            else
+            {
+                DialogResult = DialogResult.Cancel;
+            }
+        }
     }
 
 }
