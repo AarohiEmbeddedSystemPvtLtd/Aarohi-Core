@@ -2,6 +2,7 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -127,7 +128,6 @@ namespace Aarohi.SQL
         private bool OpenSqlManager(string message)
         {
             MessageBox.Show(message, $"{_appName} - SQL Connection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
             using var frm = new FormSqlConnectionManager(_appName);
             return frm.ShowDialog() == DialogResult.OK;
         }
