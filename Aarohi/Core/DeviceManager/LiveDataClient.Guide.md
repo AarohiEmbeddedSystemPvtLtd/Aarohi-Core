@@ -118,6 +118,24 @@ public sealed class LiveDataClient : IDisposable
     public Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
         Guid deviceId,
         string registerName,
+        string? value,
+        CancellationToken cancellationToken = default);
+
+    public Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
+        Guid deviceId,
+        string registerName,
+        object? value,
+        CancellationToken cancellationToken = default);
+
+    public Task<CommunicationServiceRegisterResult> WriteRegisterByAddressAsync(
+        Guid deviceId,
+        int address,
+        string? value,
+        CancellationToken cancellationToken = default);
+
+    public Task<CommunicationServiceRegisterResult> WriteRegisterByAddressAsync(
+        Guid deviceId,
+        int address,
         object? value,
         CancellationToken cancellationToken = default);
 
@@ -208,6 +226,9 @@ Write is rejected when:
 
 - `Access == RegisterAccess.ReadOnly`
 - `Type == RegisterDefinitionType.VMreg`
+
+
+For Siemens S7 writes, the client now sends the requested value as a string to the service. The service converts that string using the target register's `DataType`, `Scale`, and `Offset`, so calls like `WriteRegisterAsync(deviceId, "Start", "true")`, `WriteRegisterAsync(deviceId, "Speed", "1450")`, and `WriteRegisterAsync(deviceId, "BatchName", "ABC")` all follow the register definition.
 
 ## 7. Minimal Single-Device Read Example
 

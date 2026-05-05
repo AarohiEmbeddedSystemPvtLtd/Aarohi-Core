@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO.Ports;
 
@@ -56,7 +56,8 @@ namespace Aarohi.Core.DeviceManager.Models
         Double = 7,
         Int64 = 8,
         UInt64 = 9,
-        String = 10
+        String = 10,
+        Char = 11
     }
 
     public enum RegisterAccess
@@ -235,7 +236,7 @@ namespace Aarohi.Core.DeviceManager.Models
         /// Bool / Int16 / UInt16 = 1
         /// Int32 / UInt32 / Float = 2
         /// Int64 / UInt64 / Double = 4
-        /// String can vary
+        /// String can vary. Char = 1 byte/register.
         /// </summary>
         public int RegisterCount { get; set; } = 1;
 
@@ -321,6 +322,7 @@ namespace Aarohi.Core.DeviceManager.Models
                     return 4;
 
                 case RegisterDataType.String:
+                case RegisterDataType.Char:
                     return 1;
 
                 default:

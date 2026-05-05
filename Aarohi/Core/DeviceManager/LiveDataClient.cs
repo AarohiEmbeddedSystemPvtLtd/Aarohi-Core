@@ -268,16 +268,54 @@ namespace Aarohi.Core.DeviceManager
             }
         }
 
-        public async Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
+        public Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
+            Guid deviceId,
+            string registerName,
+            string? value,
+            CancellationToken cancellationToken = default)
+        {
+            return WriteRegisterCoreAsync(deviceId, registerName, null, value, cancellationToken);
+        }
+
+        public Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
             Guid deviceId,
             string registerName,
             object? value,
             CancellationToken cancellationToken = default)
         {
+            return WriteRegisterCoreAsync(deviceId, registerName, null, ToWriteString(value), cancellationToken);
+        }
+
+        public Task<CommunicationServiceRegisterResult> WriteRegisterByAddressAsync(
+            Guid deviceId,
+            int address,
+            string? value,
+            CancellationToken cancellationToken = default)
+        {
+            return WriteRegisterCoreAsync(deviceId, null, address, value, cancellationToken);
+        }
+
+        public Task<CommunicationServiceRegisterResult> WriteRegisterByAddressAsync(
+            Guid deviceId,
+            int address,
+            object? value,
+            CancellationToken cancellationToken = default)
+        {
+            return WriteRegisterCoreAsync(deviceId, null, address, ToWriteString(value), cancellationToken);
+        }
+
+        private async Task<CommunicationServiceRegisterResult> WriteRegisterCoreAsync(
+            Guid deviceId,
+            string? registerName,
+            int? address,
+            string? value,
+            CancellationToken cancellationToken = default)
+        {
             if (deviceId == Guid.Empty)
                 throw new ArgumentException("Device ID is required.", nameof(deviceId));
-            if (string.IsNullOrWhiteSpace(registerName))
-                throw new ArgumentException("Register name is required.", nameof(registerName));
+
+            if (string.IsNullOrWhiteSpace(registerName) && !address.HasValue)
+                throw new ArgumentException("Register name or address is required.", nameof(registerName));
 
             await EnsureConnectedAsync(cancellationToken);
 
@@ -296,6 +334,7 @@ namespace Aarohi.Core.DeviceManager
                         {
                             DeviceId = deviceId,
                             RegisterName = registerName,
+                            Address = address,
                             Value = value
                         },
                         _jsonOptions)
@@ -315,7 +354,7 @@ namespace Aarohi.Core.DeviceManager
                             response.Payload.GetRawText(), _jsonOptions);
 
                         string targetRegisterName = string.IsNullOrWhiteSpace(ack?.RegisterName)
-                            ? registerName
+                            ? registerName ?? address?.ToString() ?? string.Empty
                             : ack.RegisterName;
                         string message = string.IsNullOrWhiteSpace(ack?.DeviceName)
                             ? $"Wrote '{targetRegisterName}'."
@@ -347,6 +386,23 @@ namespace Aarohi.Core.DeviceManager
             {
                 _pending.TryRemove(correlationId, out _);
             }
+        }
+
+        private static string? ToWriteString(object? value)
+        {
+            if (value == null)
+                return null;
+
+            if (value is string stringValue)
+                return stringValue;
+
+            if (value is bool boolValue)
+                return boolValue ? "true" : "false";
+
+            if (value is IFormattable formattable)
+                return formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture);
+
+            return value.ToString();
         }
 
         public async Task DisconnectAsync()
@@ -440,6 +496,18 @@ namespace Aarohi.Core.DeviceManager
             catch (Exception)
             {
             }
+            finally
+            {
+                CancelPendingRequests();
+            }
+        }
+
+        private void CancelPendingRequests()
+        {
+            foreach (TaskCompletionSource<PipeEnvelope> tcs in _pending.Values)
+                tcs.TrySetCanceled();
+
+            _pending.Clear();
         }
 
         private async Task DisposeConnectionAsync()
@@ -468,9 +536,7 @@ namespace Aarohi.Core.DeviceManager
             _pipe?.Dispose();
             _pipe = null;
 
-            foreach (TaskCompletionSource<PipeEnvelope> tcs in _pending.Values)
-                tcs.TrySetCanceled();
-            _pending.Clear();
+            CancelPendingRequests();
         }
 
         public void Dispose()
@@ -480,6 +546,7 @@ namespace Aarohi.Core.DeviceManager
             _reader?.Dispose();
             _writer?.Dispose();
             _pipe?.Dispose();
+            CancelPendingRequests();
             _writeLock.Dispose();
         }
 
