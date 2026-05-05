@@ -9,6 +9,7 @@ using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Mail;
@@ -36,7 +37,9 @@ namespace Aarohi.UserManagment
         private static string UserName;
         private static string Password;
         private static bool checkedRememberMe = false;
-
+        private const string SecureUserNameKey = "AESPLXU";
+        private const string SecurePasswordKey = "AESPLXP";
+        private const string SecurePrefix = "DPAPI:";
         private static string generatedOtp;
         private static DateTime otpExpiry;
 
@@ -183,6 +186,7 @@ namespace Aarohi.UserManagment
             {
                 byte[] userBytes = Encoding.UTF8.GetBytes(userName ?? string.Empty);
                 string userHash = BitConverter.ToString(sha.ComputeHash(userBytes)).Replace("-", "");
+
 
                 byte[] passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
                 string passwordHash = BitConverter.ToString(sha.ComputeHash(passwordBytes)).Replace("-", "");
@@ -503,5 +507,326 @@ namespace Aarohi.UserManagment
                 return false;
             }
         }
+
+        #region Secure Remember Me Same Registry Keys - New Separate Implementation
+
+        public static bool LoginWithSecureRememberMeSameKeys(string userName, string password, bool rememberMe)
+        {
+            if (TryAuthenticateForSecureRememberMe(userName, password, showMessage: true))
+            {
+                SaveSecureRememberMeSameKeys(userName, password, rememberMe);
+
+                if (!_loginFlowRunning)
+                {
+                    _loginFlowRunning = true;
+                    LoginSuccess?.Invoke(null, new LoginSuccessEventArgs(userName, password));
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool TryGetLastValuesFromSecureRememberMeSameKeys(out string userName, out string password)
+        {
+            userName = string.Empty;
+            password = string.Empty;
+
+            try
+            {
+                string savedUser = RegistryHelper.LoadString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXU");
+
+                string savedPassword = RegistryHelper.LoadString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXP");
+
+                if (IsSecureRememberMeValue(savedUser) && IsSecureRememberMeValue(savedPassword))
+                {
+                    string realUser = DecryptRememberMeValue(savedUser);
+                    string realPassword = DecryptRememberMeValue(savedPassword);
+
+                    if (!string.IsNullOrWhiteSpace(realUser) &&
+                        !string.IsNullOrWhiteSpace(realPassword))
+                    {
+                        userName = realUser;
+                        password = realPassword;
+
+                        UserName = realUser;
+                        Password = realPassword;
+                        checkedRememberMe = true;
+
+                        return true;
+                    }
+                }
+
+                // If old SHA256 values are stored in AESPLXU/AESPLXP,
+                // original username/password cannot be recovered.
+                // So fallback to Dev PC only.
+                return TryGetDevPcLoginForSecureRememberMe(out userName, out password);
+            }
+            catch
+            {
+                ClearSecureRememberMeSameKeys();
+                return TryGetDevPcLoginForSecureRememberMe(out userName, out password);
+            }
+        }
+
+        public static void SaveSecureRememberMeSameKeys(string userName, string password, bool rememberMe)
+        {
+            try
+            {
+                if (rememberMe &&
+                    !string.IsNullOrWhiteSpace(userName) &&
+                    !string.IsNullOrWhiteSpace(password) &&
+                    !string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
+                {
+                    RegistryHelper.SaveString(
+                        RegistryHelper.storeLocs.Credentials,
+                        "AESPLXU",
+                        EncryptRememberMeValue(userName));
+
+                    RegistryHelper.SaveString(
+                        RegistryHelper.storeLocs.Credentials,
+                        "AESPLXP",
+                        EncryptRememberMeValue(password));
+
+                    Debug.WriteLine("Secure RememberMe saved in AESPLXU/AESPLXP.");
+                }
+                else
+                {
+                    ClearSecureRememberMeSameKeys();
+                }
+            }
+            catch
+            {
+                ClearSecureRememberMeSameKeys();
+            }
+        }
+
+        public static void ClearSecureRememberMeSameKeys()
+        {
+            try
+            {
+                RegistryHelper.SaveString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXU",
+                    string.Empty);
+
+                RegistryHelper.SaveString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXP",
+                    string.Empty);
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool TryAuthenticateForSecureRememberMe(string userName, string password, bool showMessage)
+        {
+            try
+            {
+                if (userName == AGLobals.Utils.DevName)
+                {
+                    if (password == DateTime.Now.ToString("ddMMyyyyHH"))
+                        return true;
+
+                    if (showMessage)
+                    {
+                        MessageBox.Show(
+                            "Incorrect password.",
+                            "Login Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+
+                    return false;
+                }
+
+                var values = _userClass.GetRowAsDictionary(_LoginDataColumnName, userName);
+
+                if (values == null || values.Count == 0)
+                {
+                    if (showMessage)
+                    {
+                        MessageBox.Show(
+                            "Username not found.",
+                            "Login Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+
+                    return false;
+                }
+
+                string dbUserName = values[_LoginDataColumnName]?.ToString() ?? string.Empty;
+                string dbPassword = values[_PasswordDataColumnName]?.ToString() ?? string.Empty;
+
+                if (!string.Equals(userName, dbUserName, StringComparison.Ordinal))
+                {
+                    if (showMessage)
+                    {
+                        MessageBox.Show(
+                            "Username does not match.",
+                            "Login Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+
+                    return false;
+                }
+
+                string enteredPasswordHash = HashPassword(password ?? string.Empty);
+
+                bool passwordOk =
+                    string.Equals(password, dbPassword, StringComparison.Ordinal) ||
+                    string.Equals(enteredPasswordHash, dbPassword, StringComparison.OrdinalIgnoreCase);
+
+                if (!passwordOk)
+                {
+                    if (showMessage)
+                    {
+                        MessageBox.Show(
+                            "Incorrect password.",
+                            "Login Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (showMessage)
+                {
+                    MessageBox.Show(
+                        "An error occurred while checking login. Please contact support.\n\n" + ex.Message,
+                        "Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+
+                return false;
+            }
+        }
+
+        private static bool TryGetDevPcLoginForSecureRememberMe(out string userName, out string password)
+        {
+            userName = string.Empty;
+            password = string.Empty;
+
+            bool isDevPc = RegistryHelper.LoadBool(
+                RegistryHelper.storeLocs.Credentials,
+                "IsDevPC");
+
+            if (!isDevPc)
+                return false;
+
+            userName = AGLobals.Utils.DevName;
+            password = DateTime.Now.ToString("ddMMyyyyHH");
+
+            return true;
+        }
+
+        private static bool IsSecureRememberMeValue(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   value.Trim().StartsWith("DPAPI:", StringComparison.Ordinal);
+        }
+
+        private static string EncryptRememberMeValue(string plainText)
+        {
+            if (string.IsNullOrWhiteSpace(plainText))
+                return string.Empty;
+
+            try
+            {
+                byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+
+                byte[] encryptedBytes = ProtectedData.Protect(
+                    plainBytes,
+                    optionalEntropy: null,
+                    scope: DataProtectionScope.CurrentUser);
+
+                return "DPAPI:" + Convert.ToBase64String(encryptedBytes);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string DecryptRememberMeValue(string encryptedText)
+        {
+            if (string.IsNullOrWhiteSpace(encryptedText))
+                return string.Empty;
+
+            try
+            {
+                encryptedText = encryptedText.Trim();
+
+                if (!encryptedText.StartsWith("DPAPI:", StringComparison.Ordinal))
+                    return string.Empty;
+
+                string base64 = encryptedText.Substring("DPAPI:".Length);
+
+                byte[] encryptedBytes = Convert.FromBase64String(base64);
+
+                byte[] plainBytes = ProtectedData.Unprotect(
+                    encryptedBytes,
+                    optionalEntropy: null,
+                    scope: DataProtectionScope.CurrentUser);
+
+                return Encoding.UTF8.GetString(plainBytes);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        public static bool LogoutSecureRememberMeSameKeys(bool wantConfirmationMessage = true)
+        {
+            try
+            {
+                DialogResult result;
+
+                if (wantConfirmationMessage)
+                {
+                    result = MessageBox.Show(
+                        "Are you sure you want to logout?",
+                        "Logout Confirmation",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+                }
+                else
+                {
+                    result = DialogResult.Yes;
+                }
+
+                if (result != DialogResult.Yes)
+                    return false;
+
+                ClearSecureRememberMeSameKeys();
+
+                UserName = string.Empty;
+                Password = string.Empty;
+                checkedRememberMe = false;
+                _loginFlowRunning = false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        #endregion
     }
 }
