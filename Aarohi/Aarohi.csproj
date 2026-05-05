@@ -4,6 +4,10 @@
 		<TargetFramework>net9.0-windows</TargetFramework>
 		<UseWindowsForms>true</UseWindowsForms>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<!-- Generates XML documentation file for IntelliSense in consuming apps / NuGet users -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Suppresses warning for public members without XML comments -->
+		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
 		<Version>1.0.14.33</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
