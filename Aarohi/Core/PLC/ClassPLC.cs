@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,7 +26,7 @@ namespace Aarohi.Core.PLC
         public string LastError { get; private set; } = string.Empty;
 
         public enum PlcAccess { Read, Write, ReadWrite }
-        public enum PlcDataType { Bool, Int16, UInt16, Int32, UInt32, Real, Byte, Word, DWord, DInt, DWordU, S7String, CharArray }
+        public enum PlcDataType { Bool, Int16, UInt16, Int32, UInt32, Real, Double, LReal, Byte, Char, Word, DWord, DInt, DWordU, S7String, CharArray }
         public Action<string>? Logger { get; set; }
 
         private void Log(string s) { try { Logger?.Invoke(s); } catch { } }
@@ -157,7 +157,9 @@ namespace Aarohi.Core.PLC
 
             List<KeyValuePair<int, List<Sub>>> groups;
             lock (_subsSync)
-                groups = _subsByDb.ToList(); // snapshot
+                groups = _subsByDb
+                    .Select(kv => new KeyValuePair<int, List<Sub>>(kv.Key, kv.Value.ToList()))
+                    .ToList(); // deep snapshot
 
             if (groups.Count == 0)
             {
@@ -165,9 +167,11 @@ namespace Aarohi.Core.PLC
                 return;
             }
 
-            foreach (var kv in groups)
+            lock (_sync)
             {
-                int db = kv.Key;
+                foreach (var kv in groups)
+                {
+                    int db = kv.Key;
                 var list = kv.Value;
                 if (list.Count == 0) continue;
 
@@ -198,7 +202,7 @@ namespace Aarohi.Core.PLC
                             foreach (var s in readers)
                             {
                                 int ofs = s.StartByte - readStart;
-                                object? val = Unpack(rbuf, ofs, s.DataType, s.Bit, s.Length);
+                                object? val = Unpack(rbuf, ofs, s.DataType, s.Bit, s.Length, s.SizeBytes);
 
                                 try { s.OnRead?.Invoke(val); } catch (Exception cbEx) { Log($"OnRead cb error: {cbEx.Message}"); }
                             }
@@ -237,7 +241,7 @@ namespace Aarohi.Core.PLC
                         foreach (var s in writers)
                         {
                             int ofs = s.StartByte - wStart;
-                            Pack(wbuf, ofs, s.DataType, s.Value, s.Bit, s.Length);
+                            Pack(wbuf, ofs, s.DataType, s.Value, s.Bit, s.Length, s.SizeBytes);
 
                         }
 
@@ -255,6 +259,7 @@ namespace Aarohi.Core.PLC
                 catch (Exception ex)
                 {
                     SetLastError($"PollOnce[DB{db}]: WRITE phase exception: {ex.Message}");
+                }
                 }
             }
         }
@@ -278,7 +283,7 @@ namespace Aarohi.Core.PLC
 
         // ----------------- Helpers -----------------
 
-        private static object? Unpack(byte[] buf, int ofs, PlcDataType type, int? bit, int? len)
+        private static object? Unpack(byte[] buf, int ofs, PlcDataType type, int? bit, int? len, int sizeBytes)
         {
             switch (type)
             {
@@ -288,12 +293,15 @@ namespace Aarohi.Core.PLC
                 case PlcDataType.Byte:
                     return buf[ofs];
 
+                case PlcDataType.Char:
+                    return buf[ofs] == 0 ? string.Empty : Encoding.ASCII.GetString(buf, ofs, 1);
+
                 case PlcDataType.Int16:
-                    return (short)S7.GetIntAt(buf, ofs);
+                    return sizeBytes == 1 ? unchecked((sbyte)buf[ofs]) : (short)S7.GetIntAt(buf, ofs);
 
                 case PlcDataType.UInt16:
                 case PlcDataType.Word:
-                    return S7.GetWordAt(buf, ofs);
+                    return sizeBytes == 1 ? buf[ofs] : S7.GetWordAt(buf, ofs);
 
                 case PlcDataType.Int32:
                 case PlcDataType.DInt:
@@ -301,10 +309,15 @@ namespace Aarohi.Core.PLC
 
                 case PlcDataType.UInt32:
                 case PlcDataType.DWord:
+                case PlcDataType.DWordU:
                     return S7.GetDWordAt(buf, ofs);
 
                 case PlcDataType.Real:
                     return S7.GetRealAt(buf, ofs);
+
+                case PlcDataType.Double:
+                case PlcDataType.LReal:
+                    return S7.GetLRealAt(buf, ofs);
 
                 case PlcDataType.S7String:
                     {
@@ -332,7 +345,7 @@ namespace Aarohi.Core.PLC
         }
 
 
-        private static void Pack(byte[] buf, int ofs, PlcDataType type, object? value, int? bit, int? len)
+        private static void Pack(byte[] buf, int ofs, PlcDataType type, object? value, int? bit, int? len, int sizeBytes)
         {
             switch (type)
             {
@@ -350,13 +363,19 @@ namespace Aarohi.Core.PLC
                     buf[ofs] = Convert.ToByte(value ?? 0);
                     break;
 
+                case PlcDataType.Char:
+                    buf[ofs] = ToAsciiCharByte(value);
+                    break;
+
                 case PlcDataType.Int16:
-                    S7.SetIntAt(buf, ofs, Convert.ToInt16(value ?? 0));
+                    if (sizeBytes == 1) buf[ofs] = unchecked((byte)Convert.ToSByte(value ?? 0));
+                    else S7.SetIntAt(buf, ofs, Convert.ToInt16(value ?? 0));
                     break;
 
                 case PlcDataType.UInt16:
                 case PlcDataType.Word:
-                    S7.SetWordAt(buf, ofs, Convert.ToUInt16(value ?? 0));
+                    if (sizeBytes == 1) buf[ofs] = Convert.ToByte(value ?? 0);
+                    else S7.SetWordAt(buf, ofs, Convert.ToUInt16(value ?? 0));
                     break;
 
                 case PlcDataType.Int32:
@@ -366,11 +385,17 @@ namespace Aarohi.Core.PLC
 
                 case PlcDataType.UInt32:
                 case PlcDataType.DWord:
+                case PlcDataType.DWordU:
                     S7.SetDWordAt(buf, ofs, Convert.ToUInt32(value ?? 0));
                     break;
 
                 case PlcDataType.Real:
                     S7.SetRealAt(buf, ofs, Convert.ToSingle(value ?? 0f));
+                    break;
+
+                case PlcDataType.Double:
+                case PlcDataType.LReal:
+                    S7.SetLRealAt(buf, ofs, Convert.ToDouble(value ?? 0d));
                     break;
 
                 case PlcDataType.S7String:
@@ -402,6 +427,27 @@ namespace Aarohi.Core.PLC
         }
 
 
+        private static byte ToAsciiCharByte(object? value)
+        {
+            if (value == null) return 0;
+
+            if (value is char c) return (byte)c;
+            if (value is byte b) return b;
+            if (value is sbyte sb) return unchecked((byte)sb);
+            if (value is short s16) return unchecked((byte)s16);
+            if (value is ushort u16) return unchecked((byte)u16);
+            if (value is int i32) return unchecked((byte)i32);
+            if (value is uint u32) return unchecked((byte)u32);
+            if (value is long i64) return unchecked((byte)i64);
+            if (value is ulong u64) return unchecked((byte)u64);
+
+            string text = Convert.ToString(value) ?? string.Empty;
+            if (string.IsNullOrEmpty(text)) return 0;
+
+            return Encoding.ASCII.GetBytes(text.Substring(0, 1))[0];
+        }
+
+
         private static void ParseAddress(
     string s, PlcDataType type,
     out int db, out int startByte, out int? bit, out int sizeBytes, out int? len)
@@ -410,9 +456,10 @@ namespace Aarohi.Core.PLC
             //  DB1.DBX10.2          Bool
             //  DB1.DBD0             Real/Int32/UInt32
             //  DB1.DBW2             Int16/UInt16
-            //  DB1.DBB20            Byte
+            //  DB1.DBB20            Byte / CHAR
             //  DB1.DBS10:20         S7 STRING[20] at byte 10  (total 22 bytes)
-            //  DB1.DBC10:20         CHAR[20] at byte 10       (total 20 bytes)
+            //  DB1.DBC10:20         fixed CHAR[20] at byte 10 (total 20 bytes)
+            //  DB1.DBB10:20         fixed CHAR[20] alternative syntax
 
             var up = s.ToUpperInvariant().Replace(" ", "");
 
@@ -430,28 +477,21 @@ namespace Aarohi.Core.PLC
             var area = m.Groups["area"].Value;
             if (area == "DBS" && type != PlcDataType.S7String)
                 throw new ArgumentException($"Address {s} implies S7String, but type is {type}");
-            if (area == "DBC" && type != PlcDataType.CharArray)
-                throw new ArgumentException($"Address {s} implies CharArray, but type is {type}");
+            if (area == "DBC" && type is not (PlcDataType.CharArray or PlcDataType.Char))
+                throw new ArgumentException($"Address {s} implies Char/CharArray, but type is {type}");
 
-            sizeBytes = type switch
+            sizeBytes = area switch
             {
-                PlcDataType.Bool => 1,
-                PlcDataType.Byte => 1,
-
-                PlcDataType.Int16 => 2,
-                PlcDataType.UInt16 => 2,
-                PlcDataType.Word => 2,
-
-                PlcDataType.Int32 => 4,
-                PlcDataType.DInt => 4,
-                PlcDataType.UInt32 => 4,
-                PlcDataType.DWord => 4,
-                PlcDataType.Real => 4,
-
-                PlcDataType.S7String => (len ?? throw new ArgumentException($"S7String requires length. Use DBx.DBSy:len")) + 2,
-                PlcDataType.CharArray => (len ?? throw new ArgumentException($"CharArray requires length. Use DBx.DBCy:len")),
-
-                _ => 4
+                "DBX" => 1,
+                "DBB" when type is PlcDataType.Bool or PlcDataType.Byte or PlcDataType.Char or PlcDataType.Int16 or PlcDataType.UInt16 => 1,
+                "DBB" when type == PlcDataType.CharArray => len ?? throw new ArgumentException($"CharArray requires length. Use DBx.DBBy:len or DBx.DBCy:len"),
+                "DBW" when type is PlcDataType.Int16 or PlcDataType.UInt16 or PlcDataType.Word => 2,
+                "DBD" when type is PlcDataType.Int32 or PlcDataType.DInt or PlcDataType.UInt32 or PlcDataType.DWord or PlcDataType.DWordU or PlcDataType.Real => 4,
+                "DBD" when type is PlcDataType.Double or PlcDataType.LReal => 8,
+                "DBS" when type == PlcDataType.S7String => (len ?? throw new ArgumentException($"S7String requires length. Use DBx.DBSy:len")) + 2,
+                "DBC" when type == PlcDataType.Char => 1,
+                "DBC" when type == PlcDataType.CharArray => (len ?? throw new ArgumentException($"CharArray requires length. Use DBx.DBCy:len")),
+                _ => throw new ArgumentException($"Address {s} and data type {type} are not compatible.")
             };
         }
 
@@ -470,12 +510,25 @@ namespace Aarohi.Core.PLC
                 if (_client.Connected()) return;
 
                 _client.SetConnectionType((ushort)ConnectionType);
+                SetClientTimeouts();
 
                 int rc = _client.ConnectTo(IpAddress, Rack, Slot);
                 if (rc != 0)
                     throw ToSocketOrGeneric(rc,
                         $"PLC connect failed (IP={IpAddress}, Rack={Rack}, Slot={Slot}): {_client.ErrorText(rc)}");
             }
+        }
+
+        private void SetClientTimeouts()
+        {
+            int timeout = Math.Max(100, ConnectTimeoutMs);
+            int pingTimeout = timeout;
+            int sendTimeout = timeout;
+            int receiveTimeout = timeout;
+
+            _client.SetParam(S7Consts.p_i32_PingTimeout, ref pingTimeout);
+            _client.SetParam(S7Consts.p_i32_SendTimeout, ref sendTimeout);
+            _client.SetParam(S7Consts.p_i32_RecvTimeout, ref receiveTimeout);
         }
 
         public bool TryConnect(out string? error)
