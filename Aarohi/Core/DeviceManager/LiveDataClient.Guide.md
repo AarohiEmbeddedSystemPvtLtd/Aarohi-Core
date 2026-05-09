@@ -164,8 +164,17 @@ public sealed class CommunicationServiceRegisterResult
     public bool Success { get; init; }
     public string Message { get; init; }
     public string CorrelationId { get; init; }
+    public string DeviceName { get; init; }
+    public string RegisterName { get; init; }
+    public int Address { get; init; }
+    public string? RequestedValue { get; init; }
+    public object? ReadBackValue { get; init; }
+    public bool VerificationSucceeded { get; init; }
+    public int VerificationAttempts { get; init; }
 }
 ```
+
+For write commands, `Success` now reflects the verified write result from `CommunicationService`. A write ack can come back with `Success=false` when the PLC write call returned but post-write read-back did not match the requested value.
 
 ## 6. Critical Model Requirements Before Registering
 

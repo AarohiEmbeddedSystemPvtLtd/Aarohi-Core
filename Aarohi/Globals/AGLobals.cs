@@ -21,7 +21,8 @@ namespace Aarohi.Globals
 
         public static class PipeNames
         {
-            public const string CommunictionPipe = "AarohiCommunicationServicePipe";
+            public const string CommunicationServicePipe = "CommunicationServicePipe";
+            public const string CommunictionPipe = CommunicationServicePipe;
         }
 
         public static class ServicesNames

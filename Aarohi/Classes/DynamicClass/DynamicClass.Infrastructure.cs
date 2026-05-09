@@ -30,7 +30,7 @@ namespace Aarohi.Classes
         public string[] GetColumnNames(bool tablenameWant = true)
         {
             var cols = GetColumns() ?? new List<ColumnInfo>();
-            var tableVerbose = GetTableDisplayName();
+            var tableVerbose = tablenameWant ? GetTableDisplayName() : string.Empty;
 
             var names = cols
                 .Select(c => new
@@ -163,7 +163,6 @@ namespace Aarohi.Classes
             public string? DefaultSql { get; set; }
             public object? DefaultValue { get; set; }
             public string? CheckDefinition { get; set; }
-            public string? SoftUsedName { get; set; }
             public string? SoftName { get; set; }
             public string[]? Options { get; set; }
             public bool HasOptions { get; set; }
@@ -398,6 +397,15 @@ namespace Aarohi.Classes
             return false;
         }
 
+        private static int ResolveBulkCopyTimeoutSeconds(int? bulkCopyTimeoutSeconds)
+        {
+            var timeout = bulkCopyTimeoutSeconds ?? BulkCopyTimeoutSeconds;
+            if (timeout < 0)
+                throw new ArgumentOutOfRangeException(nameof(bulkCopyTimeoutSeconds), "Bulk copy timeout must be 0 or greater.");
+
+            return timeout;
+        }
+
         private static void AddParam(SqlParameterCollection ps, string name, object? value)
         {
             var p = ps.AddWithValue(name, value ?? DBNull.Value);
@@ -513,8 +521,6 @@ namespace Aarohi.Classes
         {
             var meta = GetColumns() ?? new List<ColumnInfo>();
             var allowed = new HashSet<string>(meta.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-            foreach (var softName in meta.Select(c => c.SoftUsedName).Where(s => !string.IsNullOrWhiteSpace(s)))
-                allowed.Add(softName!);
 
             var unknown = Values.Keys.Where(k => !allowed.Contains(k)).ToList();
             if (unknown.Count > 0)

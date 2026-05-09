@@ -77,6 +77,7 @@ EXEC {proc}
                 }
 
                 tx.Commit();
+                InvalidateColumnMetadataCache();
                 return true;
             }
             catch
@@ -113,6 +114,7 @@ END CATCH";
             if (!string.IsNullOrWhiteSpace(physicalColumn))
                 cmd.Parameters.AddWithValue("@c", physicalColumn);
             cmd.ExecuteNonQuery();
+            InvalidateColumnMetadataCache();
             return true;
         }
 
@@ -219,19 +221,32 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty(propertyName, displayName, column);
 
         public object? GetColumnProperty(string propertyName, string column)
-    => ReadExtendedProperty(propertyName, column);
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (meta != null)
+            {
+                return propertyName switch
+                {
+                    "DisplayName" => meta.DisplayName,
+                    "Description" => meta.Description,
+                    "DefaultUnit" => meta.DefaultUnit,
+                    "InputUnit" => meta.InputUnit,
+                    "LastUsedUnit" => meta.LastUsedUnit,
+                    "ShowUnit" => meta.ShowUnit,
+                    "ReportUnit" => meta.ReportUnit,
+                    "Format" => meta.Format,
+                    "Parameter" => meta.Parameter,
+                    "Order" => meta.Order,
+                    "DatagridShow" => meta.DatagridShow,
+                    "HideInCrudForm" => meta.HideInCrudForm,
+                    "Visible" => meta.Visible,
+                    "AddedFromSoftware" => meta.SoftName,
+                    _ => ReadExtendedProperty(propertyName, column)
+                };
+            }
 
-        public bool SetTableSoftUsedName(string softUsedName)
-            => UpsertExtendedProperty(SoftUsedNamePropertyName, softUsedName, column: null);
-
-        public string GetTableSoftUsedName()
-            => Convert.ToString(ReadExtendedProperty(SoftUsedNamePropertyName, column: null)) ?? Table;
-
-        public bool SetColumnSoftUsedName(string column, string softUsedName)
-            => UpsertExtendedProperty(SoftUsedNamePropertyName, softUsedName, column);
-
-        public string GetColumnSoftUsedName(string column)
-            => Convert.ToString(ReadExtendedProperty(SoftUsedNamePropertyName, column)) ?? column;
+            return ReadExtendedProperty(propertyName, column);
+        }
 
         // Method: GetColumnDisplayName
         /// <summary>
@@ -241,6 +256,10 @@ FROM sys.fn_listextendedproperty
         /// <returns>Display name string.</returns>
         public string GetColumnDisplayName(string column)
         {
+            var meta = GetColumnMetadataEntry(column);
+            if (!string.IsNullOrWhiteSpace(meta?.DisplayName))
+                return meta.DisplayName!;
+
             var v = ReadExtendedProperty("DisplayName", column);
             return Convert.ToString(v) ?? column;
         }
@@ -324,7 +343,12 @@ FROM sys.fn_listextendedproperty
         /// <param name="column">Column name.</param>
         /// <returns>Unit string or <c>null</c> if not set.</returns>
         public string? GetColumnDefaultUnit(string column)
-            => Convert.ToString(ReadExtendedProperty("DefaultUnit", column));
+        {
+            var meta = GetColumnMetadataEntry(column);
+            return !string.IsNullOrWhiteSpace(meta?.DefaultUnit)
+                ? meta.DefaultUnit
+                : Convert.ToString(ReadExtendedProperty("DefaultUnit", column));
+        }
 
         #endregion
 
@@ -332,7 +356,12 @@ FROM sys.fn_listextendedproperty
         public bool SetColumnParameter(string column, string unit)
     => UpsertExtendedProperty("Parameter", unit, column);
         public string? GetColumnParameter(string column)
-            => Convert.ToString(ReadExtendedProperty("Parameter", column));
+        {
+            var meta = GetColumnMetadataEntry(column);
+            return !string.IsNullOrWhiteSpace(meta?.Parameter)
+                ? meta.Parameter
+                : Convert.ToString(ReadExtendedProperty("Parameter", column));
+        }
 
         #endregion
 
@@ -354,7 +383,14 @@ FROM sys.fn_listextendedproperty
         /// <param name="column">Column name.</param>
         /// <returns>Format string or <c>null</c> if not set.</returns>
         public int? GetOrder(string column)
-            => Convert.ToInt16(ReadExtendedProperty("Order", column));
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (meta?.Order != null)
+                return meta.Order;
+
+            var value = ReadExtendedProperty("Order", column);
+            return value == null ? null : Convert.ToInt16(value);
+        }
 
         #endregion
 
@@ -376,7 +412,12 @@ FROM sys.fn_listextendedproperty
         /// <param name="column">Column name.</param>
         /// <returns>Format string or <c>null</c> if not set.</returns>
         public string? GetColumnFormat(string column)
-            => Convert.ToString(ReadExtendedProperty("Format", column));
+        {
+            var meta = GetColumnMetadataEntry(column);
+            return !string.IsNullOrWhiteSpace(meta?.Format)
+                ? meta.Format
+                : Convert.ToString(ReadExtendedProperty("Format", column));
+        }
 
         #endregion
 
@@ -385,7 +426,14 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty("DatagridShow", value, column);
 
         public bool? GetShowInDataGrid(string column)
-            => Convert.ToBoolean(ReadExtendedProperty("DatagridShow", column));
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (meta?.DatagridShow != null)
+                return meta.DatagridShow;
+
+            var value = ReadExtendedProperty("DatagridShow", column);
+            return value == null ? null : Convert.ToBoolean(value);
+        }
 
         #endregion
 
@@ -395,7 +443,13 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty("DefaultUnit", value ?? string.Empty, column);
 
         public string GetDefaultUnit(string column)
-            => Convert.ToString(ReadExtendedProperty("DefaultUnit", column)) ?? string.Empty;
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (!string.IsNullOrWhiteSpace(meta?.DefaultUnit))
+                return meta.DefaultUnit!;
+
+            return Convert.ToString(ReadExtendedProperty("DefaultUnit", column)) ?? string.Empty;
+        }
 
         #endregion
 
@@ -405,7 +459,13 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty("InputUnit", value ?? string.Empty, column);
 
         public string GetInputUnit(string column)
-            => Convert.ToString(ReadExtendedProperty("InputUnit", column)) ?? string.Empty;
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (!string.IsNullOrWhiteSpace(meta?.InputUnit))
+                return meta.InputUnit!;
+
+            return Convert.ToString(ReadExtendedProperty("InputUnit", column)) ?? string.Empty;
+        }
 
         #endregion
 
@@ -415,7 +475,13 @@ FROM sys.fn_listextendedproperty
             => UpsertExtendedProperty("LastUsedUnit", value ?? string.Empty, column);
 
         public string GetLastUsedUnit(string column)
-            => Convert.ToString(ReadExtendedProperty("LastUsedUnit", column)) ?? string.Empty;
+        {
+            var meta = GetColumnMetadataEntry(column);
+            if (!string.IsNullOrWhiteSpace(meta?.LastUsedUnit))
+                return meta.LastUsedUnit!;
+
+            return Convert.ToString(ReadExtendedProperty("LastUsedUnit", column)) ?? string.Empty;
+        }
 
         #endregion
 
@@ -437,6 +503,10 @@ FROM sys.fn_listextendedproperty
         /// <returns>True/False if set; otherwise null.</returns>
         public bool? GetHideInCrudForm(string column)
         {
+            var meta = GetColumnMetadataEntry(column);
+            if (meta?.HideInCrudForm != null)
+                return meta.HideInCrudForm;
+
             var v = ReadExtendedProperty("HideInCrudForm", column);
             if (v == null || v == DBNull.Value) return null;
 
@@ -446,6 +516,13 @@ FROM sys.fn_listextendedproperty
             return s.Equals("1", StringComparison.OrdinalIgnoreCase)
                 || s.Equals("true", StringComparison.OrdinalIgnoreCase)
                 || s.Equals("yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private ColumnInfo? GetColumnMetadataEntry(string column)
+        {
+            var physicalColumn = ResolveColumnName(column);
+            return (GetColumns() ?? new List<ColumnInfo>())
+                .FirstOrDefault(c => c.Name.Equals(physicalColumn, StringComparison.OrdinalIgnoreCase));
         }
 
         #endregion
@@ -462,6 +539,14 @@ FROM sys.fn_listextendedproperty
         public List<ColumnInfo>? GetColumns()
     => SafeExecute("DDL_GET_COLUMNS", extras =>
     {
+        var cacheKey = GetColumnMetadataCacheKey();
+        if (ColumnMetadataCache.TryGetValue(cacheKey, out var cached))
+        {
+            extras["count"] = cached.Count;
+            extras["cache"] = "hit";
+            return cached;
+        }
+
         EnsureIdent(Schema);
         var physicalTable = ResolveTableName();
 
@@ -505,7 +590,6 @@ SELECT
     xp.[DatagridShow],
     xp.[HideInCrudForm],
     xp.[Visible],
-    xp.[SoftUsedName],
     xp.SoftName
 
 FROM sys.columns c
@@ -574,9 +658,6 @@ OUTER APPLY (
                  THEN CASE WHEN LOWER(CAST(ep.value AS nvarchar(10))) IN ('1','true','yes') THEN 1 ELSE 0 END
             END) AS Visible,
 
-        MAX(CASE WHEN ep.name='Soft_Used_Name'
-                 THEN CAST(ep.value AS nvarchar(256)) END) AS SoftUsedName,
-
         MAX(CASE WHEN ep.name='AddedFromSoftware'
                  THEN CAST(ep.value AS nvarchar(256)) END) AS SoftName
 
@@ -635,7 +716,6 @@ ORDER BY c.column_id;";
                 DatagridShow = rd["DatagridShow"] as int? == 1,
                 HideInCrudForm = rd["HideInCrudForm"] as int? == 1,   // <-- ADD THIS
                 Visible = rd["Visible"] as int? == 1,
-                SoftUsedName = rd["SoftUsedName"] as string,
                 SoftName = rd["SoftName"] as string
             };
 
@@ -647,10 +727,14 @@ ORDER BY c.column_id;";
             list.Add(ci);
         }
 
-        extras["count"] = list.Count;
-        return list
-    .OrderBy(c => c.Order ?? int.MaxValue)
-    .ToList();
+        var ordered = list
+            .OrderBy(c => c.Order ?? int.MaxValue)
+            .ToList();
+
+        ColumnMetadataCache[cacheKey] = ordered;
+        extras["count"] = ordered.Count;
+        extras["cache"] = "miss";
+        return ordered;
     });
 
         public DataTable ApplyDisplayNames(DataTable dt)

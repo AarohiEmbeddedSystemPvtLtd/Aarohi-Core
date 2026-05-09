@@ -47,7 +47,7 @@ Located in `Aarohi/Classes/DynamicClass/`. The class is split into partial files
 | `DynamicClass.ChunkedTable.cs` | `SelectChunkedTable` / `SelectChunkedTableAsync` |
 | `DynamicClass.SchemaDefinition.cs` | Create/drop/ensure table, add/alter/rename/drop columns, column options |
 | `DynamicClass.Metadata.cs` | Extended properties, display names, units, format, order, visibility, `GetColumns` |
-| `DynamicClass.NameResolution.cs` | Soft table/column name resolution and SQL placeholder replacement |
+| `DynamicClass.NameResolution.cs` | Physical-name validation and SQL placeholder replacement |
 | `DynamicClass.AutoJoin.cs` | `AutoSelectWithJoins` — zero-config FK joins |
 | `DynamicClass.Relations.cs` | `SelectWithRelationFilters` — join-based filtering |
 | `DynamicClass.Logging.cs` | Logger sink injection |
@@ -89,8 +89,8 @@ machine.InstanceConnectionFactory = () =>
 | Property | Type | Description |
 |---|---|---|
 | `Schema` | `string` | SQL schema name, usually `"dbo"` |
-| `Table` | `string` | Physical table name or soft table name |
-| `KeyColumn` | `string` | Physical key column name or soft key column name |
+| `Table` | `string` | Physical table name |
+| `KeyColumn` | `string` | Physical key column name |
 | `Values` | `Dictionary<string, object?>` | Column-value pairs for insert/update/save (case-insensitive) |
 | `SchemaSpec` | `Dictionary<string, ColumnDef>` | Column definitions for DDL operations |
 | `LastErrorMessage` | `string?` | Last captured error message |
@@ -100,34 +100,15 @@ machine.InstanceConnectionFactory = () =>
 | `ThrowOnError` | `static bool` | When `true` (default), exceptions are rethrown. When `false`, methods return defaults on failure. |
 | `LogInfo` | `static bool` | Enable info-level logging (default `true`) |
 | `LogTrace` | `static bool` | Enable trace-level logging (default `false`) |
+| `BulkCopyTimeoutSeconds` | `static int` | Default timeout for `SqlBulkCopy` operations in seconds (`600` by default, `0` = infinite) |
 | `LogSource` | `string` | Source tag used in log entries (default `"DynamicClass"`) |
 | `Soft_Name` | `static string` | Software name tag stamped on columns added via `AddColumn`. Useful for tracking which columns your app created. |
 
 ---
 
-## 4. Soft Used Names
+## 4. Naming Rules
 
-`DynamicClass` supports a SQL Server extended property named `Soft_Used_Name`. This lets your code use stable software-friendly names even when actual database table or column names change.
-
-**Set soft names once:**
-
-```csharp
-var dc = new DynamicClass("dbo", "Machine", "MachineId");
-
-dc.SetTableSoftUsedName("MachineMaster");          // soft name for the table
-dc.SetColumnSoftUsedName("MachineId", "Id");        // soft name for a column
-dc.SetColumnSoftUsedName("MachineName", "Name");
-```
-
-**Use soft names in code:**
-
-```csharp
-// Now "dbo"."MachineMaster" resolves to "dbo"."Machine"
-var dc = new DynamicClass("dbo", "MachineMaster", "Id");
-
-dc.Values["Name"] = "Line 1";  // resolves to MachineName
-dc.Save();
-```
+`DynamicClass` now works only with physical SQL table and column names. SQL placeholder syntax such as `{MachineName}` is still supported, but placeholders must reference real column names.
 
 **Use soft names in SQL fragments via `{PlaceholderName}` syntax:**
 
@@ -455,7 +436,8 @@ int inserted = dc.BulkInsert(
     batchSize: 1000,
     keepIdentity: false,    // if true, preserves identity values from the DataTable
     useTransaction: true,
-    autoTrimColumns: true); // if true, ignores DataTable columns that don't exist in the target table
+    autoTrimColumns: true,
+    bulkCopyTimeoutSeconds: 300); // 0 = infinite wait
 ```
 
 `autoTrimColumns: false` throws if the `DataTable` contains columns not in the destination.
@@ -466,6 +448,7 @@ int inserted = dc.BulkInsert(
 int inserted = await dc.BulkInsertAsync(
     rows: listOfDictionaries,
     batchSize: 1000,
+    bulkCopyTimeoutSeconds: 300,
     ct: cancellationToken);
 ```
 
@@ -476,6 +459,7 @@ int inserted = await dc.BulkInsertAsync(
     dt,
     batchSize: 1000,
     autoTrimColumns: true,
+    bulkCopyTimeoutSeconds: 300,
     ct: cancellationToken);
 ```
 
@@ -772,16 +756,6 @@ bool?   flag  = dc.GetCustomColumnPropertyBool("MachineName", "MyApp_IsRequired"
 int?    num   = dc.GetCustomColumnPropertyInt("MachineName", "MyApp_MaxLength");
 ```
 
-### Table/Column Custom Property (raw)
-
-```csharp
-dc.SetTableSoftUsedName("MachineMaster");
-string softName = dc.GetTableSoftUsedName();
-
-dc.SetColumnSoftUsedName("MachineId", "Id");
-string colSoft = dc.GetColumnSoftUsedName("MachineId");
-```
-
 ### Read All Column Metadata
 
 ```csharp
@@ -811,7 +785,6 @@ List<DynamicClass.ColumnInfo>? columns = dc.GetColumns();
 | `DatagridShow` | Extended property |
 | `HideInCrudForm` | Extended property |
 | `Visible` | Extended property |
-| `SoftUsedName` | `Soft_Used_Name` extended property |
 | `SoftName` | `AddedFromSoftware` extended property |
 | `DefaultUnit` / `InputUnit` / `LastUsedUnit` | Unit extended properties |
 | `Parameter` | Extended property |
@@ -1053,8 +1026,6 @@ dc.LogSource = "MachineModule";
 | `GetColumnParameter(col)` | Get parameter tag |
 | `SetCustomColumnProperty(col, propName, value)` | Set arbitrary extended property |
 | `GetCustomColumnProperty(col, propName)` | Get arbitrary extended property |
-| `SetTableSoftUsedName(name)` | Set soft table name |
-| `SetColumnSoftUsedName(col, name)` | Set soft column name |
 | `ApplyDisplayNames(DataTable)` | Rename DataTable columns to their DisplayName |
 
 ### Utilities (Static)
@@ -1092,17 +1063,15 @@ dc.SchemaSpec["Status"] = new DynamicClass.ColumnDef
 
 dc.EnsureTable();
 
-// ── Set soft names and metadata (once, or on first run) ───────────────────────
-dc.SetTableSoftUsedName("MachineMaster");
-dc.SetColumnSoftUsedName("MachineName", "Name");
+// ── Set metadata (once, or on first run) ──────────────────────────────────────
 dc.SetColumnDisplayName("MachineName", "Machine Name");
 dc.SetColumnFormat("CreatedOn", "dd-MMM-yyyy");
 dc.SetOrder("MachineName", 1);
 dc.SetOptions("Status", new[] { "Active", "Stopped", "Maintenance" });
 
 // ── Insert ────────────────────────────────────────────────────────────────────
-var insertDc = new DynamicClass("dbo", "MachineMaster", "Id");
-insertDc.Values["Name"] = "Line 1";
+var insertDc = new DynamicClass("dbo", "Machine", "MachineId");
+insertDc.Values["MachineName"] = "Line 1";
 insertDc.Values["Status"] = "Active";
 object? newId = insertDc.Save(askBeforeOverwrite: false);
 
@@ -1110,7 +1079,7 @@ object? newId = insertDc.Save(askBeforeOverwrite: false);
 DataTable? rows = dc.Select(
     whereSql: "{Status} = @s",
     parameters: new Dictionary<string, object?> { ["s"] = "Active" },
-    orderBy: "{Name} ASC",
+    orderBy: "{MachineName} ASC",
     chunkSize: 50,
     DisplayName: true);
 

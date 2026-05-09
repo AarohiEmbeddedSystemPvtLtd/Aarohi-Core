@@ -53,6 +53,7 @@ namespace Aarohi.Classes
                 cmd.ExecuteNonQuery();
 
                 tx.Commit();
+                InvalidateColumnMetadataCache();
                 return true;
             }
             catch { tx.Rollback(); throw; }
@@ -72,6 +73,7 @@ namespace Aarohi.Classes
             cmd.Parameters.AddWithValue("@full", $"{Schema}.{Table}");
             extras["sql"] = "DROP TABLE IF EXISTS";
             cmd.ExecuteNonQuery();
+            InvalidateColumnMetadataCache();
             return true;
         });
 
@@ -104,6 +106,7 @@ namespace Aarohi.Classes
                 }
 
                 tx.Commit();
+                InvalidateColumnMetadataCache();
                 return true;
             }
             catch { tx.Rollback(); throw; }
@@ -207,6 +210,7 @@ ELSE
 
                 extras["sql"] = "ALTER TABLE ADD COLUMN (rich)";
                 cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
                 return true;
             });
 
@@ -386,6 +390,7 @@ ELSE
 
                 extras["sql"] = "ALTER TABLE ALTER COLUMN (rich)";
                 cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
                 return true;
             });
 
@@ -406,6 +411,7 @@ ELSE
                 cmd.Parameters.AddWithValue("@new", newName);
                 extras["sql"] = "sp_rename COLUMN";
                 cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
                 return true;
             });
 
@@ -426,6 +432,7 @@ ELSE
                 cmd.Parameters.AddWithValue("@c", column);
                 extras["sql"] = "ALTER TABLE DROP COLUMN";
                 cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
                 return true;
             });
 
@@ -551,6 +558,7 @@ CHECK ({checkPredicate});";
                 ("optionsCount", opts.Length));
 
                     tx.Commit();
+                    InvalidateColumnMetadataCache();
                     return true;
                 }
                 catch
@@ -575,12 +583,13 @@ CHECK ({checkPredicate});";
              using var tx = cn.BeginTransaction();
              try
              {
-                 var constraintName = MakeConstraintName(Table, column);
-                 var dropped = DropConstraintInternal(cn, tx, Schema, Table, constraintName);
-                 AddCommonExtras(extras, ("constraint", constraintName), ("dropped", dropped));
-                 tx.Commit();
-                 return true;
-             }
+                  var constraintName = MakeConstraintName(Table, column);
+                  var dropped = DropConstraintInternal(cn, tx, Schema, Table, constraintName);
+                  AddCommonExtras(extras, ("constraint", constraintName), ("dropped", dropped));
+                  tx.Commit();
+                  InvalidateColumnMetadataCache();
+                  return true;
+              }
              catch
              {
                  tx.Rollback();

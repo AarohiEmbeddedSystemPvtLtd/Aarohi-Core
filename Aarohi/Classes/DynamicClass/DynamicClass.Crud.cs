@@ -326,7 +326,8 @@ namespace Aarohi.Classes
             int batchSize = 2000,
             bool useTransaction = true,
             bool autoTrimColumns = true,
-            bool ignoreNullUpdates = false // if true: NULL in source will NOT overwrite target
+            bool ignoreNullUpdates = false, // if true: NULL in source will NOT overwrite target
+            int? bulkCopyTimeoutSeconds = null
         )
         {
             return SafeExecute("BULK_UPSERT_DT", extras =>
@@ -535,7 +536,7 @@ CREATE TABLE {tmpName} (
                     {
                         bcp.DestinationTableName = tmpName;
                         bcp.BatchSize = batchSize;
-                        bcp.BulkCopyTimeout = 0;
+                        bcp.BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds);
 
                         // Map only writeCols
                         foreach (var c in writeCols)
@@ -600,7 +601,8 @@ FROM @Actions;";
                       int batchSize = 1000,
                       bool keepIdentity = false,
                       bool useTransaction = true,
-                      bool autoTrimColumns = true)
+                      bool autoTrimColumns = true,
+                      int? bulkCopyTimeoutSeconds = null)
         {
             return SafeExecute("BULK_INSERT_DT", extras =>
             {
@@ -643,7 +645,7 @@ FROM @Actions;";
                     {
                         DestinationTableName = $"[{Schema}].[{physicalTable}]",
                         BatchSize = batchSize,
-                        BulkCopyTimeout = 0
+                        BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
                     };
 
                     foreach (var name in writeCols)
