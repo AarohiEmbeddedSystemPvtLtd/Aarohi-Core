@@ -795,7 +795,8 @@ namespace Aarohi.Classes
 
         private string GetTableTitle(DynamicClass tableClass)
         {
-            return (string.IsNullOrEmpty(tableClass.GetTableDisplayName()) || tableClass.GetTableDisplayName() == "") ? tableClass.Table : tableClass.GetTableDisplayName() ;
+            var displayName = tableClass.GetTableDisplayName();
+            return string.IsNullOrWhiteSpace(displayName) ? tableClass.Table : displayName;
         }
 
         private void ClearState()

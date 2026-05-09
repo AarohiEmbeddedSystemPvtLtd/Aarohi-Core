@@ -271,12 +271,10 @@ namespace Aarohi.Classes
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var col in GetColumns())
+            foreach (var col in GetColumns() ?? new List<ColumnInfo>())
             {
-                var format = GetColumnProperty("Format", col.Name)?.ToString();
-
-                if (!string.IsNullOrWhiteSpace(format))
-                    dict[col.Name] = format;
+                if (!string.IsNullOrWhiteSpace(col.Format))
+                    dict[col.Name] = col.Format!;
             }
 
             return dict;

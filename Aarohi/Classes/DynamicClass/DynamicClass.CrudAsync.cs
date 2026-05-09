@@ -141,6 +141,7 @@ namespace Aarohi.Classes
                                        int batchSize = 1000,
                                        bool keepIdentity = false,
                                        bool useTransaction = true,
+                                       int? bulkCopyTimeoutSeconds = null,
                                        CancellationToken ct = default)
         {
             return await SafeExecuteAsync("BULK_INSERT_ASYNC", async extras =>
@@ -180,7 +181,7 @@ namespace Aarohi.Classes
                     {
                         DestinationTableName = $"[{Schema}].[{physicalTable}]",
                         BatchSize = batchSize,
-                        BulkCopyTimeout = 0
+                        BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
                     };
                     foreach (DataColumn dc in dt.Columns)
                         bcp.ColumnMappings.Add(dc.ColumnName, dc.ColumnName);
@@ -202,6 +203,7 @@ namespace Aarohi.Classes
                                        bool keepIdentity = false,
                                        bool useTransaction = true,
                                        bool autoTrimColumns = true,
+                                       int? bulkCopyTimeoutSeconds = null,
                                        CancellationToken ct = default)
         {
             return await SafeExecuteAsync("BULK_INSERT_DT_ASYNC", async extras =>
@@ -245,7 +247,7 @@ namespace Aarohi.Classes
                     {
                         DestinationTableName = $"[{Schema}].[{physicalTable}]",
                         BatchSize = batchSize,
-                        BulkCopyTimeout = 0
+                        BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
                     };
 
                     foreach (var name in writeCols)

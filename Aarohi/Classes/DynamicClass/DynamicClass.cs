@@ -3,6 +3,7 @@ using Aarohi.Globals;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -22,6 +23,7 @@ namespace Aarohi.Classes
         // ---------- Global config ----------
         public static bool LogInfo { get; set; } = true;
         public static bool LogTrace { get; set; } = false;
+        public static int BulkCopyTimeoutSeconds { get; set; } = 600;
 
         // ---------- Core properties ----------
         public string Schema { get; set; } = "dbo";
@@ -69,6 +71,9 @@ namespace Aarohi.Classes
         public string? LastErrorMessage { get; private set; }
         public Exception? LastException { get; private set; }
 
+        private static readonly ConcurrentDictionary<string, List<ColumnInfo>> ColumnMetadataCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
         #endregion
 
         #region Constructors and Disposers
@@ -112,6 +117,18 @@ namespace Aarohi.Classes
             SchemaSpec.Clear();
 
             GC.SuppressFinalize(this);
+        }
+
+        private string GetColumnMetadataCacheKey()
+        {
+            EnsureIdent(Schema);
+            EnsureIdent(Table);
+            return $"{Schema}.{Table}";
+        }
+
+        private void InvalidateColumnMetadataCache()
+        {
+            ColumnMetadataCache.TryRemove(GetColumnMetadataCacheKey(), out _);
         }
         #endregion
 
