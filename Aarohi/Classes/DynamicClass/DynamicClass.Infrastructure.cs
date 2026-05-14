@@ -153,19 +153,19 @@ namespace Aarohi.Classes
         {
             public string ParentTable { get; set; }
             public bool IsPrimaryKey { get; set; }
-            public string Name { get; set; } = "";
-            public string DataType { get; set; } = "";
+            public string Name { get; set; } = ""; // Want
+            public string DataType { get; set; } = ""; // want
             public short MaxLength { get; set; }
-            public byte Precision { get; set; }
-            public byte Scale { get; set; }
+            public byte Precision { get; set; } // want
+            public byte Scale { get; set; } // want
             public bool Nullable { get; set; }
             public bool Identity { get; set; }
             public string? DefaultSql { get; set; }
             public object? DefaultValue { get; set; }
             public string? CheckDefinition { get; set; }
-            public string? SoftUsedName { get; set; }
-            public string? SoftName { get; set; }
-            public string[]? Options { get; set; }
+            public string? SoftUsedName { get; set; } // want
+            public string? SoftName { get; set; } // want
+            public string[]? Options { get; set; } // want
             public bool HasOptions { get; set; }
 
             // FK:
@@ -174,7 +174,7 @@ namespace Aarohi.Classes
             public string? ReferencedTable { get; set; }
             public string? ReferencedColumn { get; set; }
 
-            // Verbose
+            // Verbose // want all
             public string? DisplayName { get; set; }
             public string? Description { get; set; }
             public string? Unit { get; set; }
