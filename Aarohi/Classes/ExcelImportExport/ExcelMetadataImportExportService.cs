@@ -1,4 +1,7 @@
-﻿using ClosedXML.Excel;
+﻿using Aarohi.Classes;
+using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Drawing;
+using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -6,8 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Aarohi.Classes;
 using static Aarohi.Classes.Dbhand;
+using Path = System.IO.Path;
 
 namespace Aarohi.Classes.ExcelImportExport
 {
@@ -15,6 +18,7 @@ namespace Aarohi.Classes.ExcelImportExport
     {
         private static ExcelMetadataOptions _options = new ExcelMetadataOptions();
         private static readonly object _operationLock = new object();
+        private static string? _connectionString;
 
         // Public property
         public static ExcelMetadataOptions Options
@@ -331,11 +335,12 @@ namespace Aarohi.Classes.ExcelImportExport
                         int columnLastDataRow = columnHeaderRow + dtColumnTable.Rows.Count;
 
                         wsColumns.Cell(columnHeaderRow, 1).InsertTable(dtColumnTable, excelTableName, true);
+                        MakeFormatColumnText(wsColumns, columnHeaderRow, columnLastDataRow);
 
                         FormatExcelSheet(wsColumns, columnHeaderRow);
 
-                        ApplyColumnValidations(workbook, wsColumns, dtColumnTable, allowedDataTypes, parameterUnitMap, wsValidationLists, ref validationListRow,
-                            columnHeaderRow, columnFirstDataRow, columnLastDataRow);
+                        //ApplyColumnValidations(workbook, wsColumns, dtColumnTable, allowedDataTypes, parameterUnitMap, wsValidationLists, ref validationListRow,
+                        //    columnHeaderRow, columnFirstDataRow, columnLastDataRow);
                     }
                 }
 
@@ -362,6 +367,156 @@ namespace Aarohi.Classes.ExcelImportExport
                     ConsolidateDataValidationRanges = false
                 });
             }
+        }
+        public static void ExportTablesToXlsx(string schemaName, IEnumerable<string> tableNames, string xlsxFilePath)
+        {
+            using SqlConnection sqlConnection = new SqlConnection(_connectionString);
+
+            sqlConnection.Open();
+
+            using XLWorkbook workbook = new XLWorkbook();
+
+            HashSet<string> usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> usedExcelTableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            DataTable tableMetaData = ExcelMetadataImportExportService.CreateTableMetaExportTable();
+
+            foreach (string fullTableName in tableNames)
+            {
+                if (string.IsNullOrWhiteSpace(fullTableName))
+                    continue;
+
+                string cleanedName = fullTableName.Replace("[", "").Replace("]", "").Trim();
+
+                string actualSchemaName = schemaName;
+                string actualTableName = cleanedName;
+
+                ExcelMetadataImportExportService.ParsedTableName parsedTable = ExcelMetadataImportExportService.ParseSelectedTableName(cleanedName);
+
+                if (!string.IsNullOrWhiteSpace(parsedTable.Schema))
+                    actualSchemaName = parsedTable.Schema;
+
+                if (!string.IsNullOrWhiteSpace(parsedTable.TableName))
+                    actualTableName = parsedTable.TableName;
+
+                string fullDbTableName = $"{actualSchemaName}.{actualTableName}";
+
+                string query = $"SELECT * FROM {SqlFullName(actualSchemaName, actualTableName)}";
+
+                using SqlCommand selectCommand = new SqlCommand(query, sqlConnection);
+
+                selectCommand.CommandTimeout = 0;
+
+                using SqlDataAdapter sqlDataAdapter = new SqlDataAdapter(selectCommand);
+
+                DataTable dataTable = new DataTable(actualTableName);
+
+                sqlDataAdapter.Fill(dataTable);
+
+                string uniqueId = Guid.NewGuid().ToString("D");
+
+                string safeSheetName = ExcelMetadataImportExportService.MakeSafeWorksheetName(fullDbTableName, usedSheetNames);
+
+                IXLWorksheet dataSheet = workbook.Worksheets.Add(safeSheetName);
+
+                ExcelMetadataImportExportService.SetWorksheetGuidIdentity(dataSheet, uniqueId);
+
+                const int dataHeaderRow = 3;
+
+                if (dataTable.Columns.Count > 0)
+                {
+                    WriteDataTableFast(dataSheet, dataTable, dataHeaderRow);
+
+                    //FormatDataSheetLight(dataSheet,dataHeaderRow,dataTable.Columns.Count);
+                }
+                else
+                {
+                    dataSheet.Cell(dataHeaderRow, 1).Value = "No data found.";
+                }
+
+                string displayName = "";
+
+                try
+                {
+                    using DynamicClass dc = new DynamicClass(actualSchemaName, actualTableName);
+
+                    displayName = dc.GetTableDisplayName()?.Trim() ?? "";
+                }
+                catch
+                {
+                    displayName = "";
+                }
+
+                DataRow row = tableMetaData.NewRow();
+
+                ExcelMetadataImportExportService.SetExportValue(row, ExcelTableFields.UniqueId, uniqueId);
+
+                ExcelMetadataImportExportService.SetExportValue(row, ExcelTableFields.Schema, actualSchemaName);
+
+                ExcelMetadataImportExportService.SetExportValue(row, ExcelTableFields.TableName, actualTableName);
+
+                ExcelMetadataImportExportService.SetExportValue(row, ExcelTableFields.FullTableName, fullDbTableName);
+
+                ExcelMetadataImportExportService.SetExportValue(row, ExcelTableFields.DisplayName, displayName);
+
+                tableMetaData.Rows.Add(row);
+            }
+
+            string metaTableName = ExcelMetadataImportExportService.MakeSafeExcelTableName("Table_Metadata", usedExcelTableNames);
+
+            IXLWorksheet tablesSheet = workbook.Worksheets.Add(ExcelTableFields.SheetName, 1);
+
+            tablesSheet.Cell(1, 1).InsertTable(tableMetaData, metaTableName, true);
+
+            ExcelMetadataImportExportService.FormatExcelSheet(tablesSheet);
+
+            ExcelMetadataImportExportService.AddTableSheetHyperlinks(workbook);
+            AddBackToTablesButtons(workbook);
+
+            workbook.SaveAs(xlsxFilePath,
+                new SaveOptions
+                {
+                    ValidatePackage = false,
+                    EvaluateFormulasBeforeSaving = false,
+                    GenerateCalculationChain = false,
+                    ConsolidateConditionalFormatRanges = false,
+                    ConsolidateDataValidationRanges = false
+                });
+        }
+        private static void WriteDataTableFast(IXLWorksheet ws, DataTable dataTable, int headerRow)
+        {
+            for (int col = 0; col < dataTable.Columns.Count; col++)
+            {
+                ws.Cell(headerRow, col + 1).Value =
+                    dataTable.Columns[col].ColumnName;
+            }
+
+            int currentRow = headerRow + 1;
+
+            foreach (DataRow dataRow in dataTable.Rows)
+            {
+                for (int col = 0; col < dataTable.Columns.Count; col++)
+                {
+                    object value = dataRow[col];
+
+                    ws.Cell(currentRow, col + 1).Value =
+                        value == DBNull.Value || value == null
+                            ? ""
+                            : Convert.ToString(value);
+                }
+
+                currentRow++;
+            }
+        }
+        private static string SqlFullName(string schemaName, string tableName)
+        {
+            return $"{SqlName(schemaName)}.{SqlName(tableName)}";
+        }
+
+        private static string SqlName(string name)
+        {
+            return "[" + name.Replace("]", "]]") + "]";
         }
         public static void GenerateExcelExportFileForSingleTable(string fileName,string selectedTableName,CancellationToken token)
         {
@@ -434,11 +589,12 @@ namespace Aarohi.Classes.ExcelImportExport
                     int columnLastDataRow = columnHeaderRow + dtColumnTable.Rows.Count;
 
                     wsColumns.Cell(columnHeaderRow, 1).InsertTable(dtColumnTable, excelTableName, true);
+                    MakeFormatColumnText(wsColumns, columnHeaderRow, columnLastDataRow);
 
                     FormatExcelSheet(wsColumns, columnHeaderRow);
 
-                    ApplyColumnValidations(workbook,wsColumns,dtColumnTable,allowedDataTypes,parameterUnitMap,wsValidationLists,
-                        ref validationListRow,columnHeaderRow,columnFirstDataRow,columnLastDataRow);
+                    //ApplyColumnValidations(workbook,wsColumns,dtColumnTable,allowedDataTypes,parameterUnitMap,wsValidationLists,
+                    //    ref validationListRow,columnHeaderRow,columnFirstDataRow,columnLastDataRow);
                 }
 
                 string tableMetaName = MakeSafeExcelTableName("Table_Metadata",usedExcelTableNames);
@@ -829,7 +985,7 @@ namespace Aarohi.Classes.ExcelImportExport
                 IXLRow row = ws.Row(rowNo);
 
                 bool isEmptyRow = excelColumnMap.Keys.All(col => string.IsNullOrWhiteSpace(row.Cell(col).GetString()));
-
+               
                 if (isEmptyRow)
                     continue;
 
@@ -840,11 +996,20 @@ namespace Aarohi.Classes.ExcelImportExport
                     int excelCol = item.Key;
                     string dtColumnName = item.Value;
 
-                    dr[dtColumnName] = row.Cell(excelCol).GetString().Trim();
+                    //dr[dtColumnName] = row.Cell(excelCol).GetString().Trim();
+                    IXLCell cell = row.Cell(excelCol);
+
+                    if (string.Equals(dtColumnName, ExcelColumnFields.Format, StringComparison.OrdinalIgnoreCase))
+                    {
+                        dr[dtColumnName] = cell.GetString().Trim();
+                    }
+                    else
+                    {
+                        dr[dtColumnName] = cell.GetString().Trim();
+                    }
                 }
 
-                string columnNameValue =
-                    dr[ExcelColumnFields.Name]?.ToString()?.Trim() ?? "";
+                string columnNameValue =dr[ExcelColumnFields.Name]?.ToString()?.Trim() ?? "";
 
                 if (string.IsNullOrWhiteSpace(columnNameValue))
                     continue;
@@ -1396,13 +1561,18 @@ namespace Aarohi.Classes.ExcelImportExport
 
         public static void FormatExcelSheet(IXLWorksheet ws, int headerRowNumber = 1)
         {
-            var usedRange = ws.RangeUsed();
+            //var usedRange = ws.RangeUsed();
 
+            int lastCol = ws.Row(headerRowNumber).CellsUsed(XLCellsUsedOptions.Contents).Max(c => c.Address.ColumnNumber);
+            int lastRow = ws.Column("A").LastCellUsed(XLCellsUsedOptions.Contents)?.Address.RowNumber ?? headerRowNumber;
+
+            var usedRange = ws.Range(headerRowNumber, 1, lastRow, lastCol);
+            usedRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             if (usedRange == null)
                 return;
 
-            usedRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            usedRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            //usedRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            //usedRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
 
             var headerCells = ws.Row(headerRowNumber).CellsUsed();
 
@@ -1422,6 +1592,42 @@ namespace Aarohi.Classes.ExcelImportExport
             ws.SheetView.FreezeColumns(1);
 
             ws.ColumnsUsed().AdjustToContents(8, 45);
+        }
+        public static void MakeFormatColumnText(IXLWorksheet ws, int headerRowNumber, int lastDataRow)
+        {
+            if (ws == null)
+                return;
+
+            int formatCol = 0;
+
+            foreach (IXLCell cell in ws.Row(headerRowNumber).CellsUsed())
+            {
+                string header = cell.GetString().Trim();
+
+                if (string.Equals(header, ExcelColumnFields.Format, StringComparison.OrdinalIgnoreCase))
+                {
+                    formatCol = cell.Address.ColumnNumber;
+                    break;
+                }
+            }
+
+            if (formatCol <= 0)
+                return;
+
+            if (lastDataRow <= headerRowNumber)
+                return;
+
+            IXLRange formatRange = ws.Range(headerRowNumber + 1, formatCol, lastDataRow, formatCol);
+
+            formatRange.Style.NumberFormat.Format = "@";
+
+            foreach (IXLCell cell in formatRange.Cells())
+            {
+                string value = cell.GetString().Trim();
+
+                cell.Style.NumberFormat.Format = "@";
+                cell.SetValue(value);
+            }
         }
         public static string MakeSafeWorksheetName(string name, HashSet<string> usedNames)
         {
@@ -1905,7 +2111,7 @@ namespace Aarohi.Classes.ExcelImportExport
                 linkCell.Style.Font.Bold = true;
             }
         }
-        private static void AddBackToTablesButtons(XLWorkbook workbook)
+        public static void AddBackToTablesButtons(XLWorkbook workbook)
         {
             const string buttonText = "← Back to Tables";
 

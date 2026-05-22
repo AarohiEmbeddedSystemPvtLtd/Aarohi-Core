@@ -33,8 +33,7 @@ namespace Aarohi.Globals
         public static class Utils
         {
             public static string DevName = "Dev@Aarohi";
-            private const string InstalledSqlPackage =
-       @"C:\Program Files (x86)\Aarohi Embedded Systems Pvt. Ltd\sqlpackage\sqlpackage.exe";
+            private const string InstalledSqlPackage =@"C:\Program Files (x86)\Aarohi Embedded Systems Pvt. Ltd\sqlpackage\sqlpackage.exe";
 
             public static string SqlPackagePath => ResolveSqlPackagePath();
 
