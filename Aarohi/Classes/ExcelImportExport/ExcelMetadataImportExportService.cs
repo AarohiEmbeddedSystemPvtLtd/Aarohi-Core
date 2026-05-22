@@ -331,7 +331,6 @@ namespace Aarohi.Classes.ExcelImportExport
                         int columnLastDataRow = columnHeaderRow + dtColumnTable.Rows.Count;
 
                         wsColumns.Cell(columnHeaderRow, 1).InsertTable(dtColumnTable, excelTableName, true);
-
                         FormatExcelSheet(wsColumns, columnHeaderRow);
 
                         ApplyColumnValidations(workbook, wsColumns, dtColumnTable, allowedDataTypes, parameterUnitMap, wsValidationLists, ref validationListRow,
@@ -434,7 +433,6 @@ namespace Aarohi.Classes.ExcelImportExport
                     int columnLastDataRow = columnHeaderRow + dtColumnTable.Rows.Count;
 
                     wsColumns.Cell(columnHeaderRow, 1).InsertTable(dtColumnTable, excelTableName, true);
-
                     FormatExcelSheet(wsColumns, columnHeaderRow);
 
                     ApplyColumnValidations(workbook,wsColumns,dtColumnTable,allowedDataTypes,parameterUnitMap,wsValidationLists,
