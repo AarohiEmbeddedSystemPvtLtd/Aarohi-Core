@@ -361,14 +361,12 @@ namespace Aarohi.Classes
                      .ToArray();
         }
 
-        public Dictionary<string, object?>? GetRowAsDictionary(
-    string columnName,
-    object? value)
+        public Dictionary<string, object?>? GetRowAsDictionary(string columnName,object? value,bool isFormatNeeded = false)
         {
             EnsureIdent(Schema);
             var physicalColumn = ResolveColumnName(columnName);
 
-            var dt = Select($"{Q(physicalColumn)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1, DisplayName:false);
+            var dt = Select($"{Q(physicalColumn)} = @v", new Dictionary<string, object?> { ["v"] = value }, top: 1, DisplayName:false, WantFormatingInDefault:isFormatNeeded);
             if (dt == null || dt.Rows.Count == 0) return null;
 
             var row = dt.Rows[0];
