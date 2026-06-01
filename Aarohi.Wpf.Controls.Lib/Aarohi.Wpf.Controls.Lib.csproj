@@ -39,10 +39,15 @@ Compound control consisting of a TextBox (for values) and a ComboBox (for units)
 
     <ItemGroup>
         <!-- Dependencies -->
-        <PackageReference Include="Aarohi" Version="1.0.14.20" />
         <PackageReference Include="Aarohi.Designer" Version="1.0.10" />
         <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
         <!-- 3. Corrected Image Path: Removed leading backslash -->
         <None Include="Resources\Images\Aarohi.jpg" Pack="true" PackagePath="." />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="Aarohi">
+        <HintPath>..\Aarohi\bin\Debug\net9.0-windows\Aarohi.dll</HintPath>
+      </Reference>
     </ItemGroup>
 </Project>
