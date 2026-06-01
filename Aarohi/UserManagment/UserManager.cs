@@ -613,26 +613,59 @@ namespace Aarohi.UserManagment
                 throw new Exception("Invalid email domain");
 
             //  OTP Flow
+            //if (isOtpEnabled)
+            //{
+            //    OTPProcedureStart?.Invoke(null, EventArgs.Empty);
+
+            //    try
+            //    {
+            //        Random rnd = new Random();
+            //        generatedOtp = rnd.Next(100000, 999999).ToString();
+            //        otpExpiry = DateTime.Now.AddMinutes(5);
+
+            //        await SendOtpEmail(
+            //            mail.Trim(),
+            //            "Aarohi Embedded Systems Pvt. Ltd.",
+            //            "Email Verification Code",
+            //            MailTemplates.OtpEmailBody(generatedOtp)
+            //        );
+            //    }
+            //    finally
+            //    {
+            //        OTPProcedureStop?.Invoke(null, EventArgs.Empty);
+            //    }
+
+            //    return false;
+            //}
             if (isOtpEnabled)
             {
-                OTPProcedureStart?.Invoke(null, EventArgs.Empty);
+                UserManager.OTPProcedureStart?.Invoke(null, EventArgs.Empty);
 
                 try
                 {
-                    Random rnd = new Random();
-                    generatedOtp = rnd.Next(100000, 999999).ToString();
-                    otpExpiry = DateTime.Now.AddMinutes(5);
+                    if (string.IsNullOrWhiteSpace(mail))
+                        throw new Exception("Email address is empty. Cannot send OTP.");
 
-                    await SendOtpEmail(
+                    generatedOtp = new Random().Next(100000, 999999).ToString();
+                    otpExpiry = DateTime.Now.AddMinutes(5.0);
+
+                    await MailHelpers.SendOtpEmail(
                         mail.Trim(),
                         "Aarohi Embedded Systems Pvt. Ltd.",
                         "Email Verification Code",
-                        MailTemplates.OtpEmailBody(generatedOtp)
-                    );
+                        MailTemplates.OtpEmailBody(generatedOtp));
+
+                    // IMPORTANT:
+                    // Call Stop only after OTP email successfully sent.
+                    UserManager.OTPProcedureStop?.Invoke(null, EventArgs.Empty);
                 }
-                finally
+                catch
                 {
-                    OTPProcedureStop?.Invoke(null, EventArgs.Empty);
+                    // Do not open OTP form if email sending failed.
+                    generatedOtp = string.Empty;
+                    otpExpiry = DateTime.MinValue;
+
+                    throw;
                 }
 
                 return false;

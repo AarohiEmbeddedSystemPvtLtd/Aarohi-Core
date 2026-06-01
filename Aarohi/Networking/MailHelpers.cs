@@ -1,9 +1,11 @@
 ﻿using DnsClient;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Mail;
 using System.Text;
 using System.Threading.Tasks;
@@ -50,6 +52,8 @@ namespace Aarohi.Networking
             };
             await smtp.SendMailAsync(message);
         }
+
+
 
         //public static async Task SendOtpEmail(string email, string otp)
         //{
