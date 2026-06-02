@@ -130,9 +130,18 @@ namespace AarohiWpfControls.Controls.TextBox
         {
             InitializeComponent();
             Items = new ObservableCollection<string>();
-            // THEME FIX: Link the internal unit-dropdown to the App's theme resources
+
+            ControlChrome.SetResourceReference(Border.BackgroundProperty, "PanelBgBrush");
+            ControlChrome.SetResourceReference(Border.BorderBrushProperty, "AppBrush.Border");
+            UnitSeparator.SetResourceReference(Border.BackgroundProperty, "AppBrush.Border");
+            txtLeft.SetResourceReference(System.Windows.Controls.TextBox.ForegroundProperty, "TextBrush");
+            txtLeft.SetResourceReference(System.Windows.Controls.TextBox.CaretBrushProperty, "AppBrush.Primary");
             cmbRight.SetResourceReference(ComboBox.BackgroundProperty, "PanelBgBrush");
             cmbRight.SetResourceReference(ComboBox.ForegroundProperty, "TextBrush");
+
+            MouseEnter += (_, _) => UpdateChromeState();
+            MouseLeave += (_, _) => UpdateChromeState();
+            IsKeyboardFocusWithinChanged += (_, _) => UpdateChromeState();
         }
 
         // -------------------------------------------------
@@ -165,25 +174,47 @@ namespace AarohiWpfControls.Controls.TextBox
 
         private void UpdateLayoutParts()
         {
+            double unitWidth = Math.Max(76, RightWidth);
+            double valueWidth = Math.Max(80, LeftWidth);
+
             if (Items == null || Items.Count == 0)
             {
                 ColLeft.Width = new GridLength(1, GridUnitType.Star);
+                ColSeparator.Width = new GridLength(0);
                 ColRight.Width = new GridLength(0);
+                UnitSeparator.Visibility = Visibility.Collapsed;
                 cmbRight.Visibility = Visibility.Collapsed;
                 return;
             }
 
+            ColSeparator.Width = new GridLength(1);
+            UnitSeparator.Visibility = Visibility.Visible;
             cmbRight.Visibility = Visibility.Visible;
             if (UseRightWidth)
             {
-                ColRight.Width = new GridLength(RightWidth);
+                ColRight.Width = new GridLength(unitWidth);
                 ColLeft.Width = new GridLength(1, GridUnitType.Star);
             }
             else
             {
-                ColLeft.Width = new GridLength(LeftWidth);
+                ColLeft.Width = new GridLength(valueWidth);
                 ColRight.Width = new GridLength(1, GridUnitType.Star);
             }
+        }
+
+        private void UpdateChromeState()
+        {
+            if (IsKeyboardFocusWithin)
+            {
+                ControlChrome.BorderThickness = new Thickness(1.5);
+                ControlChrome.SetResourceReference(Border.BorderBrushProperty, "AppBrush.Primary");
+                return;
+            }
+
+            ControlChrome.BorderThickness = new Thickness(1);
+            ControlChrome.SetResourceReference(
+                Border.BorderBrushProperty,
+                IsMouseOver ? "AppBrush.BorderStrong" : "AppBrush.Border");
         }
 
         // -------------------------------------------------

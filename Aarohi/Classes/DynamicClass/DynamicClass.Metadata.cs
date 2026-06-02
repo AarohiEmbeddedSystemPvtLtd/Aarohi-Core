@@ -236,6 +236,7 @@ FROM sys.fn_listextendedproperty
                     "ReportUnit" => meta.ReportUnit,
                     "Format" => meta.Format,
                     "Parameter" => meta.Parameter,
+                    "Group" => meta.Group,
                     "Order" => meta.Order,
                     "DatagridShow" => meta.DatagridShow,
                     "HideInCrudForm" => meta.HideInCrudForm,
@@ -586,6 +587,7 @@ SELECT
     xp.[ReportUnit],
     xp.[Format],
     xp.[Parameter],
+    xp.[Group],
     xp.[Order],
     xp.[DatagridShow],
     xp.[HideInCrudForm],
@@ -643,6 +645,7 @@ OUTER APPLY (
         MAX(CASE WHEN ep.name='ReportUnit' THEN CAST(ep.value AS nvarchar(64)) END) AS [ReportUnit],
         MAX(CASE WHEN ep.name='Format' THEN CAST(ep.value AS nvarchar(64)) END) AS [Format],
         MAX(CASE WHEN ep.name='Parameter' THEN CAST(ep.value AS nvarchar(256)) END) AS [Parameter],
+        MAX(CASE WHEN ep.name='Group' THEN CAST(ep.value AS nvarchar(256)) END) AS [Group],
         MAX(TRY_CAST(CASE WHEN ep.name='Order' THEN ep.value END AS int)) AS [Order],
 
         -- Boolean normalization
@@ -711,6 +714,7 @@ ORDER BY c.column_id;";
                 LastUsedUnit = rd["LastUsedUnit"] as string,
                 Format = rd["Format"] as string,
                 Parameter = rd["Parameter"] as string,
+                Group = rd["Group"] as string,
                 Order = rd["Order"] as int?,
 
                 DatagridShow = rd["DatagridShow"] as int? == 1,

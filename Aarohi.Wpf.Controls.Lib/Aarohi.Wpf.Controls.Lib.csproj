@@ -46,8 +46,6 @@ Compound control consisting of a TextBox (for values) and a ComboBox (for units)
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Aarohi">
-        <HintPath>..\Aarohi\bin\Debug\net9.0-windows\Aarohi.dll</HintPath>
-      </Reference>
+      <ProjectReference Include="..\Aarohi\Aarohi.csproj" />
     </ItemGroup>
 </Project>

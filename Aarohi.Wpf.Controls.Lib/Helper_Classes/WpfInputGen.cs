@@ -414,7 +414,8 @@ namespace AarohiWpfControls.Helper_Classes
 
             private static List<string> ResolveUnits(string? parameter)
             {
-                return UnitConverisonEngine.GetUnitsFromParameter(parameter); ;
+                return UnitConverisonEngine.GetUnitsFromParameter(parameter);
+                //return new List<string>() {"LPM","LPS","GPM","LPH"};
             }
 
             private static string ResolveQuantityName(string col, string? param) => !string.IsNullOrWhiteSpace(param) ? param : col;

@@ -17,6 +17,12 @@ namespace Aarohi.Classes
         private static string sTo = "ToUnit";
         private static string sFormula = "Formula";
 
+        // New optional column
+        private static string sFormat = "Format";
+
+        // Default format when Format column not found or empty
+        private static string sDefaultFormat = "0.00";
+
         private static string sParameterCol = "Perameter";
         private static string sUnitsCol = "Units";
 
@@ -56,6 +62,20 @@ namespace Aarohi.Classes
             set => sFormula = value;
         }
 
+        // New property if you want to rename Format column
+        public static string Format
+        {
+            get => sFormat;
+            set => sFormat = value;
+        }
+
+        // New property if you want to change default format
+        public static string DefaultFormat
+        {
+            get => sDefaultFormat;
+            set => sDefaultFormat = string.IsNullOrWhiteSpace(value) ? "0.00" : value.Trim();
+        }
+
         public static string ParameterColumnName
         {
             get => sParameterCol;
@@ -79,7 +99,52 @@ namespace Aarohi.Classes
                 .Any(r => StrEq(r[sFrom], fromUnit));
         }
 
+        // Existing method - returns double value
         public static (double value, string toUnit) convert(
+            string parameter,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
+        {
+            var result = ConvertInternal(parameter, inputValue, fromUnit, toUnit);
+            return (result.value, result.toUnit);
+        }
+
+        // New method - returns formatted string value
+        public static (string value, string toUnit) convertFormatted(
+            string parameter,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
+        {
+            var result = ConvertInternal(parameter, inputValue, fromUnit, toUnit);
+
+            string formattedValue = result.value.ToString(result.format, CultureInfo.InvariantCulture);
+
+            return (formattedValue, result.toUnit);
+        }
+
+        // Existing method - returns only double
+        public static double ConvertValue(
+            string quantity,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
+        {
+            return convert(quantity, inputValue, fromUnit, toUnit).value;
+        }
+
+        // New method - returns only formatted string
+        public static string ConvertValueFormatted(
+            string quantity,
+            object inputValue,
+            string fromUnit,
+            string toUnit)
+        {
+            return convertFormatted(quantity, inputValue, fromUnit, toUnit).value;
+        }
+
+        private static (double value, string toUnit, string format) ConvertInternal(
             string parameter,
             object inputValue,
             string fromUnit,
@@ -99,7 +164,9 @@ namespace Aarohi.Classes
             double value = ToDouble(inputValue);
 
             if (string.Equals(fromUnit.Trim(), toUnit.Trim(), StringComparison.OrdinalIgnoreCase))
-                return (value, toUnit.Trim());
+            {
+                return (value, toUnit.Trim(), sDefaultFormat);
+            }
 
             DataRow? rule = dtRules!.AsEnumerable().FirstOrDefault(r =>
                 StrEq(r[sQuantity], parameter) &&
@@ -123,16 +190,27 @@ namespace Aarohi.Classes
             object? result = EvaluateFormula(formulaText, value);
             double convertedValue = ToDouble(result!);
 
-            return (convertedValue, toUnit.Trim());
+            string format = GetFormat(rule);
+
+            return (convertedValue, toUnit.Trim(), format);
         }
 
-        public static double ConvertValue(
-            string quantity,
-            object inputValue,
-            string fromUnit,
-            string toUnit)
+        private static string GetFormat(DataRow rule)
         {
-            return convert(quantity, inputValue, fromUnit, toUnit).value;
+            if (rule == null)
+                return sDefaultFormat;
+
+            // If Format column not found, use default 0.00
+            if (!dtRules!.Columns.Contains(sFormat))
+                return sDefaultFormat;
+
+            string format = Convert.ToString(rule[sFormat])?.Trim() ?? string.Empty;
+
+            // If Format column exists but value is empty, use default 0.00
+            if (string.IsNullOrWhiteSpace(format))
+                return sDefaultFormat;
+
+            return format;
         }
 
         public static string GetUnitFromParameter(string parameter)
@@ -193,6 +271,10 @@ namespace Aarohi.Classes
 
             if (!dtRules.Columns.Contains(sFormula))
                 throw new InvalidOperationException($"Missing column '{sFormula}' in ConversionRules.");
+
+            // Important:
+            // Format column is optional.
+            // So do not throw error if Format column is missing.
         }
 
         private static void EnsureParameterMappingReady()

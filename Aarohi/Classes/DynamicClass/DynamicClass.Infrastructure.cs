@@ -187,6 +187,7 @@ namespace Aarohi.Classes
             public bool? HideInCrudForm { get; set; }
             public string? Format { get; set; }
             public string? Parameter { get; set; }
+            public string? Group { get; set; }
             public int? Order { get; set; }
             public bool? Visible { get; set; }
 

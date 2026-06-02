@@ -4,27 +4,212 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:AarohiWpfControls.Controls.TextBox"
-             mc:Ignorable="d" d:DesignHeight="26" d:DesignWidth="190">
-    <Grid Name="MainGrid">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Name="ColLeft" Width="Auto" />
-            <ColumnDefinition Width="4" />
-            <!-- Gap -->
-            <ColumnDefinition Name="ColRight" Width="Auto" />
-        </Grid.ColumnDefinitions>
+             MinHeight="38"
+             HorizontalAlignment="Stretch"
+             VerticalAlignment="Stretch"
+             SnapsToDevicePixels="True"
+             mc:Ignorable="d" d:DesignHeight="38" d:DesignWidth="260">
+    <UserControl.Resources>
+        <Style x:Key="ExtendedTextBoxValueStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource AppBrush.Primary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="12,0,8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Margin="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <TextBox x:Name="txtLeft" 
-                 Grid.Column="0" 
-                 VerticalAlignment="Center" 
-                 BorderBrush="Gray" 
-                 BorderThickness="1"
-                 TextChanged="TxtLeft_TextChanged" 
-                 PreviewTextInput="TxtLeft_PreviewTextInput"/>
+        <Style x:Key="ExtendedTextBoxUnitItemStyle" TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="ItemChrome"
+                                Margin="4,2"
+                                Padding="{TemplateBinding Padding}"
+                                Background="Transparent"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AppBrush.PrimarySubtle}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <ComboBox x:Name="cmbRight" 
-                  Grid.Column="2" 
-                  VerticalAlignment="Center" 
-                  IsEditable="False"
-                  SelectionChanged="CmbRight_SelectionChanged"/>
-    </Grid>
+        <Style x:Key="ExtendedTextBoxUnitComboStyle" TargetType="{x:Type ComboBox}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="MinWidth" Value="76" />
+            <Setter Property="MaxDropDownHeight" Value="220" />
+            <Setter Property="Padding" Value="8,0,10,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource ExtendedTextBoxUnitItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid MinHeight="{TemplateBinding MinHeight}"
+                              SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="ToggleButton"
+                                          Background="Transparent"
+                                          BorderBrush="Transparent"
+                                          BorderThickness="0"
+                                          Focusable="False"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                        <Border x:Name="UnitButtonChrome"
+                                                Background="{TemplateBinding Background}"
+                                                CornerRadius="0,8,8,0">
+                                            <Grid Margin="{Binding Padding, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="16" />
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0"
+                                                                  Margin="0,0,4,0"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                                  ContentStringFormat="{Binding SelectionBoxItemStringFormat, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" />
+                                                <Path Grid.Column="1"
+                                                      Width="8"
+                                                      Height="5"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Data="M 0 0 L 4 4 L 8 0 Z"
+                                                      Fill="{DynamicResource AppBrush.TextSecondary}" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="UnitButtonChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="UnitButtonChrome" Property="Background" Value="{DynamicResource AppBrush.ControlPressed}" />
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Opacity" Value="0.55" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PlacementTarget="{Binding ElementName=ToggleButton}"
+                                   PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=ToggleButton}"
+                                        MinWidth="{TemplateBinding MinWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,4,0,0"
+                                        Padding="2"
+                                        Background="{DynamicResource AppBrush.Surface}"
+                                        BorderBrush="{DynamicResource AppBrush.BorderStrong}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        SnapsToDevicePixels="True">
+                                    <ScrollViewer CanContentScroll="True"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Border x:Name="ControlChrome"
+            MinHeight="38"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Background="{DynamicResource PanelBgBrush}"
+            BorderBrush="{DynamicResource AppBrush.Border}"
+            BorderThickness="1"
+            CornerRadius="9"
+            SnapsToDevicePixels="True">
+        <Grid Name="MainGrid"
+              MinHeight="36"
+              ClipToBounds="True">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Name="ColLeft" Width="Auto" />
+                <ColumnDefinition Name="ColSeparator" Width="1" />
+                <ColumnDefinition Name="ColRight" Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="txtLeft"
+                     Grid.Column="0"
+                     MinHeight="36"
+                     HorizontalAlignment="Stretch"
+                     VerticalAlignment="Stretch"
+                     Style="{StaticResource ExtendedTextBoxValueStyle}"
+                     TextChanged="TxtLeft_TextChanged"
+                     PreviewTextInput="TxtLeft_PreviewTextInput" />
+
+            <Border x:Name="UnitSeparator"
+                    Grid.Column="1"
+                    Margin="0,7"
+                    Background="{DynamicResource AppBrush.Border}" />
+
+            <ComboBox x:Name="cmbRight"
+                      Grid.Column="2"
+                      MinHeight="36"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      Style="{StaticResource ExtendedTextBoxUnitComboStyle}"
+                      IsEditable="False"
+                      SelectionChanged="CmbRight_SelectionChanged" />
+        </Grid>
+    </Border>
 </UserControl>
