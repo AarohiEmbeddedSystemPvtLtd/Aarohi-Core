@@ -90,7 +90,7 @@ namespace Aarohi.UserManagment
         {
             public string UserName { get; }
             public string Password { get; }
-            public LoginSuccessEventArgs(string userName, string passWord) { UserName = userName; Password = passWord; } 
+            public LoginSuccessEventArgs(string userName, string passWord) { UserName = userName; Password = passWord; }
         }
 
         private bool _loginFlowRunning = false; // prevents double trigger
@@ -102,14 +102,14 @@ namespace Aarohi.UserManagment
             button1.Text = "Show";
             checkBoxRememberMe.Visible = WantRememberMe;
 
-            if(string.IsNullOrEmpty(dbo))
+            if (string.IsNullOrEmpty(dbo))
                 throw new ArgumentNullException(nameof(dbo));
-            if(string.IsNullOrEmpty(userTabelName))
+            if (string.IsNullOrEmpty(userTabelName))
                 throw new ArgumentNullException(nameof(userTabelName));
 
-            if(string.IsNullOrEmpty(LoginDataColumnName))
+            if (string.IsNullOrEmpty(LoginDataColumnName))
                 throw new ArgumentNullException(nameof(LoginDataColumnName));
-            if(string.IsNullOrEmpty(PasswordDataColumnName))
+            if (string.IsNullOrEmpty(PasswordDataColumnName))
                 throw new ArgumentNullException(nameof(PasswordDataColumnName));
 
             if (string.IsNullOrEmpty(DynamicClass.Soft_Name))
@@ -188,7 +188,7 @@ namespace Aarohi.UserManagment
 
             ApplyRoundedCorners(_cornerRadius);
 
-            
+
             _stage = StartupStage.FormExpand;
             _stopwatch.Restart();
             _timer.Start();
@@ -458,7 +458,7 @@ namespace Aarohi.UserManagment
                 return;
             }
 
-            if(HashingEnabled && userName != AGLobals.Utils.DevName)
+            if (HashingEnabled && userName != AGLobals.Utils.DevName)
                 password = UserManager.HashPassword(password);
 
             if (!TryAuthenticate(userName, password))
@@ -634,8 +634,6 @@ namespace Aarohi.UserManagment
             _loginFlowRunning = false;
         }
 
-       
-
         #endregion
 
         #region Post-login Loading (Fix overlap + safe UI)
@@ -728,6 +726,12 @@ namespace Aarohi.UserManagment
                 e.SuppressKeyPress = true; // prevent the ding sound
                 LoginButton_Click(LoginButton, EventArgs.Empty);
             }
+        }
+
+        // Clear password when user changes username
+        private void comboBoxUsername_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            textBox2.Text = string.Empty;
         }
     }
 }
