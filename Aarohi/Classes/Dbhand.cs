@@ -1,4 +1,5 @@
-﻿using ClosedXML.Excel;
+﻿using Aarohi.Classes.ExcelImportExport;
+using ClosedXML.Excel;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
@@ -550,10 +551,7 @@ WITH REPLACE,
 
         #region Tables
 
-        public static void ExportTablesToXlsx(
-     string schemaName,
-     IEnumerable<string> tableNames,
-     string xlsxFilePath)
+        public static void ExportTablesToXlsx(string schemaName, IEnumerable<string> tableNames, string xlsxFilePath)
         {
             using var con = new SqlConnection(_connectionString);
             con.Open();
@@ -573,7 +571,6 @@ WITH REPLACE,
 
             wb.SaveAs(xlsxFilePath);
         }
-
 
         public static void RestoreAllTablesFromXlsx(string schemaName, string xlsxFilePath)
         {

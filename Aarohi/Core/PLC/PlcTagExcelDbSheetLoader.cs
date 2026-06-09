@@ -106,14 +106,17 @@ namespace Aarohi.Core.PLC
         {
             "BOOL" => PlcDataType.Bool,
             "BYTE" => PlcDataType.Byte,
-            "CHAR" => PlcDataType.Byte,
+            "CHAR" => PlcDataType.Char,
+            "STRING" => PlcDataType.S7String,
             "INT" => PlcDataType.Int16,
+            "UINT" => PlcDataType.UInt16,
             "DINT" => PlcDataType.DInt,
+            "UDINT" => PlcDataType.UInt32,
             "REAL" => PlcDataType.Real,
             "WORD" => PlcDataType.Word,
             "DWORD" => PlcDataType.DWord,
             "TIME" => PlcDataType.DWord,
-            "LREAL" => PlcDataType.Real, // adjust if you add LReal
+            "LREAL" => PlcDataType.LReal,
             _ => PlcDataType.Real
         };
 

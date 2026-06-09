@@ -4,11 +4,15 @@
 		<TargetFramework>net9.0-windows</TargetFramework>
 		<UseWindowsForms>true</UseWindowsForms>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<!-- Generates XML documentation file for IntelliSense in consuming apps / NuGet users -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Suppresses warning for public members without XML comments -->
+		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.15</Version>
+		<Version>1.0.14.45</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
-		<Description>Test Screen Designer.</Description>
+		<Description>Aarohi Core.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<PackageIcon>icon.png</PackageIcon>
@@ -21,6 +25,7 @@
   <ItemGroup>
     <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
@@ -31,7 +36,7 @@
 
 	<ItemGroup>
 		<None Include="snap7.dll" CopyToOutputDirectory="PreserveNewest" />
-		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x64/native" />
+		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x86/native" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -78,6 +78,14 @@ namespace Aarohi.UserManagment
 
         public event EventHandler<LoginSuccessEventArgs>? LoginSuccess;
 
+        private bool _hashingEnabled = true;
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool HashingEnabled
+        {
+            get => _hashingEnabled;
+            set => _hashingEnabled = value;
+        }
+
         public sealed class LoginSuccessEventArgs : EventArgs
         {
             public string UserName { get; }
@@ -150,7 +158,6 @@ namespace Aarohi.UserManagment
             Load += FormStartUp_Load;
         }
 
-        // IMPORTANT: always call InitializeComponent
         public FormStartUp(double guideFadeDuration, string dbo, string userTabelName, string LoginDataColumnName, string PasswordDataColumnName) : this(dbo, userTabelName, LoginDataColumnName, PasswordDataColumnName)
         {
             GuideFadeDuration = guideFadeDuration;
@@ -197,8 +204,8 @@ namespace Aarohi.UserManagment
             // Added
             if (RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC", false))
             {
-                comboBoxUsername.Items.Add("Dev@Aarohi");
-                comboBoxUsername.SelectedItem = "Dev@Aarohi";
+                comboBoxUsername.Items.Add(AGLobals.Utils.DevName);
+                comboBoxUsername.SelectedItem = AGLobals.Utils.DevName;
                 textBox2.Text = DateTime.Now.ToString("ddMMyyyyHH");
             }
             // try auto login after UI is ready
@@ -434,7 +441,7 @@ namespace Aarohi.UserManagment
         {
             if (_loginFlowRunning) return;
 
-            string userName = comboBoxUsername.SelectedItem.ToString();
+            string userName = comboBoxUsername.Text;
             string password = textBox2.Text.Trim();
 
             if (string.IsNullOrWhiteSpace(userName))
@@ -460,7 +467,7 @@ namespace Aarohi.UserManagment
             HandleRememberMe(userName, password);
 
             _loginFlowRunning = true; // block further clicks until Program finishes
-            LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(userName));
+            LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(userName, password));
         }
 
         private void HandleRememberMe(string userName, string password)
@@ -580,7 +587,7 @@ namespace Aarohi.UserManagment
                 if (_loginFlowRunning) return true;
 
                 _loginFlowRunning = true;
-                LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(realName));
+                LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(realName, realPassword));
                 return true;
             }
             catch
@@ -626,8 +633,6 @@ namespace Aarohi.UserManagment
         {
             _loginFlowRunning = false;
         }
-
-
 
         #endregion
 

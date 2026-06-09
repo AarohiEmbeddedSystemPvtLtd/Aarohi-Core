@@ -11,18 +11,29 @@ namespace Aarohi.Globals
     {
         public static class Names
         {
-            public static string IPTS = "IPTS";
-            public static string IMTS = "IMTS";
-            public static string Aarohi_Reports = "Aarohi-Reports";
-            public static string Device_Manager = "Device Manager";
-            public static string IMTS_Routine = "IMTS Routine";
+            // All Soft Names
+            public const string IPTS = "IPTS";
+            public const string IMTS = "IMTS";
+            public const string Aarohi_Reports = "Aarohi-Reports";
+            public const string Device_Manager = "Device Manager";
+            public const string IMTS_Routine = "IMTS Routine";
+        }
+
+        public static class PipeNames
+        {
+            public const string CommunicationServicePipe = "CommunicationServicePipe";
+            public const string CommunictionPipe = CommunicationServicePipe;
+        }
+
+        public static class ServicesNames
+        {
+            public const string CommunicationService = "CommunicationService";
         }
 
         public static class Utils
         {
             public static string DevName = "Dev@Aarohi";
-            private const string InstalledSqlPackage =
-       @"C:\Program Files (x86)\Aarohi Embedded Systems Pvt. Ltd\sqlpackage\sqlpackage.exe";
+            private const string InstalledSqlPackage =@"C:\Program Files (x86)\Aarohi Embedded Systems Pvt. Ltd\sqlpackage\sqlpackage.exe";
 
             public static string SqlPackagePath => ResolveSqlPackagePath();
 
@@ -57,6 +68,22 @@ namespace Aarohi.Globals
                     alt1
                 );
             }
+        }
+
+        public static class ValueHolders
+        {
+            private static string _currentApp = string.Empty;
+            public static string currentApp 
+            { 
+                get 
+                { 
+                    return string.IsNullOrEmpty(_currentApp) 
+                        ? throw new Exception("Current App is not found!\nset current app using 'AGLobals.ValueHolders.currentAp'") 
+                        : _currentApp; 
+                } 
+                set => _currentApp = value;
             }
+        }
+
     }
 }

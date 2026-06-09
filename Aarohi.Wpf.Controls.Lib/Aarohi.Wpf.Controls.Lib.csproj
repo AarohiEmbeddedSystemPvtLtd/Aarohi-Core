@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+		<GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+        <!-- 1. Package Identity (Essential for NuGet) -->
+        <PackageId>Aarohi.Wpf.Controls</PackageId>  
+        <Version>1.0.0.71</Version>
+        <Authors>Aarohi Embedded Systems</Authors>
+        <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Description>A collection of highly functional, customizable, and themeable WPF UserControls designed for complex enterprise applications. Includes ExtendedDataGrid and ExtendedTextBox.
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <PackageId>Aarohi.WPF.Controls</PackageId>
+	  <Version>1.0.0.36</Version>
+	  <Authors>Aarohi Embedded Systems</Authors>
+	  <Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
+	  <Description>WPF Test Screen Designer.</Description>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+## ExtendedTextBox
+Compound control consisting of a TextBox (for values) and a ComboBox (for units), designed for seamless value-unit pairs and automatic unit conversion.</Description>
+        <PackageTags>WPF;DataGrid;TextBox;UI;Controls;Theme;Aarohi</PackageTags>
+        <!-- 2. Package Icon -->
+        <PackageIcon>Aarohi.jpg</PackageIcon>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Dependencies -->
+        <PackageReference Include="Aarohi.Designer" Version="1.0.10" />
+        <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
+        <!-- 3. Corrected Image Path: Removed leading backslash -->
+        <None Include="Resources\Images\Aarohi.jpg" Pack="true" PackagePath="." />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Aarohi\Aarohi.csproj" />
+    </ItemGroup>
+</Project>

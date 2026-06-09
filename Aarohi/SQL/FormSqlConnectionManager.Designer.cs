@@ -494,6 +494,7 @@ namespace Aarohi.SQL
             FormBorderStyle = FormBorderStyle.FixedSingle;
             Name = "FormSqlConnectionManager";
             Text = "FormSqlConnectionManager";
+            FormClosing += FormSqlConnectionManager_FormClosing;
             Load += FormSqlConnectionManager_Load;
             PanelWrapper.ResumeLayout(false);
             PanelDataHolderWrapper.ResumeLayout(false);

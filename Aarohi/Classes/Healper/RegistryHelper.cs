@@ -1,13 +1,21 @@
 ﻿using System;
 using System.Security.Cryptography;
 using System.Text;
+using Aarohi.Globals;
+using DocumentFormat.OpenXml.Bibliography;
 using Microsoft.Win32;
 
 namespace Aarohi.Classes.Healper
 {
     public static class RegistryHelper
     {
-        private static string RootRegistryPath = $"Software\\Aarohi Embedded Systems Pvt Ltd\\{DynamicClass.Soft_Name}";
+        private static string RootRegistryPath
+        {
+            get
+            {
+                return $@"Software\Aarohi Embedded Systems Pvt Ltd\{AGLobals.ValueHolders.currentApp}";
+            }
+        }
 
         public enum storeLocs
         {
@@ -15,7 +23,8 @@ namespace Aarohi.Classes.Healper
             Settings,
             Credentials,
             Miscellaneous,
-            root
+            root,
+            Paths
         }
 
         private static string GetRegistryPath(storeLocs location)
@@ -33,6 +42,9 @@ namespace Aarohi.Classes.Healper
 
                 case storeLocs.Miscellaneous:
                     return $@"{RootRegistryPath}\Miscellaneous";
+                
+                case storeLocs.Paths:
+                    return $@"{RootRegistryPath}\Paths";
 
                 case storeLocs.root:
                 default:
