@@ -513,14 +513,10 @@ namespace Aarohi.Classes
                     .Where(x => !string.IsNullOrWhiteSpace(x)));
         }
 
-        public void SetConversionContext(string? quantityName, string? parameterName, string? defaultUnit, string? numberFormat = null)
+        public void SetConversionContext(string? quantityName, string? parameterName, string? defaultUnit)
         {
             _quantityName = (quantityName ?? string.Empty).Trim();
             _parameterName = (parameterName ?? string.Empty).Trim();
-
-            if (!string.IsNullOrWhiteSpace(numberFormat))
-                NumberFormat = numberFormat!;
-
             DefaultUnit = defaultUnit;
         }
 
