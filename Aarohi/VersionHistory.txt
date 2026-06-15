@@ -5,4 +5,5 @@ Aarohi Core Library Version History
 1.0.14.50 - Removed LogEvent column mapping from database sink to fix silent DB write failures and enabled serilog_selflog.txt diagnostics.
 1.0.14.51 - Added custom 'UserName' database column mapping and automated global username injection to all logs.
 1.0.14.52 - Finalized Serilog database integration and verified successful schema and performance testing.
+	  - Toggle Switch added for Network Sql Server Discovery
 ================================================================================
