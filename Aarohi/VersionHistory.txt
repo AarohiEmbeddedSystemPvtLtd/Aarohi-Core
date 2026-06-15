@@ -12,4 +12,10 @@ Aarohi Core Library Version History
 	  - Integrated FormDbSplash visual splash screen to track SQL Server restore progress (0-100%) during first-run client database restoration.
 	  - Enhanced database restore operations to copy backups to C:\Users\Public folder first, preventing operating system access-denied errors.
 	  - Structured MSBuild targets inside NuGet package folder (build/Aarohi.targets) to automatically run the cloner wizard on rebuild without manual .csproj scripts.
+1.0.14.54 - Implemented Transaction-Safe Native Database Migration Engine.
+	  - Added automatic embedded SQL script discovery from calling assembly.
+	  - Implemented GO-batch separator splitting for executing complex SQL scripts.
+	  - Added tracking table dbo.AarohiSchemaVersions to register and track executed migrations.
+	  - Integrated transaction safety with rollback on script failure.
 ================================================================================
+

@@ -23,6 +23,9 @@ namespace Aarohi.SQL
             _regPath = $@"Software\Aarohi Embedded Systems Pvt Ltd\{_appName}\Database";
 
             SQL_STRING = LoadOrPromptUntilValid();
+
+            // Run database migrations on startup
+            RunDatabaseMigrations(SQL_STRING);
         }
 
         private string LoadOrPromptUntilValid()
@@ -487,6 +490,118 @@ namespace Aarohi.SQL
                 }
             }
             return null;
+        }
+
+        private static void RunDatabaseMigrations(string connectionString)
+        {
+            var entryAssembly = System.Reflection.Assembly.GetEntryAssembly();
+            if (entryAssembly == null) return;
+
+            // Find all embedded resource files ending with .sql in the calling application
+            var sqlResources = entryAssembly.GetManifestResourceNames()
+                .Where(name => name.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(name => name)
+                .ToList();
+
+            if (sqlResources.Count == 0) return;
+
+            using (var conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+
+                // 1. Create tracking table if it doesn't exist
+                string createTableSql = @"
+                    IF OBJECT_ID('dbo.AarohiSchemaVersions', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.AarohiSchemaVersions (
+                            Id INT IDENTITY(1,1) PRIMARY KEY,
+                            ScriptName NVARCHAR(255) NOT NULL UNIQUE,
+                            AppliedAt DATETIME DEFAULT GETDATE()
+                        );
+                    END";
+                using (var cmd = new SqlCommand(createTableSql, conn))
+                {
+                    cmd.ExecuteNonQuery();
+                }
+
+                // 2. Query already applied migrations
+                var appliedScripts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                using (var cmd = new SqlCommand("SELECT ScriptName FROM dbo.AarohiSchemaVersions", conn))
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        appliedScripts.Add(reader.GetString(0));
+                    }
+                }
+
+                // 3. Run pending scripts
+                foreach (var resourceName in sqlResources)
+                {
+                    // Use the resource file name as the migration identifier
+                    string scriptId = resourceName;
+                    var parts = resourceName.Split('.');
+                    if (parts.Length >= 2)
+                    {
+                        scriptId = parts[parts.Length - 2] + "." + parts[parts.Length - 1];
+                    }
+
+                    if (appliedScripts.Contains(scriptId))
+                    {
+                        continue; // Already applied
+                    }
+
+                    // Read script content
+                    string scriptContent;
+                    using (var stream = entryAssembly.GetManifestResourceStream(resourceName))
+                    {
+                        if (stream == null) continue;
+                        using (var reader = new System.IO.StreamReader(stream))
+                        {
+                            scriptContent = reader.ReadToEnd();
+                        }
+                    }
+
+                    // Execute script within a transaction
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Split script by 'GO' statements to execute batch commands
+                            var batches = System.Text.RegularExpressions.Regex.Split(
+                                scriptContent,
+                                @"^\s*GO\s*$",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline);
+
+                            foreach (var batch in batches)
+                            {
+                                if (string.IsNullOrWhiteSpace(batch)) continue;
+
+                                using (var cmd = new SqlCommand(batch, conn, transaction))
+                                {
+                                    cmd.CommandTimeout = 300;
+                                    cmd.ExecuteNonQuery();
+                                }
+                            }
+
+                            // Log migration as applied
+                            string logMigrationSql = "INSERT INTO dbo.AarohiSchemaVersions (ScriptName) VALUES (@name)";
+                            using (var cmd = new SqlCommand(logMigrationSql, conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@name", scriptId);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            transaction.Commit();
+                        }
+                        catch (Exception ex)
+                        {
+                            transaction.Rollback();
+                            throw new Exception($"Failed to apply database migration script '{scriptId}': {ex.Message}", ex);
+                        }
+                    }
+                }
+            }
         }
     }
 }
