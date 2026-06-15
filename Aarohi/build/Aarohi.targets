@@ -1,0 +1,6 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Run the DbPackager post-build task automatically on rebuild inside Visual Studio -->
+  <Target Name="AarohiDbPackagerTarget" AfterTargets="PostBuildEvent" Condition="'$(BuildingInsideVisualStudio)' == 'true'">
+    <Exec Command="&quot;$(MSBuildThisFileDirectory)tools\Aarohi.DbPackager.exe&quot; &quot;$(TargetDir).&quot; &quot;$(ProjectName)&quot;" />
+  </Target>
+</Project>

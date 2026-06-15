@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace Aarohi.SQL
@@ -49,6 +49,8 @@ namespace Aarohi.SQL
             ComboboxDatabaseName = new ComboBox();
             label3 = new Label();
             PanelFooter = new Aarohi.ExtendedUI.ExtendedPanel();
+            panelDiscovery = new Panel();
+            toggleNetworkDiscovery = new ToggleSwitch();
             extendedPanel6 = new Aarohi.ExtendedUI.ExtendedPanel();
             ButtonTestConnection = new Aarohi.ExtendedUI.ExtendedButton();
             ButtonSave = new Aarohi.ExtendedUI.ExtendedButton();
@@ -62,6 +64,7 @@ namespace Aarohi.SQL
             extendedPanel3.SuspendLayout();
             extendedPanel2.SuspendLayout();
             PanelFooter.SuspendLayout();
+            panelDiscovery.SuspendLayout();
             extendedPanel6.SuspendLayout();
             PanelHeader.SuspendLayout();
             SuspendLayout();
@@ -321,6 +324,7 @@ namespace Aarohi.SQL
             PanelFooter.BlurTint = Color.FromArgb(40, 255, 255, 255);
             PanelFooter.BorderColor = Color.Transparent;
             PanelFooter.BorderWidth = 1;
+            PanelFooter.Controls.Add(panelDiscovery);
             PanelFooter.Controls.Add(extendedPanel6);
             PanelFooter.CornerRadius = 0;
             PanelFooter.CornerRadiusBottomLeft = 20;
@@ -336,6 +340,29 @@ namespace Aarohi.SQL
             PanelFooter.Padding = new Padding(18);
             PanelFooter.Size = new Size(989, 105);
             PanelFooter.TabIndex = 2;
+            // 
+            // panelDiscovery
+            // 
+            panelDiscovery.BackColor = Color.Transparent;
+            panelDiscovery.Controls.Add(toggleNetworkDiscovery);
+            panelDiscovery.Dock = DockStyle.Left;
+            panelDiscovery.Location = new Point(18, 18);
+            panelDiscovery.Name = "panelDiscovery";
+            panelDiscovery.Size = new Size(350, 69);
+            panelDiscovery.TabIndex = 6;
+            // 
+            // toggleNetworkDiscovery
+            // 
+            toggleNetworkDiscovery.BackColor = Color.Transparent;
+            toggleNetworkDiscovery.Font = new Font("Gadugi", 12F, FontStyle.Bold);
+            toggleNetworkDiscovery.ForeColor = Color.MediumBlue;
+            toggleNetworkDiscovery.Location = new Point(10, 19);
+            toggleNetworkDiscovery.Name = "toggleNetworkDiscovery";
+            toggleNetworkDiscovery.Size = new Size(300, 30);
+            toggleNetworkDiscovery.TabIndex = 0;
+            toggleNetworkDiscovery.Text = "Network Server Discovery";
+            toggleNetworkDiscovery.UseVisualStyleBackColor = true;
+            toggleNetworkDiscovery.CheckedChanged += toggleNetworkDiscovery_CheckedChanged;
             // 
             // extendedPanel6
             // 
@@ -493,6 +520,7 @@ namespace Aarohi.SQL
             Controls.Add(PanelWrapper);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             Name = "FormSqlConnectionManager";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "FormSqlConnectionManager";
             FormClosing += FormSqlConnectionManager_FormClosing;
             Load += FormSqlConnectionManager_Load;
@@ -506,6 +534,7 @@ namespace Aarohi.SQL
             extendedPanel3.PerformLayout();
             extendedPanel2.ResumeLayout(false);
             PanelFooter.ResumeLayout(false);
+            panelDiscovery.ResumeLayout(false);
             extendedPanel6.ResumeLayout(false);
             PanelHeader.ResumeLayout(false);
             ResumeLayout(false);
@@ -536,5 +565,7 @@ namespace Aarohi.SQL
         private Aarohi.ExtendedUI.ExtendedPanel extendedPanel6;
         private Aarohi.ExtendedUI.ExtendedButton ButtonTestConnection;
         private Aarohi.ExtendedUI.ExtendedButton ButtonSave;
+        private System.Windows.Forms.Panel panelDiscovery;
+        private Aarohi.SQL.ToggleSwitch toggleNetworkDiscovery;
     }
 }

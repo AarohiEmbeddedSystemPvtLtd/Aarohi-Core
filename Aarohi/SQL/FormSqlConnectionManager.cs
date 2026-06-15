@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes.Healper;
+using Aarohi.Classes.Healper;
 using Aarohi.ExtendedUI;
 using Microsoft.Data.Sql;
 using Microsoft.Data.SqlClient;
@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Sql;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -140,11 +142,16 @@ namespace Aarohi.SQL
         private async Task LoadSqlServersAsync()
         {
             comboBoxHostname.Enabled = false;
+
+            // Save the currently selected or typed hostname to restore it later
+            string currentHost = comboBoxHostname.Text;
+
             comboBoxHostname.Items.Clear();
             comboBoxHostname.Items.Add("Loading...");
             comboBoxHostname.SelectedIndex = 0;
 
             List<string> servers = new List<string>();
+            bool enableNetworkDiscovery = toggleNetworkDiscovery != null && toggleNetworkDiscovery.Checked;
 
             try
             {
@@ -152,35 +159,44 @@ namespace Aarohi.SQL
                 {
                     List<string> list = new List<string>();
 
-                    try
+                    if (enableNetworkDiscovery)
                     {
-                        DataTable dt = SqlDataSourceEnumerator.Instance.GetDataSources();
-
-                        foreach (DataRow row in dt.Rows)
+                        try
                         {
-                            string server = row["ServerName"]?.ToString();
-                            string instance = row["InstanceName"]?.ToString();
+                            DataTable dt = SqlDataSourceEnumerator.Instance.GetDataSources();
 
-                            if (string.IsNullOrWhiteSpace(server))
-                                continue;
+                            foreach (DataRow row in dt.Rows)
+                            {
+                                string server = row["ServerName"]?.ToString();
+                                string instance = row["InstanceName"]?.ToString();
 
-                            string full = string.IsNullOrWhiteSpace(instance)
-                                ? server
-                                : $@"{server}\{instance}";
+                                if (string.IsNullOrWhiteSpace(server))
+                                    continue;
 
-                            if (!list.Contains(full))
-                                list.Add(full);
+                                string full = string.IsNullOrWhiteSpace(instance)
+                                    ? server
+                                    : $@"{server}\{instance}";
+
+                                if (!list.Contains(full))
+                                    list.Add(full);
+                            }
                         }
+                        catch
+                        {
+                            // ignore scan errors
+                        }
+
+                        string pc = Environment.MachineName;
+
+                        // most common local instance
+                        list.Add($@"{pc}\SQLEXPRESS");
                     }
-                    catch
+                    else
                     {
-                        // ignore scan errors
+                        string pc = Environment.MachineName;
+                        list.Add(pc);
+                        list.Add($@"{pc}\SQLEXPRESS");
                     }
-
-                    string pc = Environment.MachineName;
-
-                    // most common local instance
-                    list.Add($@"{pc}\SQLEXPRESS");
 
                     return list.Distinct().OrderBy(x => x).ToList();
                 });
@@ -193,32 +209,51 @@ namespace Aarohi.SQL
             comboBoxHostname.Items.Clear();
             comboBoxHostname.Items.AddRange(servers.Cast<object>().ToArray());
 
-            // ---- AUTO SELECT CURRENT PC SERVER ----
-            string pcName = Environment.MachineName;
-
-            string[] preferred =
-            {
-                $@"{pcName}\SQLEXPRESS",
-                @".\SQLEXPRESS",
-                $@"{pcName}",
-                @"(local)",
-                @"."
-            };
-
             bool assigned = false;
 
-            foreach (var p in preferred)
+            // Try to restore the previous selection or text
+            if (!string.IsNullOrWhiteSpace(currentHost) && currentHost != "Loading...")
             {
-                if (servers.Contains(p))
+                int idx = comboBoxHostname.Items.IndexOf(currentHost);
+                if (idx >= 0)
                 {
-                    comboBoxHostname.SelectedItem = p;
+                    comboBoxHostname.SelectedIndex = idx;
                     assigned = true;
-                    break;
+                }
+                else
+                {
+                    comboBoxHostname.Text = currentHost;
+                    assigned = true;
                 }
             }
 
-            if (!assigned && comboBoxHostname.Items.Count > 0)
-                comboBoxHostname.SelectedIndex = 0;
+            if (!assigned)
+            {
+                // ---- AUTO SELECT CURRENT PC SERVER ----
+                string pcName = Environment.MachineName;
+
+                string[] preferred =
+                {
+                    $@"{pcName}\SQLEXPRESS",
+                    @".\SQLEXPRESS",
+                    $@"{pcName}",
+                    @"(local)",
+                    @"."
+                };
+
+                foreach (var p in preferred)
+                {
+                    if (servers.Contains(p))
+                    {
+                        comboBoxHostname.SelectedItem = p;
+                        assigned = true;
+                        break;
+                    }
+                }
+
+                if (!assigned && comboBoxHostname.Items.Count > 0)
+                    comboBoxHostname.SelectedIndex = 0;
+            }
 
             comboBoxHostname.Enabled = true;
             PanelDataHolderWrapper.Enabled = true;
@@ -619,6 +654,70 @@ namespace Aarohi.SQL
                 DialogResult = DialogResult.Cancel;
             }
         }
+
+        private async void toggleNetworkDiscovery_CheckedChanged(object sender, EventArgs e)
+        {
+            await LoadSqlServersAsync();
+        }
     }
 
+    public class ToggleSwitch : CheckBox
+    {
+        public ToggleSwitch()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+            this.BackColor = Color.Transparent;
+            this.Cursor = Cursors.Hand;
+            this.Size = new Size(250, 40);
+        }
+
+        protected override void OnPaint(PaintEventArgs pevent)
+        {
+            base.OnPaintBackground(pevent);
+            pevent.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int width = 50;
+            int height = 26;
+            int toggleSize = 20;
+
+            // Draw background capsule
+            Rectangle rect = new Rectangle(0, (this.Height - height) / 2, width, height);
+            using (var path = GetRoundPath(rect, height))
+            {
+                Color bgColor = Checked ? Color.MediumBlue : Color.LightGray;
+                using (Brush brush = new SolidBrush(bgColor))
+                {
+                    pevent.Graphics.FillPath(brush, path);
+                }
+            }
+
+            // Draw switch ellipse
+            int left = Checked ? (width - toggleSize - 3) : 3;
+            Rectangle toggleRect = new Rectangle(left, (this.Height - toggleSize) / 2, toggleSize, toggleSize);
+            using (Brush brush = new SolidBrush(Color.White))
+            {
+                pevent.Graphics.FillEllipse(brush, toggleRect);
+            }
+
+            // Draw text
+            if (!string.IsNullOrEmpty(Text))
+            {
+                Rectangle textRect = new Rectangle(width + 8, 0, this.Width - width - 8, this.Height);
+                TextRenderer.DrawText(pevent.Graphics, Text, Font, textRect, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+            }
+        }
+
+        private GraphicsPath GetRoundPath(Rectangle rect, int radius)
+        {
+            var path = new GraphicsPath();
+            path.StartFigure();
+            path.AddArc(rect.X, rect.Y, radius, radius, 180, 90);
+            path.AddArc(rect.X + rect.Width - radius, rect.Y, radius, radius, 270, 90);
+            path.AddArc(rect.X + rect.Width - radius, rect.Y + rect.Height - radius, radius, radius, 0, 90);
+            path.AddArc(rect.X, rect.Y + rect.Height - radius, radius, radius, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
 }
+
