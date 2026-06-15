@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.5.11709.299 stable
@@ -6,6 +6,8 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aarohi", "Aarohi\Aarohi.csproj", "{DC45F8A9-DD55-4905-934D-75DFA10CC17A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aarohi.Wpf.Controls.Lib", "Aarohi.Wpf.Controls.Lib\Aarohi.Wpf.Controls.Lib.csproj", "{09AACF96-76F1-48FE-A587-3C157AB21FE5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aarohi.DbPackager", "Aarohi.DbPackager\Aarohi.DbPackager.csproj", "{2F372DF7-B462-4D90-A8EA-61266205BCF7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{09AACF96-76F1-48FE-A587-3C157AB21FE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{09AACF96-76F1-48FE-A587-3C157AB21FE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{09AACF96-76F1-48FE-A587-3C157AB21FE5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2F372DF7-B462-4D90-A8EA-61266205BCF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F372DF7-B462-4D90-A8EA-61266205BCF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2F372DF7-B462-4D90-A8EA-61266205BCF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F372DF7-B462-4D90-A8EA-61266205BCF7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

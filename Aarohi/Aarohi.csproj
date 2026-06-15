@@ -9,7 +9,7 @@
 		<!-- Suppresses warning for public members without XML comments -->
 		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.52</Version>
+		<Version>1.0.14.53</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<Description>Aarohi Core.</Description>
@@ -20,6 +20,8 @@
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="\" />
+		<None Include="build\Aarohi.targets" Pack="true" PackagePath="build\" />
+		<None Include="..\Aarohi.DbPackager\bin\$(Configuration)\net9.0-windows\**\*.*" Pack="true" PackagePath="build\tools\" />
 	</ItemGroup>
 
   <ItemGroup>
@@ -52,6 +54,12 @@
 	  </Compile>
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
 	  <Compile Update="SQL\FormSqlConnectionManager.cs">
+	    <SubType>Form</SubType>
+	  </Compile>
+	  <Compile Update="SQL\FormDbSplash.cs">
+	    <SubType>Form</SubType>
+	  </Compile>
+	  <Compile Update="SQL\FormDatabaseCloner.cs">
 	    <SubType>Form</SubType>
 	  </Compile>
 	</ItemGroup>
