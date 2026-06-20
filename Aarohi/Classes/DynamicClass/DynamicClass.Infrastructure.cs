@@ -1,4 +1,4 @@
-﻿using Aarohi.Core.Logger;
+using Aarohi.Core.Logger;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
 using System;
@@ -23,7 +23,7 @@ namespace Aarohi.Classes
         // Method: GetColumnNames
         /// <summary>
         /// Returns user-facing column names sorted by display name. If <paramref name="tablenameWant"/> is true,
-        /// each entry is prefixed with the table display name (e.g., "Table → Column").
+        /// each entry is prefixed with the table display name (e.g., "Table ? Column").
         /// </summary>
         /// <param name="tablenameWant">Whether to prefix names with the table display name.</param>
         /// <returns>Array of friendly names.</returns>
@@ -118,7 +118,7 @@ namespace Aarohi.Classes
                 {
                     string oldS = oldVal == DBNull.Value ? "NULL" : Convert.ToString(oldVal) ?? "";
                     string newS = newVal == DBNull.Value ? "NULL" : Convert.ToString(newVal) ?? "";
-                    lines.Add($"{col}: {oldS}  →  {newS}");
+                    lines.Add($"{col}: {oldS}  ?  {newS}");
                 }
             }
 
@@ -128,7 +128,7 @@ namespace Aarohi.Classes
             if (lines.Count > maxLines)
             {
                 var head = lines.Take(maxLines).ToList();
-                head.Add($"… (+{lines.Count - maxLines} more)");
+                head.Add($"� (+{lines.Count - maxLines} more)");
                 return string.Join(Environment.NewLine, head);
             }
             return string.Join(Environment.NewLine, lines);
@@ -188,6 +188,7 @@ namespace Aarohi.Classes
             public string? Format { get; set; }
             public string? Parameter { get; set; }
             public string? Group { get; set; }
+            public bool? IsRequired { get; set; }
             public int? Order { get; set; }
             public bool? Visible { get; set; }
 

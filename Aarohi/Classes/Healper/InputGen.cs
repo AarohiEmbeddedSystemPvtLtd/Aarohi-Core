@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes;
+using Aarohi.Classes;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -1432,6 +1432,9 @@ namespace Aarohi.Classes.Healper
                 foreach (var col in cols)
                 {
                     if (col == null) continue;
+
+                    if (string.Equals(col.Group?.Trim(), "Hidden", StringComparison.OrdinalIgnoreCase))
+                        continue;
 
                     if (skipPumpModelCols)
                     {
