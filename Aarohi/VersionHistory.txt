@@ -1,0 +1,21 @@
+Aarohi Core Library Version History
+================================================================================
+
+1.0.14.49 - Added separate 'SaveWithAudit' method in DynamicClass.Crud.cs for safe, non-breaking change tracking.
+1.0.14.50 - Removed LogEvent column mapping from database sink to fix silent DB write failures and enabled serilog_selflog.txt diagnostics.
+1.0.14.51 - Added custom 'UserName' database column mapping and automated global username injection to all logs.
+1.0.14.52 - Finalized Serilog database integration and verified successful schema and performance testing.
+	  - Toggle Switch added for Network Sql Server Discovery
+1.0.14.53 - Integrated Database Packager & Bootstrapping system.
+	  - Added Developer Cloner Wizard (FormDatabaseCloner) to allow cloning, selective table data purging (wipe vs. keep), identity reseeding, and backup packaging.
+	  - Added dynamic target directory argument self-healing in Aarohi.DbPackager to handle Windows backslash escaping errors.
+	  - Integrated FormDbSplash visual splash screen to track SQL Server restore progress (0-100%) during first-run client database restoration.
+	  - Enhanced database restore operations to copy backups to C:\Users\Public folder first, preventing operating system access-denied errors.
+	  - Structured MSBuild targets inside NuGet package folder (build/Aarohi.targets) to automatically run the cloner wizard on rebuild without manual .csproj scripts.
+1.0.14.54 - Implemented Transaction-Safe Native Database Migration Engine.
+	  - Added automatic embedded SQL script discovery from calling assembly.
+	  - Implemented GO-batch separator splitting for executing complex SQL scripts.
+	  - Added tracking table dbo.AarohiSchemaVersions to register and track executed migrations.
+	  - Integrated transaction safety with rollback on script failure.
+================================================================================
+

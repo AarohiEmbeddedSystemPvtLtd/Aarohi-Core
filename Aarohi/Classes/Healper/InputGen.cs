@@ -46,7 +46,6 @@ namespace Aarohi.Classes.Healper
             public Color OriginalBackColor;
             public object? OriginalTag;
             public string Parameter = string.Empty;
-            public string Format = string.Empty;
             public string Unit = string.Empty;
         }
 
@@ -202,9 +201,6 @@ namespace Aarohi.Classes.Healper
 
                 List<string> units = ResolveUnits(meta.Unit, meta.Parameter);
                 etb.SetUnits(units);
-
-                string format = string.IsNullOrWhiteSpace(meta.Format) ? "0.###" : meta.Format;
-
                 etb.AutoConvertOnUnitChange = true;
                 etb.AutoLoadUnitsFromParameter = false;
                 etb.ShowConversionErrorMessageBox = true;
@@ -213,12 +209,12 @@ namespace Aarohi.Classes.Healper
                 {
                     string defaultUnit = units[0];
                     string quantityName = ResolveQuantityName(meta.Column, meta.Parameter);
-                    etb.SetConversionContext(quantityName, meta.Parameter, defaultUnit, format);
+                    etb.SetConversionContext(quantityName, meta.Parameter, defaultUnit);
                 }
                 else
                 {
                     // Plain numeric field, no unit conversion context
-                    etb.SetConversionContext(null, null, null, format);
+                    etb.SetConversionContext(null, null, null);
                 }
             }
 
@@ -244,7 +240,7 @@ namespace Aarohi.Classes.Healper
 
             public void RegisterExistingControl(string table, string col, Control ctrl, bool required, string? dataType = null)
             {
-                RegisterExistingControl(table, col, ctrl, required, dataType, unit: null, parameter: null, format: null, precision: null, scale: null);
+                RegisterExistingControl(table, col, ctrl, required, dataType, unit: null, parameter: null, precision: null, scale: null);
             }
 
             public void RegisterExistingControl(
@@ -255,7 +251,6 @@ namespace Aarohi.Classes.Healper
                 string? dataType,
                 string? unit,
                 string? parameter,
-                string? format,
                 int? precision = null,
                 int? scale = null)
             {
@@ -275,8 +270,7 @@ namespace Aarohi.Classes.Healper
                     OriginalBackColor = ctrl.BackColor,
                     OriginalTag = ctrl.Tag,
                     Unit = unit ?? string.Empty,
-                    Parameter = parameter ?? string.Empty,
-                    Format = format ?? string.Empty
+                    Parameter = parameter ?? string.Empty
                 };
 
                 _metaByControl[ctrl] = meta;
@@ -1241,7 +1235,6 @@ namespace Aarohi.Classes.Healper
     string DefaultUnit,
     string SelectedUnit,
     string Parameter,
-    string Format,
     bool required,
     Color titleColor,
     string dataType = "varchar",
@@ -1303,7 +1296,7 @@ namespace Aarohi.Classes.Healper
                     }
 
                     panelHolder.Controls.Add(cb);
-                    RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, Format, precision, scale);
+                    RegisterExistingControl(table, colName, cb, required, null, Unit, Parameter, precision, scale);
                 }
                 else
                 {
@@ -1320,7 +1313,7 @@ namespace Aarohi.Classes.Healper
                         };
 
                         panelHolder.Controls.Add(tb);
-                        RegisterExistingControl(table, colName, tb, required, dataType, Unit, Parameter, Format, precision, scale);
+                        RegisterExistingControl(table, colName, tb, required, dataType, Unit, Parameter, precision, scale);
                     }
                     else
                     {
@@ -1338,8 +1331,7 @@ namespace Aarohi.Classes.Healper
                             LeftEditable = true,
                             LeftText = string.Empty,
                             AutoConvertOnUnitChange = true,
-                            AutoLoadUnitsFromParameter = false,
-                            NumberFormat = string.IsNullOrWhiteSpace(Format) ? "0.###" : Format
+                            AutoLoadUnitsFromParameter = false
                         };
 
                         etb.SetUnits(etbUnits);
@@ -1355,8 +1347,7 @@ namespace Aarohi.Classes.Healper
                         etb.SetConversionContext(
                             ResolveQuantityName(colName, Parameter),
                             Parameter,
-                            actualDefaultUnit,
-                            string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
+                            actualDefaultUnit);
 
                         bool isNumericType = false;
                         string normalizedDataType = NormalizeType(dataType);
@@ -1369,14 +1360,13 @@ namespace Aarohi.Classes.Healper
                         SetExtendedTextBoxValueFromDefaultUnit(etb, defaultValue, isNumericType);
 
                         panelHolder.Controls.Add(etb);
-                        RegisterExistingControl(table, colName, etb, required, dataType, string.Join(",", etbUnits), Parameter, Format, precision, scale);
+                        RegisterExistingControl(table, colName, etb, required, dataType, string.Join(",", etbUnits), Parameter, precision, scale);
 
                         // Re-apply context because RegisterExistingControl configures ETB again
                         etb.SetConversionContext(
                             ResolveQuantityName(colName, Parameter),
                             Parameter,
-                            actualDefaultUnit,
-                            string.IsNullOrWhiteSpace(Format) ? "0.###" : Format);
+                            actualDefaultUnit);
 
                         etb.SetCurrentUnit(actualSelectedUnit, false);
                         SetExtendedTextBoxValueFromDefaultUnit(etb, defaultValue, isNumericType);
@@ -1456,7 +1446,6 @@ namespace Aarohi.Classes.Healper
                     string name = string.IsNullOrEmpty(col.DisplayName) ? col.Name : col.DisplayName;
                     string unit = string.IsNullOrEmpty(col.Unit) ? string.Empty : col.Unit;
                     string parameter = string.IsNullOrEmpty(col.Parameter) ? string.Empty : col.Parameter;
-                    string format = string.IsNullOrEmpty(col.Format) ? string.Empty : col.Format;
                     string dt = string.IsNullOrWhiteSpace(col.DataType) ? "varchar" : col.DataType;
                     int? precision = col.Precision;
                     int? scale = col.Scale;
@@ -1480,7 +1469,6 @@ namespace Aarohi.Classes.Healper
                         DefaultUnit: defaultUnit,
                         SelectedUnit: selectedUnit,
                         Parameter: parameter,
-                        Format: format,
                         required: !col.Nullable,
                         titleColor: titleColor,
                         dataType: dt,
