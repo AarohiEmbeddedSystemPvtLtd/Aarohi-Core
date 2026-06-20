@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes.Healper;
+using Aarohi.Classes.Healper;
 using Aarohi.ExtendedUI;
 using System;
 using System.Collections.Generic;
@@ -282,7 +282,7 @@ namespace Aarohi.Classes
         }
 
         /// <summary>
-        /// Registers a parent→child options dependency. When parent changes, child options are repopulated.
+        /// Registers a parent?child options dependency. When parent changes, child options are repopulated.
         /// </summary>
         public void RegisterDependency(
             string parentKey,
@@ -374,7 +374,7 @@ namespace Aarohi.Classes
         }
 
         /// <summary>
-        /// Registers N paired parent→child rewrite rules using a common transform.
+        /// Registers N paired parent?child rewrite rules using a common transform.
         /// </summary>
         public void RegisterDataRewriteDependencies(
             IReadOnlyList<string> parentKeys,
@@ -394,7 +394,7 @@ namespace Aarohi.Classes
         }
 
         /// <summary>
-        /// Registers N paired parent→child rewrite rules using an index-aware transform.
+        /// Registers N paired parent?child rewrite rules using an index-aware transform.
         /// </summary>
         public void RegisterDataRewriteDependencies(
             IReadOnlyList<string> parentKeys,
@@ -419,7 +419,7 @@ namespace Aarohi.Classes
         }
 
         /// <summary>
-        /// Registers N paired parent→child rewrite rules using a key-aware transform.
+        /// Registers N paired parent?child rewrite rules using a key-aware transform.
         /// </summary>
         public void RegisterDataRewriteDependencies(
             IReadOnlyList<string> parentKeys,
@@ -502,7 +502,7 @@ namespace Aarohi.Classes
         }
 
         /// <summary>
-        /// Registers a single parent→child data rewrite rule using a transform for the child value.
+        /// Registers a single parent?child data rewrite rule using a transform for the child value.
         /// </summary>
         public void RegisterDataRewriteDependency(
             string parentKey,
@@ -1085,7 +1085,7 @@ namespace Aarohi.Classes
 
                 if (allErrors.Count > 0)
                 {
-                    var msg = "Please fix the following:\n• " + string.Join("\n• ", allErrors);
+                    var msg = "Please fix the following:\n� " + string.Join("\n� ", allErrors);
                     MessageBox.Show(this, msg, "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -1166,7 +1166,7 @@ namespace Aarohi.Classes
                     var isEmpty = raw is null || (raw is string str && string.IsNullOrWhiteSpace(str));
                     if (isEmpty)
                     {
-                        errors.Add($"{(c.DisplayName)} is required.");
+                        errors.Add($"{(string.IsNullOrWhiteSpace(c.DisplayName) ? c.Name : c.DisplayName)} is required.");
                         _errors.SetError(di, "Required");
                         continue;
                     }

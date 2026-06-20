@@ -441,7 +441,7 @@ ELSE
         #region Column Options
         // Method: GetOptions
         /// <summary>
-        /// Returns the current set of allowed values (options) parsed from the column's CHECK constraint (if any).
+        /// Returns the current set of options from the column's Options extended property.
         /// </summary>
         /// <param name="column">Column name.</param>
         /// <returns>Array of options; empty if none detected.</returns>
@@ -457,7 +457,7 @@ ELSE
 
         // Method: AddOption
         /// <summary>
-        /// Adds a single option to a column's allowed set by recreating the CHECK constraint safely.
+        /// Adds a single option to a column's Options extended property.
         /// </summary>
         /// <param name="column">Column name.</param>
         /// <param name="option">Option value to add.</param>
@@ -477,7 +477,7 @@ ELSE
 
         // Method: RemoveOption
         /// <summary>
-        /// Removes an option from a column's allowed set. If no options remain, drops the CHECK constraint.
+        /// Removes an option from a column's Options extended property. If no options remain, removes the property.
         /// </summary>
         /// <param name="column">Column name.</param>
         /// <param name="option">Option value to remove.</param>
@@ -489,15 +489,14 @@ ELSE
             if (removed == 0) return true; // nothing to do
 
             if (list.Count == 0)
-                return DropOptionsConstraint(column);
+                return ClearOptions(column);
 
             return SetOptions(column, list);
         }
 
         // Method: SetOptions
         /// <summary>
-        /// Replaces the allowed options for a column by creating a new CHECK constraint (idempotent).
-        /// Handles string vs numeric quoting automatically and respects column nullability.
+        /// Replaces the options for a column using the Options extended property.
         /// </summary>
         /// <param name="column">Column name.</param>
         /// <param name="options">New set of options (must contain at least one non-empty value).</param>
@@ -516,124 +515,44 @@ ELSE
                 if (opts.Length == 0)
                     throw new InvalidOperationException($"No options provided for column '{column}'.");
 
-                // Get column metadata to know nullability and SQL type (for quoting)
                 var colInfo = (GetColumns() ?? new List<ColumnInfo>())
                       .FirstOrDefault(c => c.Name.Equals(column, StringComparison.OrdinalIgnoreCase));
                 if (colInfo is null)
                     throw new InvalidOperationException($"Column '{column}' not found in [{Schema}].[{Table}].");
 
-                // Build IN(...) list with correct quoting for the column type
-                var inList = BuildInList(opts, colInfo.DataType);
+                var optionsText = string.Join(",", opts);
+                var saved = UpsertExtendedProperty("Options", optionsText, column);
 
-                var qCol = QSafe(column);
+                AddCommonExtras(extras,
+                    ("extendedProperty", "Options"),
+                    ("optionsCount", opts.Length));
 
-                var constraintName = MakeConstraintName(Table, column);
-                var allowNull = colInfo.Nullable;
+                return saved;
+            });
 
-                using var cn = Open();
-                using var tx = cn.BeginTransaction();
-                try
-                {
-                    // Drop any prior "our" constraint (idempotent)
-                    DropConstraintInternal(cn, tx, Schema, Table, constraintName);
+        public bool ClearOptions(string column)
+            => SafeExecute("DDL_CLEAR_OPTIONS", extras =>
+            {
+                EnsureIdent(Schema); EnsureIdent(Table);
 
-                    // Build the CHECK predicate
-                    var checkPredicate = allowNull
-                        ? $"{qCol} IS NULL OR {qCol} IN ({inList})"
-                        : $"{qCol} IN ({inList})";
-                    checkPredicate = "(" + checkPredicate + ")";
+                var colInfo = (GetColumns() ?? new List<ColumnInfo>())
+                    .FirstOrDefault(c => c.Name.Equals(column, StringComparison.OrdinalIgnoreCase));
+                if (colInfo is null)
+                    throw new InvalidOperationException($"Column '{column}' not found in [{Schema}].[{Table}].");
 
-                    // Create the constraint
-                    var createSql = $@"
-ALTER TABLE [{Schema}].[{Table}] 
-ADD CONSTRAINT [{constraintName}] 
-CHECK ({checkPredicate});";
-
-                    using (var create = new SqlCommand(createSql, cn, tx))
-                        create.ExecuteNonQuery();
-
-                    AddCommonExtras(extras,
-                ("constraint", constraintName),
-                ("check", checkPredicate),
-                ("optionsCount", opts.Length));
-
-                    tx.Commit();
-                    InvalidateColumnMetadataCache();
-                    return true;
-                }
-                catch
-                {
-                    tx.Rollback();
-                    throw;
-                }
+                var removed = DropExtendedProperty("Options", column);
+                AddCommonExtras(extras, ("extendedProperty", "Options"), ("removed", removed));
+                return removed;
             });
 
         // Method: DropOptionsConstraint
         /// <summary>
-        /// Drops the generated options CHECK constraint for a column (idempotent).
+        /// Removes the Options extended property for a column (idempotent).
         /// </summary>
         /// <param name="column">Column name.</param>
         /// <returns><c>true</c> on success.</returns>
         public bool DropOptionsConstraint(string column)
-         => SafeExecute("DDL_DROP_OPTIONS_CONSTRAINT", extras =>
-         {
-             EnsureIdent(Schema); EnsureIdent(Table);
-
-             using var cn = Open();
-             using var tx = cn.BeginTransaction();
-             try
-             {
-                  var constraintName = MakeConstraintName(Table, column);
-                  var dropped = DropConstraintInternal(cn, tx, Schema, Table, constraintName);
-                  AddCommonExtras(extras, ("constraint", constraintName), ("dropped", dropped));
-                  tx.Commit();
-                  InvalidateColumnMetadataCache();
-                  return true;
-              }
-             catch
-             {
-                 tx.Rollback();
-                 throw;
-             }
-         });
-
-        private static string MakeConstraintName(string table, string column)
-        {
-            string raw = $"CK_{table}_{column}_OPTIONS";
-            return SanitizeForObjectName(raw, 128);
-        }
-
-        private static bool DropConstraintInternal(SqlConnection cn, SqlTransaction tx, string schema, string table, string constraintName)
-        {
-            const string sql = @"
-IF EXISTS (
-    SELECT 1
-    FROM sys.check_constraints cc
-    JOIN sys.tables t  ON t.object_id = cc.parent_object_id
-    JOIN sys.schemas s ON s.schema_id = t.schema_id
-    WHERE cc.name = @n AND t.name = @t AND s.name = @s
-)
-BEGIN
-    DECLARE @sql nvarchar(max) = N'ALTER TABLE [' + @s + N'].[' + @t + N'] DROP CONSTRAINT [' + @n + N'];';
-    EXEC (@sql);
-END";
-            using var cmd = new SqlCommand(sql, cn, tx);
-            cmd.Parameters.AddWithValue("@n", constraintName);
-            cmd.Parameters.AddWithValue("@t", table);
-            cmd.Parameters.AddWithValue("@s", schema);
-            return cmd.ExecuteNonQuery() >= 0; // if existed, it's dropped; idempotent
-        }
-
-        private static string BuildInList(IEnumerable<string> options, string sqlDataType)
-        {
-            // Decide quoting by SQL type; treat non-numeric as string
-            bool isNumeric = IsNumericType(sqlDataType);
-
-            return string.Join(",",
-                options.Select(o => isNumeric
-                    ? NormalizeNumericLiteral(o)
-                    : QuoteSqlLiteral(o)));
-        }
+            => ClearOptions(column);
 
         private static bool IsNumericType(string sqlType)
         {
@@ -646,44 +565,13 @@ END";
                    t.StartsWith("smallmoney");
         }
 
-        private static string QuoteSqlLiteral(string value)
-        {
-            // N'...' with escaped single quotes
-            var escaped = (value ?? string.Empty).Replace("'", "''");
-            return $"N'{escaped}'";
-        }
-
-        private static string NormalizeNumericLiteral(string raw)
-        {
-            // Allow simple normalization; will throw if not a number
-            if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any,
-                                 System.Globalization.CultureInfo.InvariantCulture, out var d))
-            {
-                // Keep as invariant string (no quotes)
-                return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            }
-            // If parsing fails, fallback to 0 to avoid SQL errors? Better: throw.
-            throw new ArgumentException($"Option '{raw}' is not a valid numeric literal for numeric column.");
-        }
-
         private static string QSafe(string ident)
         {
             if (string.IsNullOrWhiteSpace(ident))
                 throw new ArgumentException("Identifier cannot be null/empty.");
-            // Escape closing bracket inside names: a]b -> a]]b
+
             var safe = ident.Replace("]", "]]");
             return "[" + safe + "]";
-        }
-
-        private static string SanitizeForObjectName(string raw, int maxLen = 128)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return "_";
-            var chars = raw.Select(ch =>
-                ch >= 'A' && ch <= 'Z' ||
-                ch >= 'a' && ch <= 'z' ||
-                ch >= '0' && ch <= '9' || ch == '_' ? ch : '_').ToArray();
-            var s = new string(chars);
-            return s.Length <= maxLen ? s : s.Substring(0, maxLen);
         }
 
         #endregion

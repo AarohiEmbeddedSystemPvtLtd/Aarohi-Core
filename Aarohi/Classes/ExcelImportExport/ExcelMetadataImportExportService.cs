@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes;
+using Aarohi.Classes;
 using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Drawing;
 using Microsoft.Data.SqlClient;
@@ -665,6 +665,7 @@ namespace Aarohi.Classes.ExcelImportExport
             SetExportValue(row, ExcelColumnFields.DefaultValue, column.DefaultValue == null || column.DefaultValue == DBNull.Value ? ""
                     : Convert.ToString(column.DefaultValue)?.Trim() ?? "");
 
+            SetExportValue(row, ExcelColumnFields.DisplayName, SafeString(column.DisplayName));
             SetExportValue(row, ExcelColumnFields.DisplayName, SafeString(column.DisplayName));
             SetExportValue(row, ExcelColumnFields.Description, SafeString(column.Description));
 
@@ -2111,7 +2112,7 @@ namespace Aarohi.Classes.ExcelImportExport
         }
         public static void AddBackToTablesButtons(XLWorkbook workbook)
         {
-            const string buttonText = "← Back to Tables";
+            const string buttonText = "? Back to Tables";
 
             if (!workbook.Worksheets.Contains(ExcelTableFields.SheetName))
                 return;

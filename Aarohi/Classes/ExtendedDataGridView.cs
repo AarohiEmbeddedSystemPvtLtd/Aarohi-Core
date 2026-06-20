@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -60,7 +60,7 @@ namespace Aarohi.Classes
                 var hdr = ResolveHeaderStyle(cellStyle);
                 Size sz = base.GetPreferredSize(graphics, hdr, rowIndex, constraintSize);
 
-                const int paddingAroundButton = 8; // ~4px left & right â€œbreathing roomâ€
+                const int paddingAroundButton = 8; // ~4px left & right “breathing room”
                 sz.Width += ButtonWidth + paddingAroundButton;
                 return sz;
             }
@@ -372,7 +372,7 @@ namespace Aarohi.Classes
             CellContextMenuStripNeeded += ExtendedDataGridView_CellContextMenuStripNeeded;
 
             // Header menu base items (will be rebuilt dynamically)
-            _headerMenu.Items.Add("Openâ€¦ (placeholder)", null, (_, __) =>
+            _headerMenu.Items.Add("Open… (placeholder)", null, (_, __) =>
             {
                 if (_menuForColumn != null)
                     HeaderDropDownOpened?.Invoke(_menuForColumn.Name);
@@ -458,7 +458,7 @@ namespace Aarohi.Classes
             CellContextMenuStripNeeded += ExtendedDataGridView_CellContextMenuStripNeeded;
 
             // Header menu base items (will be rebuilt dynamically)
-            _headerMenu.Items.Add("Openâ€¦ (placeholder)", null, (_, __) =>
+            _headerMenu.Items.Add("Open… (placeholder)", null, (_, __) =>
             {
                 if (_menuForColumn != null)
                     HeaderDropDownOpened?.Invoke(_menuForColumn.Name);
@@ -908,9 +908,9 @@ namespace Aarohi.Classes
                 bool hasUser = _columnFilters.ContainsKey(c.Name);
                 bool hasFixed = _fixedFilters.ContainsKey(c.Name);
 
-                string suffix = hasFixed && hasUser ? " â§‰ðŸ”’"
-                             : hasFixed ? " ðŸ”’"
-                             : hasUser ? " â§‰"
+                string suffix = hasFixed && hasUser ? " ???"
+                             : hasFixed ? " ??"
+                             : hasUser ? " ?"
                              : string.Empty;
 
                 c.HeaderCell.Value = baseText + suffix;
@@ -959,10 +959,10 @@ namespace Aarohi.Classes
             // ---- Filter ----
             _headerMenu.Items.Add(Section("Filter"));
 
-            var equals = new ToolStripMenuItem("Equalsâ€¦");
+            var equals = new ToolStripMenuItem("Equals…");
             equals.Click += (_, __) => PromptAndFire(col.Name, "Filter", "Equals");
 
-            var contains = new ToolStripMenuItem("Containsâ€¦");
+            var contains = new ToolStripMenuItem("Contains…");
             contains.Click += (_, __) => PromptAndFire(col.Name, "Filter", "Contains");
 
             _headerMenu.Items.Add(equals);
@@ -981,14 +981,14 @@ namespace Aarohi.Classes
             _headerMenu.Items.Add(clearFilterMenu);
 
             var operators = new ToolStripMenuItem("By Operator");
-            operators.DropDownItems.Add("Starts Withâ€¦", null, (_, __) => PromptAndFire(col.Name, "Filter", "StartsWith"));
-            operators.DropDownItems.Add("Ends Withâ€¦", null, (_, __) => PromptAndFire(col.Name, "Filter", "EndsWith"));
-            operators.DropDownItems.Add("Greater Thanâ€¦", null, (_, __) => PromptAndFire(col.Name, "Filter", "GreaterThan"));
-            operators.DropDownItems.Add("Less Thanâ€¦", null, (_, __) => PromptAndFire(col.Name, "Filter", "LessThan"));
+            operators.DropDownItems.Add("Starts With…", null, (_, __) => PromptAndFire(col.Name, "Filter", "StartsWith"));
+            operators.DropDownItems.Add("Ends With…", null, (_, __) => PromptAndFire(col.Name, "Filter", "EndsWith"));
+            operators.DropDownItems.Add("Greater Than…", null, (_, __) => PromptAndFire(col.Name, "Filter", "GreaterThan"));
+            operators.DropDownItems.Add("Less Than…", null, (_, __) => PromptAndFire(col.Name, "Filter", "LessThan"));
             _headerMenu.Items.Add(operators);
 
             var distinct = new ToolStripMenuItem("Distinct Values");
-            distinct.DropDownItems.Add("â€” All â€”", null, (_, __) => HeaderCommand?.Invoke(col.Name, "Filter", "Clear", null));
+            distinct.DropDownItems.Add("— All —", null, (_, __) => HeaderCommand?.Invoke(col.Name, "Filter", "Clear", null));
             // Note: you can populate real distinct values externally using HeaderCommand and your data source
             _headerMenu.Items.Add(distinct);
 
@@ -1001,7 +1001,7 @@ namespace Aarohi.Classes
             var columnsMenu = new ToolStripMenuItem("Columns");
 
             // --- Show All ---
-            var showAll = new ToolStripMenuItem("â€” Show All â€”", image: null, onClick: (_, __) =>
+            var showAll = new ToolStripMenuItem("— Show All —", image: null, onClick: (_, __) =>
             {
                 foreach (DataGridViewColumn c in this.Columns)
                 {
@@ -1017,7 +1017,7 @@ namespace Aarohi.Classes
             columnsMenu.DropDownItems.Add(showAll);
 
             // --- Hide All (non-PK only) ---
-            var hideAll = new ToolStripMenuItem("â€” Hide All â€”", image: null, onClick: (_, __) =>
+            var hideAll = new ToolStripMenuItem("— Hide All —", image: null, onClick: (_, __) =>
             {
                 foreach (DataGridViewColumn c in this.Columns)
                 {
@@ -1073,7 +1073,7 @@ namespace Aarohi.Classes
 
                     _dynClass?.SetShowInDataGrid(target.Name, newState);
 
-                    // 3ï¸âƒ£ Raise header event
+                    // 3?? Raise header event
                     HeaderCommand?.Invoke(
                         target.Name,
                         "Columns",
@@ -1308,7 +1308,7 @@ namespace Aarohi.Classes
         {
             base.OnDataSourceChanged(e);
 
-            // Always ensure weâ€™re bound to a DataView/BindingSource for filtering
+            // Always ensure we’re bound to a DataView/BindingSource for filtering
             EnsureBindingLayer();
 
             // Re-apply fixed + user filters on the new DataView
@@ -1736,7 +1736,7 @@ namespace Aarohi.Classes
 
         private void ExtendedDataGridView_CellContextMenuStripNeeded(object? sender, DataGridViewCellContextMenuStripNeededEventArgs e)
         {
-            // Fallback path so OS can show it if you donâ€™t call Show() manually.
+            // Fallback path so OS can show it if you don’t call Show() manually.
             if (e.RowIndex >= 0)
             {
                 _rowMenuTargetIndex = e.RowIndex;

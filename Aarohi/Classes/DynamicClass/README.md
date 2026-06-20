@@ -16,7 +16,7 @@
 10. [Bulk Operations](#10-bulk-operations)
 11. [DDL — Table Management](#11-ddl--table-management)
 12. [DDL — Column Management](#12-ddl--column-management)
-13. [Column Options (CHECK Constraints)](#13-column-options-check-constraints)
+13. [Column Options](#13-column-options)
 14. [Metadata & Extended Properties](#14-metadata--extended-properties)
 15. [Auto-Join](#15-auto-join)
 16. [Relation Filters](#16-relation-filters)
@@ -649,12 +649,12 @@ dc.DropColumn("ObsoleteColumn");   // no-op if column doesn't exist
 
 ---
 
-## 13. Column Options (CHECK Constraints)
+## 13. Column Options
 
-`DynamicClass` can manage a list of allowed values for a string/numeric column by creating a `CHECK` constraint. This is useful for dropdown options stored and enforced at the DB level.
+`DynamicClass` can manage a list of dropdown options for a column using the column-level `Options` extended property.
 
 ```csharp
-// Set options — replaces any existing CHECK constraint
+// Set options - replaces the Options extended property
 dc.SetOptions("Status", new[] { "Active", "Stopped", "Maintenance" });
 
 // Add a single option
@@ -663,19 +663,18 @@ dc.AddOption("Status", "Calibrating");
 // Remove a single option
 dc.RemoveOption("Status", "Maintenance");
 
-// Read current options (parsed from the CHECK constraint)
+// Read current options from the Options extended property
 string[] options = dc.GetOptions("Status");
 // ["Active", "Stopped", "Calibrating"]
 
-// Drop the constraint entirely
+// Clear options
 dc.DropOptionsConstraint("Status");
 ```
 
 Notes:
-- Options are stored as a `CK_{Table}_{Column}_OPTIONS` CHECK constraint.
-- Numeric column types generate unquoted literals; string types use `N'...'`.
-- If the column is nullable, the CHECK allows `NULL` in addition to the listed values.
-- `GetColumns()` returns `ColumnInfo.Options` and `ColumnInfo.HasOptions` parsed from these constraints.
+- Options are stored in the column-level `Options` extended property.
+- Option text is comma-separated when saved by `SetOptions`.
+- `GetColumns()` returns `ColumnInfo.Options` and `ColumnInfo.HasOptions` parsed from the extended property.
 
 ---
 
@@ -777,7 +776,7 @@ List<DynamicClass.ColumnInfo>? columns = dc.GetColumns();
 | `DefaultSql` | Raw DEFAULT definition from DB |
 | `DefaultValue` | Parsed .NET default value |
 | `CheckDefinition` | Raw CHECK constraint definition |
-| `Options` | Parsed string array of allowed values (from CHECK) |
+| `Options` | Parsed string array from the `Options` extended property |
 | `HasOptions` | `true` if `Options.Length >= 2` |
 | `DisplayName` | Extended property |
 | `Format` | Extended property |
@@ -993,11 +992,11 @@ dc.LogSource = "MachineModule";
 
 | Method | Description |
 |---|---|
-| `GetOptions(column)` | Return allowed values parsed from CHECK constraint |
-| `SetOptions(column, options)` | Replace CHECK constraint with new allowed values |
+| `GetOptions(column)` | Return values from the `Options` extended property |
+| `SetOptions(column, options)` | Replace the `Options` extended property value |
 | `AddOption(column, option)` | Add one value to the allowed set |
 | `RemoveOption(column, option)` | Remove one value from the allowed set |
-| `DropOptionsConstraint(column)` | Drop the generated CHECK constraint |
+| `DropOptionsConstraint(column)` | Clear the `Options` extended property |
 
 ### Metadata
 

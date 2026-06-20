@@ -2,6 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFramework>net9.0-windows</TargetFramework>
+		<DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**</DefaultItemExcludes>
 		<UseWindowsForms>true</UseWindowsForms>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<!-- Generates XML documentation file for IntelliSense in consuming apps / NuGet users -->
@@ -46,12 +47,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Compile Update="Classes\DynamicCrudForm.cs">
-	    <SubType>Form</SubType>
-	  </Compile>
-	  <Compile Update="Classes\ExtendedDropDownList.cs">
-	    <SubType>Component</SubType>
-	  </Compile>
+	  <Compile Update="Classes\DynamicCrudForm.cs" />
+	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
 	  <Compile Update="SQL\FormSqlConnectionManager.cs">
 	    <SubType>Form</SubType>
