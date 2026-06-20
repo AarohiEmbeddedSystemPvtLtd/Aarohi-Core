@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static Aarohi.Core.Exceptions;
 
 namespace Aarohi.Classes
 {
@@ -65,12 +66,29 @@ namespace Aarohi.Classes
 
         private void ButtonDelete_Click(object sender, EventArgs e)
         {
-            _edgv.TryGetSelectedRowData(out IDictionary<string, object?> rowData);
-            if (rowData == null) return;
-            var result = MessageBox.Show($"Are you sure you want to delete {_suffix} '{rowData[_dc.GetPrimaryKeyColumns().FirstOrDefault()]}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (result == DialogResult.Yes)
+            try
             {
-                _dc.DeleteByKey(_dc.GetPrimaryKeyColumns().FirstOrDefault());
+                _edgv.TryGetSelectedRowData(out IDictionary<string, object?> rowData);
+                if (rowData == null) return;
+                var result = MessageBox.Show($"Are you sure you want to delete {_suffix} '{rowData[_dc.GetPrimaryKeyColumns().FirstOrDefault()]}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result == DialogResult.Yes)
+                {
+                    object? GrpPrimaryKey = _dc.GetPrimaryKeyColumns().FirstOrDefault();
+                    object val = rowData[GrpPrimaryKey.ToString()];
+                    if (GrpPrimaryKey != null && val != null)
+                    {
+                        _dc.DeleteByKey(val);
+                        refresh();
+                    }
+                }
+            }
+            catch (ForeignKeyDeleteBlockedException Fkex)
+            {
+                MessageBox.Show(Fkex.Message, "Delete Blocked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Delete Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
