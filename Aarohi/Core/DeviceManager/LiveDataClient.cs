@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace Aarohi.Core.DeviceManager
@@ -21,6 +22,17 @@ namespace Aarohi.Core.DeviceManager
         public string DeviceName { get; set; } = string.Empty;
         public string DeviceTagName { get; set; } = string.Empty;
         public DateTime TimeStamp { get; set; } = DateTime.Now;
+        public long SequenceNumber { get; set; }
+        public int RequestedUpdateRateMs { get; set; }
+        public DateTime PollStartedOn { get; set; } = DateTime.Now;
+        public DateTime PollCompletedOn { get; set; } = DateTime.Now;
+        public double PollDurationMs { get; set; }
+        public bool IsPollOverrun { get; set; }
+        public DateTime ClientReceivedOn { get; set; } = DateTime.Now;
+        public DateTime ClientDispatchedOn { get; set; } = DateTime.Now;
+        public double ClientDispatchDelayMs { get; set; }
+        public bool HasSequenceGap { get; set; }
+        public long ExpectedSequenceNumber { get; set; }
         public List<DeviceRegisterValue> Values { get; set; } = new();
     }
 
@@ -43,6 +55,21 @@ namespace Aarohi.Core.DeviceManager
         }
     }
 
+    
+    public sealed class CommunicationServiceRegisterBatchResult
+    {
+        public Guid DeviceId { get; init; }
+        public List<CommunicationServiceRegisterResult> Results { get; init; } = new();
+        public DateTime TimeStamp { get; init; } = DateTime.Now;
+        public bool AllSucceeded => Results.All(x => x.Success);
+    }
+
+    public sealed class WriteRegisterItem
+    {
+        public string? RegisterName { get; set; }
+        public int? Address { get; set; }
+        public object? Value { get; set; }
+    }
     public sealed class CommunicationServiceRegisterReadResult
     {
         public bool Success { get; init; }
@@ -78,12 +105,18 @@ namespace Aarohi.Core.DeviceManager
         private readonly ConcurrentDictionary<string, TaskCompletionSource<PipeEnvelope>> _pending = new();
         private readonly SemaphoreSlim _connectionLock = new(1, 1);
         private readonly SemaphoreSlim _writeLock = new(1, 1);
-
+        private readonly Channel<DeviceValuesReceivedEventArgs> _valuesDispatchQueue = Channel.CreateUnbounded<DeviceValuesReceivedEventArgs>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
+        private readonly ConcurrentDictionary<Guid, long> _lastSequenceByDevice = new();
         private NamedPipeClientStream? _pipe;
         private StreamReader? _reader;
         private StreamWriter? _writer;
         private CancellationTokenSource? _cts;
         private Task? _readLoop;
+        private Task? _valuesDispatchLoop;
 
         private static void Trace(string message)
         {
@@ -146,6 +179,7 @@ namespace Aarohi.Core.DeviceManager
                 _writer = new StreamWriter(_pipe, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true };
 
                 _cts = new CancellationTokenSource();
+                _valuesDispatchLoop = Task.Run(() => DispatchValuesLoopAsync(_cts.Token));
                 _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token));
                 Trace($"Connected to pipe '{_pipeName}'.");
             }
@@ -339,6 +373,41 @@ namespace Aarohi.Core.DeviceManager
             }
         }
 
+        public async Task<CommunicationServiceRegisterResult> UnregisterAllDevicesAsync(
+            IEnumerable<Guid> deviceIds,
+            CancellationToken cancellationToken = default)
+        {
+            List<Guid> ids = deviceIds
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                return new CommunicationServiceRegisterResult
+                {
+                    Success = true,
+                    Message = "No devices to unregister."
+                };
+            }
+
+            List<string> failed = new();
+
+            foreach (Guid deviceId in ids)
+            {
+                CommunicationServiceRegisterResult result = await UnregisterDeviceAsync(deviceId, cancellationToken).ConfigureAwait(false);
+                if (!result.Success)
+                    failed.Add($"{deviceId}: {result.Message}");
+            }
+
+            return new CommunicationServiceRegisterResult
+            {
+                Success = failed.Count == 0,
+                Message = failed.Count == 0
+                    ? $"{ids.Count} device(s) unregistered."
+                    : string.Join(Environment.NewLine, failed)
+            };
+        }
         public Task<CommunicationServiceRegisterResult> WriteRegisterAsync(
             Guid deviceId,
             string registerName,
@@ -415,6 +484,111 @@ namespace Aarohi.Core.DeviceManager
             return result.ValueText;
         }
 
+        public async Task<CommunicationServiceRegisterBatchResult> WriteRegistersAsync(
+            Guid deviceId,
+            IEnumerable<WriteRegisterItem> writes,
+            CancellationToken cancellationToken = default)
+        {
+            if (deviceId == Guid.Empty)
+                throw new ArgumentException("Device ID is required.", nameof(deviceId));
+
+            var writesList = writes?.ToList() ?? new List<WriteRegisterItem>();
+            if (writesList.Count == 0)
+            {
+                return new CommunicationServiceRegisterBatchResult
+                {
+                    DeviceId = deviceId,
+                    TimeStamp = DateTime.Now
+                };
+            }
+
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+
+            string correlationId = Guid.NewGuid().ToString("N");
+            var tcs = new TaskCompletionSource<PipeEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pending[correlationId] = tcs;
+
+            try
+            {
+                var envelope = new PipeEnvelope
+                {
+                    Type = "WriteRegisters",
+                    CorrelationId = correlationId,
+                    Payload = JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            DeviceId = deviceId,
+                            Writes = writesList.Select(x => new
+                            {
+                                x.RegisterName,
+                                x.Address,
+                                Value = ToWriteString(x.Value)
+                            }).ToList()
+                        },
+                        _jsonOptions)
+                };
+
+                await SendAsync(envelope, cancellationToken).ConfigureAwait(false);
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                using (timeout.Token.Register(() => tcs.TrySetCanceled()))
+                {
+                    PipeEnvelope response = await tcs.Task.ConfigureAwait(false);
+
+                    if (string.Equals(response.Type, "WriteRegistersAck", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WriteRegistersAckPayload? ack = JsonSerializer.Deserialize<WriteRegistersAckPayload>(
+                            response.Payload.GetRawText(), _jsonOptions);
+
+                        List<CommunicationServiceRegisterResult> results = ack?.Results?.Select(x => new CommunicationServiceRegisterResult
+                        {
+                            Success = x.Success,
+                            Message = x.Message,
+                            CorrelationId = correlationId,
+                            DeviceName = x.DeviceName,
+                            RegisterName = x.RegisterName,
+                            Address = x.Address,
+                            RequestedValue = x.RequestedValue,
+                            ReadBackValue = NormalizeJsonValue(x.ReadBackValue),
+                            VerificationSucceeded = x.VerificationSucceeded,
+                            VerificationAttempts = x.VerificationAttempts
+                        }).ToList() ?? new List<CommunicationServiceRegisterResult>();
+
+                        return new CommunicationServiceRegisterBatchResult
+                        {
+                            DeviceId = ack?.DeviceId ?? deviceId,
+                            Results = results,
+                            TimeStamp = ack?.TimeStamp ?? DateTime.Now
+                        };
+                    }
+
+                    ErrorPayload? err = JsonSerializer.Deserialize<ErrorPayload>(
+                        response.Payload.GetRawText(), _jsonOptions);
+                    return new CommunicationServiceRegisterBatchResult
+                    {
+                        DeviceId = deviceId,
+                        Results = new List<CommunicationServiceRegisterResult>
+                        {
+                            new CommunicationServiceRegisterResult
+                            {
+                                Success = false,
+                                Message = BuildResponseErrorMessage(response.Type, err?.Message, "Error from communication service."),
+                                CorrelationId = correlationId
+                            }
+                        }
+                    };
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("Communication service did not acknowledge the batch register write in time.");
+            }
+            finally
+            {
+                _pending.TryRemove(correlationId, out _);
+            }
+        }
         private async Task<CommunicationServiceRegisterResult> WriteRegisterCoreAsync(
             Guid deviceId,
             string? registerName,
@@ -722,14 +896,7 @@ namespace Aarohi.Core.DeviceManager
                                     Trace($"DeviceValues received. Device={response.DeviceTagName}, Count={response.Values.Count}, BadCount={badCount}, Timestamp={response.TimeStamp:O}");
                                 }
 
-                                ValuesReceived?.Invoke(this, new DeviceValuesReceivedEventArgs
-                                {
-                                    DeviceId = response.DeviceId,
-                                    DeviceTagName = response.DeviceTagName,
-                                    DeviceName = response.DeviceName,
-                                    TimeStamp = response.TimeStamp,
-                                    Values = response.Values
-                                });
+                                EnqueueDeviceValues(response);
                             }
                         }
                         catch (Exception ex)
@@ -757,6 +924,67 @@ namespace Aarohi.Core.DeviceManager
             }
         }
 
+        private void EnqueueDeviceValues(DeviceValuesPayload response)
+        {
+            DateTime receivedOn = DateTime.Now;
+            long expectedSequence = 0;
+            bool hasGap = false;
+
+            if (response.SequenceNumber > 0)
+            {
+                long previous = _lastSequenceByDevice.TryGetValue(response.DeviceId, out long oldValue) ? oldValue : 0;
+                expectedSequence = previous <= 0 ? response.SequenceNumber : previous + 1;
+                hasGap = previous > 0 && response.SequenceNumber != previous + 1;
+                _lastSequenceByDevice[response.DeviceId] = response.SequenceNumber;
+            }
+
+            var args = new DeviceValuesReceivedEventArgs
+            {
+                DeviceId = response.DeviceId,
+                DeviceTagName = response.DeviceTagName,
+                DeviceName = response.DeviceName,
+                TimeStamp = response.TimeStamp,
+                SequenceNumber = response.SequenceNumber,
+                RequestedUpdateRateMs = response.RequestedUpdateRateMs,
+                PollStartedOn = response.PollStartedOn,
+                PollCompletedOn = response.PollCompletedOn,
+                PollDurationMs = response.PollDurationMs,
+                IsPollOverrun = response.IsPollOverrun,
+                ClientReceivedOn = receivedOn,
+                HasSequenceGap = hasGap,
+                ExpectedSequenceNumber = expectedSequence,
+                Values = response.Values
+            };
+
+            if (!_valuesDispatchQueue.Writer.TryWrite(args))
+                Trace($"DeviceValues dispatch queue rejected sample. Device={response.DeviceTagName}, Sequence={response.SequenceNumber}");
+        }
+
+        private async Task DispatchValuesLoopAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await foreach (DeviceValuesReceivedEventArgs args in _valuesDispatchQueue.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    DateTime dispatchedOn = DateTime.Now;
+                    args.ClientDispatchedOn = dispatchedOn;
+                    args.ClientDispatchDelayMs = (dispatchedOn - args.ClientReceivedOn).TotalMilliseconds;
+
+                    try
+                    {
+                        ValuesReceived?.Invoke(this, args);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace($"ValuesReceived handler failed: {ex.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Trace("DeviceValues dispatch loop cancelled.");
+            }
+        }
         private void FailPendingRequests(Exception exception)
         {
             foreach (TaskCompletionSource<PipeEnvelope> tcs in _pending.Values)
@@ -869,6 +1097,12 @@ namespace Aarohi.Core.DeviceManager
             public DateTime TimeStamp { get; set; }
         }
 
+        private sealed class WriteRegistersAckPayload
+        {
+            public Guid DeviceId { get; set; }
+            public List<WriteRegisterAckPayload> Results { get; set; } = new();
+            public DateTime TimeStamp { get; set; }
+        }
         private sealed class ReadRegisterAckPayload
         {
             public bool Success { get; set; }
@@ -894,6 +1128,12 @@ namespace Aarohi.Core.DeviceManager
             public string DeviceName { get; set; } = string.Empty;
             public string DeviceTagName { get; set; } = string.Empty;
             public DateTime TimeStamp { get; set; } = DateTime.Now;
+            public long SequenceNumber { get; set; }
+            public int RequestedUpdateRateMs { get; set; }
+            public DateTime PollStartedOn { get; set; } = DateTime.Now;
+            public DateTime PollCompletedOn { get; set; } = DateTime.Now;
+            public double PollDurationMs { get; set; }
+            public bool IsPollOverrun { get; set; }
             public List<DeviceRegisterValue> Values { get; set; } = new();
         }
     }
