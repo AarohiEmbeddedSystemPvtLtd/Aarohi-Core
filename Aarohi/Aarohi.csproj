@@ -50,15 +50,9 @@
 	  <Compile Update="Classes\DynamicCrudForm.cs" />
 	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
-	  <Compile Update="SQL\FormSqlConnectionManager.cs">
-	    <SubType>Form</SubType>
-	  </Compile>
-	  <Compile Update="SQL\FormDbSplash.cs">
-	    <SubType>Form</SubType>
-	  </Compile>
-	  <Compile Update="SQL\FormDatabaseCloner.cs">
-	    <SubType>Form</SubType>
-	  </Compile>
+	  <Compile Update="SQL\FormSqlConnectionManager.cs" />
+	  <Compile Update="SQL\FormDbSplash.cs" />
+	  <Compile Update="SQL\FormDatabaseCloner.cs" />
 	</ItemGroup>
 	
 </Project>
