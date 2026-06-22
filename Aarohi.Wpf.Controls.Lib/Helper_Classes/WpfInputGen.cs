@@ -637,7 +637,7 @@ namespace AarohiWpfControls.Helper_Classes
                         defUnit,
                         string.IsNullOrWhiteSpace(selUnit) ? defUnit : selUnit);
 
-                    etb.LeftText = defaultValue?.ToString() ?? string.Empty;
+                    etb.LeftText = string.Empty;
 
                     panel.Children.Add(etb);
 
@@ -653,6 +653,16 @@ namespace AarohiWpfControls.Helper_Classes
                         selUnit,
                         precision,
                         scale);
+
+                    if (defaultValue != null && defaultValue != DBNull.Value)
+                    {
+                        SetValue(
+                            table,
+                            colName,
+                            defaultValue,
+                            validate: false,
+                            notify: false);
+                    }
                 }
 
                 return panel;
@@ -765,7 +775,7 @@ namespace AarohiWpfControls.Helper_Classes
 
                 if (_inputs.TryGetValue(key, out FrameworkElement ctrl))
                 {
-                    return GetControlValueText(ctrl);
+                    return GetValueTextInDefaultUnit(ctrl);
                 }
 
                 return string.Empty;
@@ -780,7 +790,7 @@ namespace AarohiWpfControls.Helper_Classes
                 if (!_inputs.TryGetValue(key, out FrameworkElement ctrl))
                     return false;
 
-                value = GetControlValueText(ctrl);
+                value = GetValueTextInDefaultUnit(ctrl);
                 return true;
             }
 
@@ -805,11 +815,11 @@ namespace AarohiWpfControls.Helper_Classes
                     if (TryGetMeta(ctrl, out FieldMeta meta))
                     {
                         string key = $"{meta.Table}.{meta.Column}";
-                        values[key] = GetControlValueText(ctrl);
+                        values[key] = GetValueTextInDefaultUnit(ctrl);
                     }
                     else
                     {
-                        values[item.Key] = GetControlValueText(ctrl);
+                        values[item.Key] = GetValueTextInDefaultUnit(ctrl);
                     }
                 }
 
@@ -934,6 +944,50 @@ namespace AarohiWpfControls.Helper_Classes
                     toUnit);
 
                 return FormatNumberForTextBox(convertedValue, etb.NumberFormat);
+            }
+
+            private string GetValueTextInDefaultUnit(FrameworkElement ctrl)
+            {
+                string displayedText = GetControlValueText(ctrl);
+
+                if (ctrl is not ExtendedTextBox etb ||
+                    !TryGetMeta(ctrl, out FieldMeta meta) ||
+                    string.IsNullOrWhiteSpace(displayedText))
+                {
+                    return displayedText;
+                }
+
+                if (!double.TryParse(
+                        displayedText,
+                        NumberStyles.Any,
+                        CultureInfo.InvariantCulture,
+                        out double displayedValue))
+                {
+                    return displayedText;
+                }
+
+                string defaultUnit = meta.DefaultUnit?.Trim() ?? string.Empty;
+                string selectedUnit = GetSelectedUnitSafe(etb, meta.SelectedUnit);
+
+                if (string.IsNullOrWhiteSpace(selectedUnit))
+                    selectedUnit = defaultUnit;
+
+                meta.SelectedUnit = selectedUnit;
+
+                if (string.IsNullOrWhiteSpace(defaultUnit) ||
+                    string.IsNullOrWhiteSpace(selectedUnit) ||
+                    string.Equals(selectedUnit, defaultUnit, StringComparison.OrdinalIgnoreCase))
+                {
+                    return displayedText;
+                }
+
+                double defaultValue = UnitConverisonEngine.ConvertValue(
+                    meta.Parameter,
+                    displayedValue,
+                    selectedUnit,
+                    defaultUnit);
+
+                return defaultValue.ToString("0.##########", CultureInfo.InvariantCulture);
             }
 
             private static string FormatNumberForTextBox(double value, string? numberFormat)
