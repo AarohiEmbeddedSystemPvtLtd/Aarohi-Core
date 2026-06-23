@@ -26,7 +26,7 @@
 	</ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />
+    <!--<PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />-->
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
@@ -44,6 +44,12 @@
 	<ItemGroup>
 		<None Include="snap7.dll" CopyToOutputDirectory="PreserveNewest" />
 		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x86/native" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Reference Include="Aarohi.ExtendedUI">
+	    <HintPath>..\..\Aarohi_ExtendedUI\Aarohi.ExtendedUI_Root\Aarohi.ExtendedUI_V1\Aarohi.ExtendedUI\bin\Debug\net9.0-windows\Aarohi.ExtendedUI.dll</HintPath>
+	  </Reference>
 	</ItemGroup>
 
 	<ItemGroup>
