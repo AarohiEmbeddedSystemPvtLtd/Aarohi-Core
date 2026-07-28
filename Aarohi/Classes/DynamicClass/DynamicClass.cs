@@ -168,6 +168,11 @@ namespace Aarohi.Classes
         {
             ColumnMetadataCache.TryRemove(GetColumnMetadataCacheKey(), out _);
         }
+
+        public bool RemoveColumnProperty(string propertyName, string column)
+        {
+            return DropExtendedProperty(propertyName, column);
+        }
         #endregion
 
     }

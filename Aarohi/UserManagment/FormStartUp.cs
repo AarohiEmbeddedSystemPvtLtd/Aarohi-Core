@@ -176,12 +176,12 @@ namespace Aarohi.UserManagment
             {
                 comboBoxShiftLogin.Items.Clear();
 
-                comboBoxShiftLogin.Items.Add(
-                    new ShiftLoginItem
-                    {
-                        ShiftId = 0,
-                        ShiftName = "-- Select Shift --"
-                    });
+                //comboBoxShiftLogin.Items.Add(
+                //    new ShiftLoginItem
+                //    {
+                //        ShiftId = 0,
+                //        ShiftName = "-- Select Shift --"
+                //    });
 
                 foreach (ShiftLoginItem shift in _configuredShifts)
                     comboBoxShiftLogin.Items.Add(shift);
