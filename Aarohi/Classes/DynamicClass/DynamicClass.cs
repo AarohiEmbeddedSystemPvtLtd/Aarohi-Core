@@ -103,6 +103,28 @@ namespace Aarohi.Classes
             }
         }
 
+        public DynamicClass(
+                    string schema,
+                    string table,
+                    Func<SqlConnection> connectionFactory,
+                    string? keyColumn = null)
+        {
+            if (connectionFactory == null)
+                throw new ArgumentNullException(nameof(connectionFactory));
+
+            Schema = schema;
+            Table = table;
+            KeyColumn = keyColumn?.Trim() ?? "";
+
+            // Important: set instance factory before DetectAndSetKeyColumn()
+            _instanceFactory = connectionFactory;
+
+            if (string.IsNullOrWhiteSpace(KeyColumn))
+            {
+                DetectAndSetKeyColumn(preferIdentityFallback: true, throwOnComposite: false);
+            }
+        }
+
         /// <summary>
         /// Releases transient state (last error, values, schema spec) and suppresses finalization.
         /// </summary>
@@ -119,11 +141,27 @@ namespace Aarohi.Classes
             GC.SuppressFinalize(this);
         }
 
+        //private string GetColumnMetadataCacheKey()
+        //{
+        //    EnsureIdent(Schema);
+        //    EnsureIdent(Table);
+        //    return $"{Schema}.{Table}";
+        //}
         private string GetColumnMetadataCacheKey()
         {
             EnsureIdent(Schema);
             EnsureIdent(Table);
-            return $"{Schema}.{Table}";
+
+            Func<SqlConnection> factory = ResolveFactory();
+
+            using SqlConnection con = factory();
+
+            SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(con.ConnectionString);
+
+            string server = builder.DataSource?.Trim() ?? "";
+            string database = builder.InitialCatalog?.Trim() ?? "";
+
+            return $"{server}|{database}|{Schema}.{Table}";
         }
 
         private void InvalidateColumnMetadataCache()
