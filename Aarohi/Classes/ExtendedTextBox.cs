@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -71,6 +71,10 @@ namespace Aarohi.Classes
         private bool _suppressComboChanged;
         private bool _autoConverting;
         private bool _bulkItemsUpdate;
+
+        private double _rawValue;
+        private bool _hasRawValue;
+        private string? _rawUnit;
 
         private int _leftWidth = 100;
         private int _rightWidth = 90;
@@ -150,6 +154,9 @@ namespace Aarohi.Classes
                 _textBox.Text = newValue;
                 _suppressTextChanged = false;
 
+                if (UseHighPrecisionConversion)
+                    CaptureRawValueFromText();
+
                 LeftTextChanged?.Invoke(this, EventArgs.Empty);
                 ValuePairChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -221,6 +228,14 @@ namespace Aarohi.Classes
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public bool AutoConvertOnUnitChange { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to use a high-precision unformatted backing field as the source of truth for unit conversion.
+        /// When true, prevents decimal truncation/drift caused by converting formatted textbox values.
+        /// </summary>
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        [Description("Enables high-precision raw backing field for unit conversion to prevent formatting drift.")]
+        public bool UseHighPrecisionConversion { get; set; } = false;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public bool AutoLoadUnitsFromParameter { get; set; } = false;
@@ -593,6 +608,11 @@ namespace Aarohi.Classes
         {
             if (_suppressTextChanged) return;
 
+            if (UseHighPrecisionConversion)
+            {
+                CaptureRawValueFromText();
+            }
+
             LeftTextChanged?.Invoke(this, EventArgs.Empty);
             ValuePairChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -639,11 +659,12 @@ namespace Aarohi.Classes
             string? oldUnit = _previousUnit;
             string? newUnit = SelectedItem;
 
-            SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
-
             if (AutoConvertOnUnitChange)
             {
-                bool ok = TryConvertLeftTextOnUnitChange_WithResult(oldUnit, newUnit, out string? error);
+                string? error;
+                bool ok = UseHighPrecisionConversion
+                    ? TryConvertRawValueOnUnitChange(oldUnit, newUnit, out error)
+                    : TryConvertLeftTextOnUnitChange_WithResult(oldUnit, newUnit, out error);
 
                 if (!ok)
                 {
@@ -669,6 +690,10 @@ namespace Aarohi.Classes
 
             _lastGoodSelectedIndex = _comboBox.SelectedIndex;
             _previousUnit = SelectedItem;
+            // Notify consumers only after the displayed value and selected unit agree.
+            // Calculated dependants (for example Duty Head Min/Max) must never observe
+            // the new unit with the previous unit's numeric value.
+            SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
             ValuePairChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -762,7 +787,11 @@ namespace Aarohi.Classes
                     return false;
                 }
 
-                if (!TryGetCurrentValue(out currentValue))
+                bool parsed = UseHighPrecisionConversion
+                    ? TryGetRawValueInUnit(currentUnit, out currentValue)
+                    : TryGetCurrentValue(out currentValue);
+
+                if (!parsed)
                 {
                     error = $"LeftText is not numeric: '{LeftText}'";
                     return false;
@@ -773,6 +802,9 @@ namespace Aarohi.Classes
                     defaultValue = currentValue;
                     return true;
                 }
+
+                if (UseHighPrecisionConversion)
+                    return TryGetRawValueInUnit(defaultUnit, out defaultValue);
 
                 var result = UnitConverisonEngine.convert(
                     QuantityName!,
@@ -826,6 +858,13 @@ namespace Aarohi.Classes
                 _textBox.Text = finalValue.ToString(NumberFormat, CultureInfo.CurrentCulture);
                 _suppressTextChanged = false;
 
+                if (UseHighPrecisionConversion)
+                {
+                    _rawValue = finalValue;
+                    _hasRawValue = true;
+                    _rawUnit = CurrentUnit;
+                }
+
                 LeftTextChanged?.Invoke(this, EventArgs.Empty);
                 ValuePairChanged?.Invoke(this, EventArgs.Empty);
                 return true;
@@ -878,6 +917,13 @@ namespace Aarohi.Classes
                 _suppressTextChanged = true;
                 _textBox.Text = finalValue.ToString(NumberFormat, CultureInfo.CurrentCulture);
                 _suppressTextChanged = false;
+
+                if (UseHighPrecisionConversion)
+                {
+                    _rawValue = finalValue;
+                    _hasRawValue = true;
+                    _rawUnit = CurrentUnit;
+                }
 
                 SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
                 LeftTextChanged?.Invoke(this, EventArgs.Empty);
@@ -937,6 +983,157 @@ namespace Aarohi.Classes
                 return true;
 
             return false;
+        }
+
+        // -------------------------------------------------
+        // High-Precision Methods (Opt-In / V0.1.34+)
+        // -------------------------------------------------
+
+        /// <summary>
+        /// Sets a high-precision numeric value and its corresponding unit. This acts as the raw source of truth,
+        /// formatting the display text to the TextBox while preventing rounding decay in subsequent conversions.
+        /// </summary>
+        /// <param name="value">The raw, high-precision numeric value.</param>
+        /// <param name="unit">The target engineering unit symbol.</param>
+        public void SetRawValueAndUnit(double value, string unit)
+        {
+            _rawValue = value;
+            _hasRawValue = true;
+            _rawUnit = unit.Trim();
+
+            int idx = FindUnitIndex(unit);
+            if (idx >= 0)
+            {
+                _suppressComboChanged = true;
+                try
+                {
+                    _comboBox.SelectedIndex = idx;
+                }
+                finally
+                {
+                    _suppressComboChanged = false;
+                }
+                _lastGoodSelectedIndex = idx;
+                _previousUnit = SelectedItem;
+            }
+
+            _suppressTextChanged = true;
+            _textBox.Text = value.ToString(_numberFormat, CultureInfo.CurrentCulture);
+            _suppressTextChanged = false;
+
+            ValuePairChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Attempts to retrieve the unformatted high-precision raw value. If high-precision mode is enabled
+        /// and a raw value has been set/tracked, it returns the raw value; otherwise, it parses the current display text.
+        /// </summary>
+        /// <param name="value">Output parameter containing the unformatted high-precision value.</param>
+        /// <returns>True if the value was successfully retrieved/parsed; otherwise, false.</returns>
+        public bool TryGetRawValue(out double value)
+        {
+            if (UseHighPrecisionConversion && _hasRawValue)
+            {
+                value = _rawValue;
+                return true;
+            }
+
+            bool success = TryParseDoubleAnyCulture(LeftText, out value);
+            if (success && UseHighPrecisionConversion)
+            {
+                _rawValue = value;
+                _hasRawValue = true;
+                _rawUnit = CurrentUnit;
+            }
+            return success;
+        }
+
+        private void CaptureRawValueFromText()
+        {
+            if (TryParseDoubleAnyCulture(_textBox.Text, out double value))
+            {
+                _rawValue = value;
+                _hasRawValue = true;
+                _rawUnit = CurrentUnit;
+            }
+            else
+            {
+                _hasRawValue = false;
+                _rawUnit = null;
+            }
+        }
+
+        private bool TryGetRawValueInUnit(string targetUnit, out double value)
+        {
+            value = 0;
+            if (!TryGetRawValue(out double rawValue))
+                return false;
+
+            string sourceUnit = string.IsNullOrWhiteSpace(_rawUnit)
+                ? (CurrentUnit ?? string.Empty).Trim()
+                : _rawUnit.Trim();
+            if (string.IsNullOrWhiteSpace(sourceUnit) ||
+                sourceUnit.Equals(targetUnit, StringComparison.OrdinalIgnoreCase))
+            {
+                value = rawValue;
+                return true;
+            }
+
+            value = UnitConverisonEngine.convert(
+                QuantityName!, rawValue, sourceUnit, targetUnit).value;
+            return true;
+        }
+
+        /// <summary>
+        /// Internal helper that performs unit conversion on the high-precision backing raw value,
+        /// avoiding compounding rounding errors from formatted display text.
+        /// </summary>
+        private bool TryConvertRawValueOnUnitChange(string? oldUnit, string? newUnit, out string? error)
+        {
+            error = null;
+
+            if (_autoConverting) return true;
+            if (string.IsNullOrWhiteSpace(_quantityName)) return true;
+            if (string.IsNullOrWhiteSpace(oldUnit)) return true;
+            if (string.IsNullOrWhiteSpace(newUnit)) return true;
+
+            if (oldUnit.Equals(newUnit, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!TryGetRawValue(out double oldValue))
+                return true;
+
+            try
+            {
+                _autoConverting = true;
+
+                string sourceUnit = string.IsNullOrWhiteSpace(_rawUnit) ? oldUnit! : _rawUnit!;
+                double convertedValue = sourceUnit.Equals(newUnit, StringComparison.OrdinalIgnoreCase)
+                    ? oldValue
+                    : UnitConverisonEngine.convert(
+                        _quantityName!, oldValue, sourceUnit, newUnit!).value;
+
+                _suppressTextChanged = true;
+                _textBox.Text = convertedValue.ToString(_numberFormat, CultureInfo.CurrentCulture);
+                _suppressTextChanged = false;
+
+                LeftTextChanged?.Invoke(this, EventArgs.Empty);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error =
+                    $"Conversion failed.\n\n" +
+                    $"Quantity: {_quantityName}\n" +
+                    $"From: {oldUnit} -> To: {newUnit}\n\n" +
+                    $"Details: {ex.Message}";
+
+                return false;
+            }
+            finally
+            {
+                _autoConverting = false;
+            }
         }
     }
 }

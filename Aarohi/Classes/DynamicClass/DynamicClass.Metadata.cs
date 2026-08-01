@@ -239,6 +239,8 @@ FROM sys.fn_listextendedproperty
                     "Group" => meta.Group,
                     "Order" => meta.Order,
                     "DatagridShow" => meta.DatagridShow,
+                    "ShowInOnePhase" => meta.ShowInOnePhase,
+                    "ShowInThreePhase" => meta.ShowInThreePhase,
                     "HideInCrudForm" => meta.HideInCrudForm,
                     "Visible" => meta.Visible,
                     "AddedFromSoftware" => meta.SoftName,
@@ -590,6 +592,8 @@ SELECT
     xp.[Group],
     xp.[Order],
     xp.[DatagridShow],
+    xp.[ShowInOnePhase],
+    xp.[ShowInThreePhase],
     xp.[HideInCrudForm],
     xp.[Visible],
     xp.SoftName
@@ -649,9 +653,17 @@ OUTER APPLY (
         MAX(TRY_CAST(CASE WHEN ep.name='Order' THEN ep.value END AS int)) AS [Order],
 
         -- Boolean normalization
-                MAX(CASE WHEN ep.name='DatagridShow'
+        MAX(CASE WHEN ep.name='DatagridShow'
                  THEN CASE WHEN LOWER(CAST(ep.value AS nvarchar(10))) IN ('1','true','yes') THEN 1 ELSE 0 END
             END) AS DatagridShow,
+
+        MAX(CASE WHEN ep.name='ShowInOnePhase'
+                 THEN CASE WHEN LOWER(CAST(ep.value AS nvarchar(10))) IN ('1','true','yes') THEN 1 ELSE 0 END
+            END) AS ShowInOnePhase,
+
+        MAX(CASE WHEN ep.name='ShowInThreePhase'
+                 THEN CASE WHEN LOWER(CAST(ep.value AS nvarchar(10))) IN ('1','true','yes') THEN 1 ELSE 0 END
+            END) AS ShowInThreePhase,
 
         MAX(CASE WHEN ep.name='HideInCrudForm'
                  THEN CASE WHEN LOWER(CAST(ep.value AS nvarchar(10))) IN ('1','true','yes') THEN 1 ELSE 0 END
@@ -718,6 +730,8 @@ ORDER BY c.column_id;";
                 Order = rd["Order"] as int?,
 
                 DatagridShow = rd["DatagridShow"] as int? == 1,
+                ShowInOnePhase = rd["ShowInOnePhase"] as int? == 1,
+                ShowInThreePhase = rd["ShowInThreePhase"] as int? == 1,
                 HideInCrudForm = rd["HideInCrudForm"] as int? == 1,   // <-- ADD THIS
                 Visible = rd["Visible"] as int? == 1,
                 SoftName = rd["SoftName"] as string
@@ -742,6 +756,16 @@ ORDER BY c.column_id;";
         extras["cache"] = "miss";
         return ordered;
     });
+
+        /// <summary>
+        /// Invalidates this table's cached column metadata and reloads it from
+        /// SQL Server in one metadata query.
+        /// </summary>
+        public List<ColumnInfo>? RefreshColumns()
+        {
+            InvalidateColumnMetadataCache();
+            return GetColumns();
+        }
 
         private void ResolveColumnOptions(ColumnInfo ci)
         {
