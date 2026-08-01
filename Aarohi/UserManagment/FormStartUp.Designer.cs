@@ -96,7 +96,7 @@ namespace Aarohi.UserManagment
             PanelMainWrapperBorder.Location = new Point(20, 20);
             PanelMainWrapperBorder.Name = "PanelMainWrapperBorder";
             PanelMainWrapperBorder.Padding = new Padding(10);
-            PanelMainWrapperBorder.Size = new Size(1153, 429);
+            PanelMainWrapperBorder.Size = new Size(1153, 415);
             PanelMainWrapperBorder.TabIndex = 0;
             // 
             // PanelMainWrapper
@@ -121,7 +121,7 @@ namespace Aarohi.UserManagment
             PanelMainWrapper.Location = new Point(10, 10);
             PanelMainWrapper.Name = "PanelMainWrapper";
             PanelMainWrapper.Padding = new Padding(6);
-            PanelMainWrapper.Size = new Size(1133, 409);
+            PanelMainWrapper.Size = new Size(1133, 395);
             PanelMainWrapper.TabIndex = 1;
             // 
             // PanelForm
@@ -132,7 +132,7 @@ namespace Aarohi.UserManagment
             PanelForm.Location = new Point(506, 6);
             PanelForm.Name = "PanelForm";
             PanelForm.Padding = new Padding(10);
-            PanelForm.Size = new Size(621, 397);
+            PanelForm.Size = new Size(621, 383);
             PanelForm.TabIndex = 0;
             // 
             // LoginWrapper
@@ -157,7 +157,7 @@ namespace Aarohi.UserManagment
             LoginWrapper.Location = new Point(10, 10);
             LoginWrapper.Name = "LoginWrapper";
             LoginWrapper.Padding = new Padding(20);
-            LoginWrapper.Size = new Size(601, 377);
+            LoginWrapper.Size = new Size(601, 363);
             LoginWrapper.TabIndex = 0;
             // 
             // LoginElementWrapper
@@ -181,7 +181,7 @@ namespace Aarohi.UserManagment
             LoginElementWrapper.Location = new Point(20, 130);
             LoginElementWrapper.Name = "LoginElementWrapper";
             LoginElementWrapper.Padding = new Padding(6);
-            LoginElementWrapper.Size = new Size(561, 155);
+            LoginElementWrapper.Size = new Size(561, 141);
             LoginElementWrapper.TabIndex = 2;
             // 
             // PanelLoginElementWrapper
@@ -202,7 +202,7 @@ namespace Aarohi.UserManagment
             PanelLoginElementWrapper.Location = new Point(6, 6);
             PanelLoginElementWrapper.Name = "PanelLoginElementWrapper";
             PanelLoginElementWrapper.Padding = new Padding(6);
-            PanelLoginElementWrapper.Size = new Size(549, 113);
+            PanelLoginElementWrapper.Size = new Size(549, 99);
             PanelLoginElementWrapper.TabIndex = 0;
             PanelLoginElementWrapper.Paint += PanelLoginElementWrapper_Paint;
             // 
@@ -224,7 +224,7 @@ namespace Aarohi.UserManagment
             LoginUsernameWrapper.Location = new Point(9, 9);
             LoginUsernameWrapper.Name = "LoginUsernameWrapper";
             LoginUsernameWrapper.Padding = new Padding(6);
-            LoginUsernameWrapper.Size = new Size(531, 41);
+            LoginUsernameWrapper.Size = new Size(531, 34);
             LoginUsernameWrapper.TabIndex = 0;
             // 
             // labelUsername
@@ -232,7 +232,7 @@ namespace Aarohi.UserManagment
             labelUsername.AutoSize = true;
             labelUsername.Font = new Font("Gadugi", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelUsername.ForeColor = Color.MediumBlue;
-            labelUsername.Location = new Point(9, 10);
+            labelUsername.Location = new Point(9, 6);
             labelUsername.Name = "labelUsername";
             labelUsername.Size = new Size(117, 21);
             labelUsername.TabIndex = 0;
@@ -242,7 +242,7 @@ namespace Aarohi.UserManagment
             // 
             comboBoxUsername.Font = new Font("Gadugi", 14.25F);
             comboBoxUsername.FormattingEnabled = true;
-            comboBoxUsername.Location = new Point(129, 6);
+            comboBoxUsername.Location = new Point(129, 2);
             comboBoxUsername.Margin = new Padding(0);
             comboBoxUsername.Name = "comboBoxUsername";
             comboBoxUsername.Size = new Size(390, 30);
@@ -266,17 +266,17 @@ namespace Aarohi.UserManagment
             extendedPanel1.GridAutoRowHeight = false;
             extendedPanel1.GridColumnCount = 1;
             extendedPanel1.GridRowCount = 2;
-            extendedPanel1.Location = new Point(9, 62);
+            extendedPanel1.Location = new Point(9, 55);
             extendedPanel1.Name = "extendedPanel1";
             extendedPanel1.Padding = new Padding(6);
-            extendedPanel1.Size = new Size(531, 41);
+            extendedPanel1.Size = new Size(531, 34);
             extendedPanel1.TabIndex = 1;
             // 
             // labelPassword
             // 
             labelPassword.Font = new Font("Gadugi", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelPassword.ForeColor = Color.MediumBlue;
-            labelPassword.Location = new Point(9, 10);
+            labelPassword.Location = new Point(9, 6);
             labelPassword.Name = "labelPassword";
             labelPassword.Size = new Size(115, 21);
             labelPassword.TabIndex = 0;
@@ -285,7 +285,7 @@ namespace Aarohi.UserManagment
             // textBox2
             // 
             textBox2.Font = new Font("Gadugi", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox2.Location = new Point(127, 4);
+            textBox2.Location = new Point(127, 1);
             textBox2.Margin = new Padding(0);
             textBox2.Name = "textBox2";
             textBox2.Size = new Size(325, 33);
@@ -295,7 +295,7 @@ namespace Aarohi.UserManagment
             // button1
             // 
             button1.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            button1.Location = new Point(452, 4);
+            button1.Location = new Point(452, 1);
             button1.Margin = new Padding(0);
             button1.Name = "button1";
             button1.Size = new Size(75, 33);
@@ -322,7 +322,7 @@ namespace Aarohi.UserManagment
             LoginShiftWrapper.Location = new Point(6, 6);
             LoginShiftWrapper.Name = "LoginShiftWrapper";
             LoginShiftWrapper.Padding = new Padding(6);
-            LoginShiftWrapper.Size = new Size(537, 101);
+            LoginShiftWrapper.Size = new Size(537, 87);
             LoginShiftWrapper.TabIndex = 2;
             LoginShiftWrapper.Visible = false;
             // 
@@ -330,7 +330,7 @@ namespace Aarohi.UserManagment
             // 
             labelShift.Font = new Font("Gadugi", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelShift.ForeColor = Color.MediumBlue;
-            labelShift.Location = new Point(9, 37);
+            labelShift.Location = new Point(9, 30);
             labelShift.Name = "labelShift";
             labelShift.Size = new Size(115, 26);
             labelShift.TabIndex = 0;
@@ -341,7 +341,7 @@ namespace Aarohi.UserManagment
             comboBoxShiftLogin.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxShiftLogin.Font = new Font("Gadugi", 14.25F);
             comboBoxShiftLogin.FormattingEnabled = true;
-            comboBoxShiftLogin.Location = new Point(127, 35);
+            comboBoxShiftLogin.Location = new Point(127, 28);
             comboBoxShiftLogin.Margin = new Padding(0);
             comboBoxShiftLogin.Name = "comboBoxShiftLogin";
             comboBoxShiftLogin.Size = new Size(390, 30);
@@ -359,7 +359,7 @@ namespace Aarohi.UserManagment
             PanelRememberMeWrapper.DisplayMode = ExtendedUI.DisplayMode.Flex;
             PanelRememberMeWrapper.Dock = DockStyle.Bottom;
             PanelRememberMeWrapper.JustifyContent = ExtendedUI.JustifyContent.Center;
-            PanelRememberMeWrapper.Location = new Point(6, 119);
+            PanelRememberMeWrapper.Location = new Point(6, 105);
             PanelRememberMeWrapper.Name = "PanelRememberMeWrapper";
             PanelRememberMeWrapper.Padding = new Padding(6);
             PanelRememberMeWrapper.Size = new Size(549, 30);
@@ -396,7 +396,7 @@ namespace Aarohi.UserManagment
             LoginButtonWrapper.GradientColors.Add(Color.MediumBlue);
             LoginButtonWrapper.GradientOpacity = 0.3F;
             LoginButtonWrapper.JustifyContent = ExtendedUI.JustifyContent.Center;
-            LoginButtonWrapper.Location = new Point(20, 285);
+            LoginButtonWrapper.Location = new Point(20, 271);
             LoginButtonWrapper.Name = "LoginButtonWrapper";
             LoginButtonWrapper.Padding = new Padding(0, 1, 0, 0);
             LoginButtonWrapper.Size = new Size(561, 72);
@@ -528,7 +528,7 @@ namespace Aarohi.UserManagment
             panelLoadder.Location = new Point(6, 6);
             panelLoadder.Name = "panelLoadder";
             panelLoadder.Padding = new Padding(80);
-            panelLoadder.Size = new Size(500, 397);
+            panelLoadder.Size = new Size(500, 383);
             panelLoadder.TabIndex = 0;
             // 
             // LoadingWrapper
@@ -539,7 +539,7 @@ namespace Aarohi.UserManagment
             LoadingWrapper.Location = new Point(80, 80);
             LoadingWrapper.Name = "LoadingWrapper";
             LoadingWrapper.Padding = new Padding(100, 190, 100, 190);
-            LoadingWrapper.Size = new Size(340, 237);
+            LoadingWrapper.Size = new Size(340, 223);
             LoadingWrapper.TabIndex = 9;
             LoadingWrapper.Visible = false;
             // 
@@ -578,7 +578,7 @@ namespace Aarohi.UserManagment
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.White;
-            ClientSize = new Size(1193, 469);
+            ClientSize = new Size(1193, 455);
             Controls.Add(PanelMainWrapperBorder);
             FormBorderStyle = FormBorderStyle.None;
             Name = "FormStartUp";
