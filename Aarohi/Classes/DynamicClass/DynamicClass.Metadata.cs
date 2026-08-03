@@ -729,7 +729,7 @@ ORDER BY c.column_id;";
 
             ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
             // Resolve column options using Extended Properties if available, otherwise fall back to Check Constraints.
-            ResolveColumnOptions(ci);
+            //ResolveColumnOptions(ci);
             ci.Options = ParseOptionsExtendedProperty(rd["Options"] as string);
             ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
             ci.Unit = "";
@@ -757,19 +757,19 @@ ORDER BY c.column_id;";
             return GetColumns();
         }
 
-        private void ResolveColumnOptions(ColumnInfo ci)
-        {
-            // 1. Try to load options from the database Extended Properties first
-            ci.Options = GetOptionsExtended(ci.Name);
+        //private void ResolveColumnOptions(ColumnInfo ci)
+        //{
+        //    // 1. Try to load options from the database Extended Properties first
+        //    ci.Options = GetOptionsExtended(ci.Name);
 
-            // 2. Fall back to parsing options from Check Constraints if no Extended Property exists
-            if (ci.Options == null || ci.Options.Length < 2)
-            {
-                ci.Options = TryParseOptionsFromCheck(ci.CheckDefinition, ci.Name);
-            }
+        //    // 2. Fall back to parsing options from Check Constraints if no Extended Property exists
+        //    if (ci.Options == null || ci.Options.Length < 2)
+        //    {
+        //        ci.Options = TryParseOptionsFromCheck(ci.CheckDefinition, ci.Name);
+        //    }
 
-            ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
-        }
+        //    ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
+        //}
 
         public DataTable ApplyDisplayNames(DataTable dt)
         {
