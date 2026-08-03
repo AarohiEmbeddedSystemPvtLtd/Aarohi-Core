@@ -128,7 +128,7 @@ namespace Aarohi.Classes
             if (lines.Count > maxLines)
             {
                 var head = lines.Take(maxLines).ToList();
-                head.Add($"… (+{lines.Count - maxLines} more)");
+                head.Add($"ï¿½ (+{lines.Count - maxLines} more)");
                 return string.Join(Environment.NewLine, head);
             }
             return string.Join(Environment.NewLine, lines);
