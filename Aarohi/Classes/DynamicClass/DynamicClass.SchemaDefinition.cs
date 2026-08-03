@@ -18,7 +18,7 @@ namespace Aarohi.Classes
     public sealed partial class DynamicClass
     {
 
-        #region DDL (TABLE/COLUMN CRUD)
+        #region DDL (TABLE/COLUMN CRUD) 
 
         #region Table Manager
 
@@ -455,6 +455,59 @@ ELSE
                    .ToArray();
         }
 
+        // Method: GetOptionsExtended
+        /// <summary>
+        /// Returns the current set of options from the column's Options extended property.
+        /// </summary>
+        /// <param name="column">Column name.</param>
+        /// <returns>Array of options; empty if none detected.</returns>
+        public string[] GetOptionsExtended(string column)
+        {
+            EnsureIdent(Schema);
+            EnsureIdent(Table);
+
+            if (string.IsNullOrWhiteSpace(column))
+                return Array.Empty<string>();
+
+            var physicalTable = ResolveTableName();
+            var physicalColumn = ResolveColumnName(column);
+
+            const string sql = @"
+SELECT CONVERT(nvarchar(max), ep.value)
+FROM sys.extended_properties ep
+JOIN sys.tables t 
+    ON t.object_id = ep.major_id
+JOIN sys.schemas s 
+    ON s.schema_id = t.schema_id
+JOIN sys.columns c 
+    ON c.object_id = t.object_id
+   AND c.column_id = ep.minor_id
+WHERE ep.name = @propertyName
+  AND s.name = @schemaName
+  AND t.name = @tableName
+  AND c.name = @columnName;";
+
+            using var cn = Open();
+            using var cmd = new SqlCommand(sql, cn);
+
+            cmd.Parameters.AddWithValue("@propertyName", "Options");
+            cmd.Parameters.AddWithValue("@schemaName", Schema);
+            cmd.Parameters.AddWithValue("@tableName", physicalTable);
+            cmd.Parameters.AddWithValue("@columnName", physicalColumn);
+
+            var value = cmd.ExecuteScalar()?.ToString();
+
+            if (string.IsNullOrWhiteSpace(value))
+                return Array.Empty<string>();
+
+            return value
+                .Split(',')
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         // Method: AddOption
         /// <summary>
         /// Adds a single option to a column's Options extended property.
@@ -468,7 +521,7 @@ ELSE
             if (string.IsNullOrWhiteSpace(option))
                 throw new ArgumentException("Option cannot be empty.", nameof(option));
 
-            var current = GetOptions(column).ToList();
+            var current = GetOptionsExtended(column).ToList();
             if (!current.Contains(option, StringComparer.OrdinalIgnoreCase))
                 current.Add(option);
 
@@ -484,7 +537,7 @@ ELSE
         /// <returns><c>true</c> on success.</returns>
         public bool RemoveOption(string column, string option)
         {
-            var list = GetOptions(column).ToList();
+            var list = GetOptionsExtended(column).ToList();
             var removed = list.RemoveAll(s => s.Equals(option, StringComparison.OrdinalIgnoreCase));
             if (removed == 0) return true; // nothing to do
 

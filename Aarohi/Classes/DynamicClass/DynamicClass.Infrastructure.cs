@@ -128,7 +128,7 @@ namespace Aarohi.Classes
             if (lines.Count > maxLines)
             {
                 var head = lines.Take(maxLines).ToList();
-                head.Add($"� (+{lines.Count - maxLines} more)");
+                head.Add($"… (+{lines.Count - maxLines} more)");
                 return string.Join(Environment.NewLine, head);
             }
             return string.Join(Environment.NewLine, lines);
@@ -184,6 +184,8 @@ namespace Aarohi.Classes
             public string? ShowUnit { get; set; }
             public string? ReportUnit { get; set; }
             public bool? DatagridShow { get; set; }
+            public bool? ShowInOnePhase { get; set; }
+            public bool? ShowInThreePhase { get; set; }
             public bool? HideInCrudForm { get; set; }
             public string? Format { get; set; }
             public string? Parameter { get; set; }
