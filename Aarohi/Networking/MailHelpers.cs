@@ -14,21 +14,44 @@ namespace Aarohi.Networking
 {
     public static class MailHelpers
     {
-        public async static Task<bool> HasValidEmailDomain(string email)
+        //public async static Task<bool> HasValidEmailDomain(string email)
+        //{
+        //    try
+        //    {
+        //        var domain = email.Split('@')[1];
+
+        //        var lookup = new LookupClient();
+        //        var result = await lookup.QueryAsync(domain, QueryType.MX);
+
+        //        var mxRecords = result.Answers.MxRecords();
+
+        //        return mxRecords != null && mxRecords.Any();
+        //    }
+        //    catch
+        //    {
+        //        return false;
+        //    }
+        //}
+        private static readonly LookupClient _lookup = new LookupClient(new LookupClientOptions
         {
+            Timeout = TimeSpan.FromSeconds(3),
+            Retries = 1,
+            UseCache = true
+        });
+
+        public static async Task<bool> HasValidEmailDomain(string email)
+        {
+            string domain = email[(email.IndexOf('@') + 1)..];
+
             try
             {
-                var domain = email.Split('@')[1];
+                var result = await _lookup.QueryAsync(domain, QueryType.MX);
 
-                var lookup = new LookupClient();
-                var result = await lookup.QueryAsync(domain, QueryType.MX);
-
-                var mxRecords = result.Answers.MxRecords();
-
-                return mxRecords != null && mxRecords.Any();
+                return result.Answers.MxRecords().Any();
             }
-            catch
+            catch (DnsResponseException)
             {
+                // Domain genuinely doesn't exist
                 return false;
             }
         }

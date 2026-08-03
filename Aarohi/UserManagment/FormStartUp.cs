@@ -5,11 +5,13 @@ using Aarohi.Globals;
 using Aarohi.Loadder;
 using Microsoft.Data.SqlClient;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -46,7 +48,8 @@ namespace Aarohi.UserManagment
         private float _loginStartOpacity = 0.0f;
         private float _loginEndOpacity = 0.30f;
         private bool _loginFadeInitialized = false;
-        DynamicClass _userClass;
+
+        private readonly DynamicClass _userClass;
         private string _LoginDataColumnName = string.Empty;
         private string _PasswordDataColumnName = string.Empty;
 
@@ -63,23 +66,210 @@ namespace Aarohi.UserManagment
 
         private AarohiLoadder? loader;
 
-        // tweakable
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
         public double GuideFadeDelay { get; set; } = 0.10;
 
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
         public double GuideFadeDuration { get; set; } = 0.60;
 
         #endregion
 
-        private readonly string LoginInfoPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Aarohi", "IPTS_Git", "Login.info");
+        #region Shift Selection
 
-        public event EventHandler<LoginSuccessEventArgs>? LoginSuccess;
+        private readonly List<ShiftLoginItem> _configuredShifts =
+            new List<ShiftLoginItem>();
+
+        /// <summary>
+        /// Generic shift information supplied by the main application.
+        /// The class library does not access IMTS Globals or Shift_Master.
+        /// </summary>
+        public sealed class ShiftLoginItem
+        {
+            public int ShiftId { get; set; }
+
+            public string ShiftName { get; set; } =
+                string.Empty;
+
+            public TimeSpan StartTime { get; set; }
+
+            public TimeSpan EndTime { get; set; }
+
+            public override string ToString()
+            {
+                return ShiftName;
+            }
+        }
+
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
+        public int SelectedShiftId
+        {
+            get
+            {
+                return GetSelectedShiftItem()?.ShiftId ?? 0;
+            }
+        }
+
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
+        public string SelectedShiftName
+        {
+            get
+            {
+                return GetSelectedShiftItem()?.ShiftName ??
+                       string.Empty;
+            }
+        }
+
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
+        public TimeSpan SelectedShiftStartTime
+        {
+            get
+            {
+                return GetSelectedShiftItem()?.StartTime ??
+                       TimeSpan.Zero;
+            }
+        }
+
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
+        public TimeSpan SelectedShiftEndTime
+        {
+            get
+            {
+                return GetSelectedShiftItem()?.EndTime ??
+                       TimeSpan.Zero;
+            }
+        }
+
+        /// <summary>
+        /// Called by the consuming application after FormStartUp is created.
+        /// It enables the shift row and fills the dropdown.
+        /// </summary>
+        public void ConfigureShiftSelection(
+            IEnumerable<ShiftLoginItem> shifts,
+            int preferredShiftId = 0)
+        {
+            _configuredShifts.Clear();
+
+            if (shifts != null)
+            {
+                _configuredShifts.AddRange(
+                    shifts
+                        .Where(x =>
+                            x != null &&
+                            x.ShiftId > 0 &&
+                            !string.IsNullOrWhiteSpace(
+                                x.ShiftName))
+                        .GroupBy(x => x.ShiftId)
+                        .Select(group => group.First())
+                        .OrderBy(x => x.StartTime)
+                        .ThenBy(x => x.ShiftName));
+            }
+
+            comboBoxShiftLogin.BeginUpdate();
+
+            try
+            {
+                comboBoxShiftLogin.Items.Clear();
+
+                //comboBoxShiftLogin.Items.Add(
+                //    new ShiftLoginItem
+                //    {
+                //        ShiftId = 0,
+                //        ShiftName = "-- Select Shift --"
+                //    });
+
+                foreach (ShiftLoginItem shift in _configuredShifts)
+                    comboBoxShiftLogin.Items.Add(shift);
+
+                int selectedIndex = 0;
+
+                if (preferredShiftId > 0)
+                {
+                    for (int index = 1;
+                         index < comboBoxShiftLogin.Items.Count;
+                         index++)
+                    {
+                        if (comboBoxShiftLogin.Items[index]
+                            is ShiftLoginItem item &&
+                            item.ShiftId == preferredShiftId)
+                        {
+                            selectedIndex = index;
+                            break;
+                        }
+                    }
+                }
+
+                comboBoxShiftLogin.SelectedIndex =
+                    selectedIndex;
+            }
+            finally
+            {
+                comboBoxShiftLogin.EndUpdate();
+            }
+
+            PanelLoginElementWrapper.GridRowCount = 3;
+            LoginShiftWrapper.Visible = true;
+
+            // Give the new third row enough vertical space.
+            Height = 570;
+            CenterToScreen();
+
+            PanelLoginElementWrapper.PerformLayout();
+            LoginElementWrapper.PerformLayout();
+            LoginWrapper.PerformLayout();
+        }
+
+        /// <summary>
+        /// Shift selection is validated separately from username/password.
+        /// </summary>
+        public bool TryGetSelectedShift(
+            out ShiftLoginItem selectedShift)
+        {
+            ShiftLoginItem? item =
+                GetSelectedShiftItem();
+
+            if (item == null ||
+                item.ShiftId <= 0 ||
+                string.IsNullOrWhiteSpace(item.ShiftName))
+            {
+                selectedShift =
+                    new ShiftLoginItem();
+
+                return false;
+            }
+
+            selectedShift = item;
+            return true;
+        }
+
+        private ShiftLoginItem? GetSelectedShiftItem()
+        {
+            return comboBoxShiftLogin.SelectedItem
+                as ShiftLoginItem;
+        }
+
+        #endregion
+
+        private readonly string LoginInfoPath =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.ApplicationData),
+                "Aarohi",
+                "IPTS_Git",
+                "Login.info");
+
+        public event EventHandler<LoginSuccessEventArgs>?
+            LoginSuccess;
 
         private bool _hashingEnabled = true;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Hidden)]
         public bool HashingEnabled
         {
             get => _hashingEnabled;
@@ -89,48 +279,91 @@ namespace Aarohi.UserManagment
         public sealed class LoginSuccessEventArgs : EventArgs
         {
             public string UserName { get; }
+
             public string Password { get; }
-            public LoginSuccessEventArgs(string userName, string passWord) { UserName = userName; Password = passWord; }
+
+            public LoginSuccessEventArgs(
+                string userName,
+                string passWord)
+            {
+                UserName = userName;
+                Password = passWord;
+            }
         }
 
-        private bool _loginFlowRunning = false; // prevents double trigger
+        private bool _loginFlowRunning = false;
         private bool _isPasswordVisible = false;
-        public FormStartUp(string dbo, string userTabelName, string LoginDataColumnName, string PasswordDataColumnName, bool WantRememberMe = false)
+
+        public FormStartUp(
+            string dbo,
+            string userTabelName,
+            string LoginDataColumnName,
+            string PasswordDataColumnName,
+            bool WantRememberMe = false)
         {
             InitializeComponent();
+
             textBox2.UseSystemPasswordChar = true;
             button1.Text = "Show";
             checkBoxRememberMe.Visible = WantRememberMe;
 
+            // Hidden until the main project supplies shift records.
+            LoginShiftWrapper.Visible = false;
+
             if (string.IsNullOrEmpty(dbo))
                 throw new ArgumentNullException(nameof(dbo));
+
             if (string.IsNullOrEmpty(userTabelName))
-                throw new ArgumentNullException(nameof(userTabelName));
+                throw new ArgumentNullException(
+                    nameof(userTabelName));
 
-            if (string.IsNullOrEmpty(LoginDataColumnName))
-                throw new ArgumentNullException(nameof(LoginDataColumnName));
-            if (string.IsNullOrEmpty(PasswordDataColumnName))
-                throw new ArgumentNullException(nameof(PasswordDataColumnName));
+            if (string.IsNullOrEmpty(
+                LoginDataColumnName))
+            {
+                throw new ArgumentNullException(
+                    nameof(LoginDataColumnName));
+            }
 
-            if (string.IsNullOrEmpty(DynamicClass.Soft_Name))
-                throw new ArgumentNullException(nameof(DynamicClass.Soft_Name));
+            if (string.IsNullOrEmpty(
+                PasswordDataColumnName))
+            {
+                throw new ArgumentNullException(
+                    nameof(PasswordDataColumnName));
+            }
 
-            _userClass = new DynamicClass("dbo", userTabelName);
+            if (string.IsNullOrEmpty(
+                DynamicClass.Soft_Name))
+            {
+                throw new ArgumentNullException(
+                    nameof(DynamicClass.Soft_Name));
+            }
 
-            labelSoftName.Text = DynamicClass.Soft_Name;
-            _LoginDataColumnName = LoginDataColumnName;
-            _PasswordDataColumnName = PasswordDataColumnName;
+            _userClass =
+                new DynamicClass(
+                    dbo,
+                    userTabelName);
 
-            // Make overlapped wrappers behave like a "single page"
-            if (LoginWrapper != null) LoginWrapper.Dock = DockStyle.Fill;
-            if (LoadingWrapper != null) LoadingWrapper.Dock = DockStyle.Fill;
+            labelSoftName.Text =
+                DynamicClass.Soft_Name;
+
+            _LoginDataColumnName =
+                LoginDataColumnName;
+
+            _PasswordDataColumnName =
+                PasswordDataColumnName;
+
+            if (LoginWrapper != null)
+                LoginWrapper.Dock = DockStyle.Fill;
+
+            if (LoadingWrapper != null)
+                LoadingWrapper.Dock = DockStyle.Fill;
 
             panelLoadder.Width = 1130;
 
-            // initial state
             LoginWrapper.Visible = false;
             LoginWrapper.Enabled = false;
-            LoginWrapper.GradientOpacity = _loginStartOpacity;
+            LoginWrapper.GradientOpacity =
+                _loginStartOpacity;
 
             LoadingWrapper.Visible = false;
             LoadingWrapper.Enabled = false;
@@ -141,74 +374,117 @@ namespace Aarohi.UserManagment
                 ControlStyles.ResizeRedraw |
                 ControlStyles.UserPaint,
                 true);
+
             UpdateStyles();
 
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle =
+                FormBorderStyle.None;
+
+            StartPosition =
+                FormStartPosition.CenterScreen;
+
             DoubleBuffered = true;
 
             Width = _startWidth;
             Height = 500;
             CenterToScreen();
 
-            _timer = new Timer { Interval = 15 };
+            _timer =
+                new Timer
+                {
+                    Interval = 15
+                };
+
             _timer.Tick += Timer_Tick;
 
             Shown += FormStartUp_Shown;
             Load += FormStartUp_Load;
         }
 
-        public FormStartUp(double guideFadeDuration, string dbo, string userTabelName, string LoginDataColumnName, string PasswordDataColumnName) : this(dbo, userTabelName, LoginDataColumnName, PasswordDataColumnName)
+        public FormStartUp(
+            double guideFadeDuration,
+            string dbo,
+            string userTabelName,
+            string LoginDataColumnName,
+            string PasswordDataColumnName)
+            : this(
+                dbo,
+                userTabelName,
+                LoginDataColumnName,
+                PasswordDataColumnName)
         {
-            GuideFadeDuration = guideFadeDuration;
+            GuideFadeDuration =
+                guideFadeDuration;
         }
 
         protected override CreateParams CreateParams
         {
             get
             {
-                var cp = base.CreateParams;
-                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED reduces flicker
+                CreateParams cp =
+                    base.CreateParams;
+
+                cp.ExStyle |=
+                    0x02000000;
+
                 return cp;
             }
         }
 
-        private void FormStartUp_Load(object? sender, EventArgs e)
+        private void FormStartUp_Load(
+            object? sender,
+            EventArgs e)
         {
-            loader = new AarohiLoadder
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White,
-                Size = new Size(Width, 1000),
-                ShowGuideLines = false
-            };
+            loader =
+                new AarohiLoadder
+                {
+                    Dock = DockStyle.Fill,
+                    BackColor = Color.White,
+                    Size = new Size(
+                        Width,
+                        1000),
+                    ShowGuideLines = false
+                };
 
             if (!panelLoadder.Controls.Contains(loader))
                 panelLoadder.Controls.Add(loader);
 
-            ApplyRoundedCorners(_cornerRadius);
+            ApplyRoundedCorners(
+                _cornerRadius);
 
+            _stage =
+                StartupStage.FormExpand;
 
-            _stage = StartupStage.FormExpand;
             _stopwatch.Restart();
             _timer.Start();
-
-
         }
 
-        private void FormStartUp_Shown(object? sender, EventArgs e)
+        private void FormStartUp_Shown(
+            object? sender,
+            EventArgs e)
         {
             Shown -= FormStartUp_Shown;
-            comboBoxUsername.Items.AddRange(_userClass.GetColumnValues(_LoginDataColumnName));
 
-            // Added
-            if (RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC", false))
+            comboBoxUsername.Items.AddRange(
+                _userClass.GetColumnValues(
+                    _LoginDataColumnName));
+
+            if (RegistryHelper.LoadBool(
+                RegistryHelper.storeLocs.Credentials,
+                "IsDevPC",
+                false))
             {
-                comboBoxUsername.Items.Add(AGLobals.Utils.DevName);
-                comboBoxUsername.SelectedItem = AGLobals.Utils.DevName;
-                textBox2.Text = DateTime.Now.ToString("ddMMyyyyHH");
+                comboBoxUsername.Items.Add(
+                    AGLobals.Utils.DevName);
+
+                comboBoxUsername.SelectedItem =
+                    AGLobals.Utils.DevName;
+
+                textBox2.Text =
+                    DateTime.Now.ToString(
+                        "ddMMyyyyHH");
             }
-            // try auto login after UI is ready
+
             _ = TryAutoLoginAsync();
         }
 
@@ -216,23 +492,24 @@ namespace Aarohi.UserManagment
         {
             try
             {
-                // small delay ensures animation can start cleanly (optional)
                 await Task.Delay(50);
 
-                // Only attempt auto-login if form is not disposed
-                if (IsDisposed) return;
+                if (IsDisposed)
+                    return;
 
                 LoadStoredValues();
             }
             catch
             {
-                // ignore auto-login failures silently (you can log if needed)
+                // Existing behavior: ignore stored-login errors.
             }
         }
 
         #region Animation
 
-        private void Timer_Tick(object? sender, EventArgs e)
+        private void Timer_Tick(
+            object? sender,
+            EventArgs e)
         {
             switch (_stage)
             {
@@ -261,19 +538,34 @@ namespace Aarohi.UserManagment
 
         private void HandleFormExpand()
         {
-            double elapsed = _stopwatch.ElapsedMilliseconds;
-            double t = Math.Min(1.0, elapsed / _durationMs);
-            double eased = EaseInOut(t);
+            double elapsed =
+                _stopwatch.ElapsedMilliseconds;
 
-            int newWidth = _startWidth + (int)((_targetWidth - _startWidth) * eased);
+            double t =
+                Math.Min(
+                    1.0,
+                    elapsed / _durationMs);
 
-            int centerX = Left + (Width / 2);
+            double eased =
+                EaseInOut(t);
+
+            int newWidth =
+                _startWidth +
+                (int)(
+                    (_targetWidth - _startWidth) *
+                    eased);
+
+            int centerX =
+                Left + Width / 2;
+
             Width = newWidth;
-            Left = centerX - (Width / 2);
+            Left = centerX - Width / 2;
 
-            ApplyRoundedCorners(_cornerRadius);
+            ApplyRoundedCorners(
+                _cornerRadius);
 
-            if (!_loaderStarted && t >= _loaderStartPercent)
+            if (!_loaderStarted &&
+                t >= _loaderStartPercent)
             {
                 _loaderStarted = true;
                 StartLoaderAnimation();
@@ -281,16 +573,21 @@ namespace Aarohi.UserManagment
 
             if (t >= 1.0)
             {
-                _stage = StartupStage.LoaderWait;
+                _stage =
+                    StartupStage.LoaderWait;
+
                 _stopwatch.Restart();
             }
         }
 
         private void HandleLoaderWait()
         {
-            if (_stopwatch.ElapsedMilliseconds >= _loaderWaitMs)
+            if (_stopwatch.ElapsedMilliseconds >=
+                _loaderWaitMs)
             {
-                _stage = StartupStage.PanelShrink;
+                _stage =
+                    StartupStage.PanelShrink;
+
                 _stopwatch.Restart();
                 _panelShrinkInitialized = false;
             }
@@ -300,25 +597,54 @@ namespace Aarohi.UserManagment
         {
             if (!_panelShrinkInitialized)
             {
-                panelLoadder.Dock = DockStyle.Left;
-                _panelStartWidth = panelLoadder.Width;
-                panelLoadder.Left = (ClientSize.Width - panelLoadder.Width) / 2;
+                panelLoadder.Dock =
+                    DockStyle.Left;
+
+                _panelStartWidth =
+                    panelLoadder.Width;
+
+                panelLoadder.Left =
+                    (ClientSize.Width -
+                     panelLoadder.Width) / 2;
+
                 _panelShrinkInitialized = true;
             }
 
-            double elapsed = _stopwatch.ElapsedMilliseconds;
-            double t = Math.Min(1.0, elapsed / _panelShrinkDurationMs);
-            double eased = EaseInOut(t);
+            double elapsed =
+                _stopwatch.ElapsedMilliseconds;
 
-            int newWidth = _panelStartWidth + (int)((_panelTargetWidth - _panelStartWidth) * eased);
+            double t =
+                Math.Min(
+                    1.0,
+                    elapsed /
+                    _panelShrinkDurationMs);
 
-            int centerX = panelLoadder.Left + (panelLoadder.Width / 2);
-            panelLoadder.Width = newWidth;
-            panelLoadder.Left = centerX - (panelLoadder.Width / 2);
+            double eased =
+                EaseInOut(t);
+
+            int newWidth =
+                _panelStartWidth +
+                (int)(
+                    (_panelTargetWidth -
+                     _panelStartWidth) *
+                    eased);
+
+            int centerX =
+                panelLoadder.Left +
+                panelLoadder.Width / 2;
+
+            panelLoadder.Width =
+                newWidth;
+
+            panelLoadder.Left =
+                centerX -
+                panelLoadder.Width / 2;
 
             if (t >= 1.0)
             {
-                _stage = StartupStage.LoginFadeIn;
+                _stage =
+                    StartupStage.LoginFadeIn;
+
                 _stopwatch.Restart();
                 _loginFadeInitialized = false;
             }
@@ -329,54 +655,127 @@ namespace Aarohi.UserManagment
             if (!_loginFadeInitialized)
             {
                 ShowLoginUi();
-                LoginWrapper.GradientOpacity = _loginStartOpacity;
+
+                LoginWrapper.GradientOpacity =
+                    _loginStartOpacity;
+
                 _loginFadeInitialized = true;
             }
 
-            double elapsed = _stopwatch.ElapsedMilliseconds;
-            double t = Math.Min(1.0, elapsed / _loginFadeDurationMs);
-            double eased = EaseInOut(t);
+            double elapsed =
+                _stopwatch.ElapsedMilliseconds;
 
-            LoginWrapper.GradientOpacity = (float)(
-                _loginStartOpacity + (_loginEndOpacity - _loginStartOpacity) * eased
-            );
+            double t =
+                Math.Min(
+                    1.0,
+                    elapsed /
+                    _loginFadeDurationMs);
+
+            double eased =
+                EaseInOut(t);
+
+            LoginWrapper.GradientOpacity =
+                (float)(
+                    _loginStartOpacity +
+                    (_loginEndOpacity -
+                     _loginStartOpacity) *
+                    eased);
 
             if (t >= 1.0)
             {
-                LoginWrapper.GradientOpacity = _loginEndOpacity;
-                _stage = StartupStage.Finished;
+                LoginWrapper.GradientOpacity =
+                    _loginEndOpacity;
+
+                _stage =
+                    StartupStage.Finished;
+
                 _stopwatch.Stop();
             }
         }
 
-        private static double EaseInOut(double t) => 0.5 - 0.5 * Math.Cos(Math.PI * t);
-
-        private void ApplyRoundedCorners(int radius)
+        private static double EaseInOut(
+            double t)
         {
-            if (Width <= 0 || Height <= 0) return;
+            return 0.5 -
+                   0.5 *
+                   Math.Cos(Math.PI * t);
+        }
 
-            Rectangle rect = new Rectangle(0, 0, Width, Height);
-            using (GraphicsPath path = new GraphicsPath())
+        private void ApplyRoundedCorners(
+            int radius)
+        {
+            if (Width <= 0 ||
+                Height <= 0)
             {
-                path.AddArc(rect.X, rect.Y, radius, radius, 180, 90);
-                path.AddArc(rect.Right - radius, rect.Y, radius, radius, 270, 90);
-                path.AddArc(rect.Right - radius, rect.Bottom - radius, radius, radius, 0, 90);
-                path.AddArc(rect.X, rect.Bottom - radius, radius, radius, 90, 90);
-                path.CloseAllFigures();
-
-                Region?.Dispose();
-                Region = new Region(path);
+                return;
             }
+
+            Rectangle rect =
+                new Rectangle(
+                    0,
+                    0,
+                    Width,
+                    Height);
+
+            using GraphicsPath path =
+                new GraphicsPath();
+
+            path.AddArc(
+                rect.X,
+                rect.Y,
+                radius,
+                radius,
+                180,
+                90);
+
+            path.AddArc(
+                rect.Right - radius,
+                rect.Y,
+                radius,
+                radius,
+                270,
+                90);
+
+            path.AddArc(
+                rect.Right - radius,
+                rect.Bottom - radius,
+                radius,
+                radius,
+                0,
+                90);
+
+            path.AddArc(
+                rect.X,
+                rect.Bottom - radius,
+                radius,
+                radius,
+                90,
+                90);
+
+            path.CloseAllFigures();
+
+            Region?.Dispose();
+            Region = new Region(path);
         }
 
         private void StartLoaderAnimation()
         {
-            if (loader == null) return;
+            if (loader == null)
+                return;
 
-            loader.SetEasing(AarohiLoadder.EasingType.EaseOut);
-            loader.fillRevealMode = AarohiLoadder.RevealMode.Radial;
-            loader.SetFillTiming(AarohiLoadder.FillTimingMode.AfterStrokes, 0.1);
-            loader.SetFillEasing(AarohiLoadder.EasingType.EaseInOut);
+            loader.SetEasing(
+                AarohiLoadder.EasingType.EaseOut);
+
+            loader.fillRevealMode =
+                AarohiLoadder.RevealMode.Radial;
+
+            loader.SetFillTiming(
+                AarohiLoadder.FillTimingMode.AfterStrokes,
+                0.1);
+
+            loader.SetFillEasing(
+                AarohiLoadder.EasingType.EaseInOut);
+
             loader.SetFillOnTop(true);
             loader.SetGlobalDuration(2.0);
 
@@ -395,40 +794,36 @@ namespace Aarohi.UserManagment
 
         #endregion
 
-        #region UI Switching (Fix overlap)
+        #region UI Switching
 
         private void ShowLoginUi()
         {
-            // Loading OFF
             LoadingWrapper.Visible = false;
             LoadingWrapper.Enabled = false;
 
-            // Login ON
             LoginWrapper.Visible = true;
             LoginWrapper.Enabled = true;
             LoginWrapper.BringToFront();
 
-            // force redraw so no ghosting
             Invalidate(true);
             Update();
+
             LoginWrapper.Invalidate(true);
             LoginWrapper.Refresh();
         }
 
         private void ShowLoadingUi()
         {
-            // Login OFF (disable too, so it can't paint/capture clicks)
             LoginWrapper.Visible = false;
             LoginWrapper.Enabled = false;
 
-            // Loading ON
             LoadingWrapper.Visible = true;
             LoadingWrapper.Enabled = true;
             LoadingWrapper.BringToFront();
 
-            // force redraw so overlapped panels don't show through
             Invalidate(true);
             Update();
+
             LoadingWrapper.Invalidate(true);
             LoadingWrapper.Refresh();
         }
@@ -437,51 +832,95 @@ namespace Aarohi.UserManagment
 
         #region Login
 
-        private void LoginButton_Click(object sender, EventArgs e)
+        private void LoginButton_Click(
+            object sender,
+            EventArgs e)
         {
-            if (_loginFlowRunning) return;
+            if (_loginFlowRunning)
+                return;
 
-            string userName = comboBoxUsername.Text;
-            string password = textBox2.Text.Trim();
+            string userName =
+                comboBoxUsername.Text;
 
-            if (string.IsNullOrWhiteSpace(userName))
+            string password =
+                textBox2.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(
+                userName))
             {
-                MessageBox.Show("Please enter user name.", "Validation",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    "Please enter user name.",
+                    "Validation",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(password))
+            if (string.IsNullOrWhiteSpace(
+                password))
             {
-                MessageBox.Show("Please enter password.", "Validation",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    "Please enter password.",
+                    "Validation",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
                 return;
             }
 
-            if (HashingEnabled && userName != AGLobals.Utils.DevName)
-                password = UserManager.HashPassword(password);
+            if (HashingEnabled &&
+                userName != AGLobals.Utils.DevName)
+            {
+                password =
+                    UserManager.HashPassword(
+                        password);
+            }
 
-            if (!TryAuthenticate(userName, password))
+            if (!TryAuthenticate(
+                userName,
+                password))
+            {
                 return;
+            }
 
-            HandleRememberMe(userName, password);
+            HandleRememberMe(
+                userName,
+                password);
 
-            _loginFlowRunning = true; // block further clicks until Program finishes
-            LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(userName, password));
+            _loginFlowRunning = true;
+
+            LoginSuccess?.Invoke(
+                this,
+                new LoginSuccessEventArgs(
+                    userName,
+                    password));
         }
 
-        private void HandleRememberMe(string userName, string password)
+        private void HandleRememberMe(
+            string userName,
+            string password)
         {
             if (checkBoxRememberMe.Checked)
             {
-                if (!string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(
+                    userName,
+                    AGLobals.Utils.DevName,
+                    StringComparison.OrdinalIgnoreCase))
                 {
-                    SetRegistryHashes(userName, password);
-                    SaveInfo(userName, password);
+                    SetRegistryHashes(
+                        userName,
+                        password);
+
+                    SaveInfo(
+                        userName,
+                        password);
                 }
                 else
                 {
-                    SetRegistryHashes(string.Empty, string.Empty);
+                    SetRegistryHashes(
+                        string.Empty,
+                        string.Empty);
 
                     if (File.Exists(LoginInfoPath))
                         File.Delete(LoginInfoPath);
@@ -489,64 +928,104 @@ namespace Aarohi.UserManagment
             }
             else
             {
-                SetRegistryHashes(string.Empty, string.Empty);
+                SetRegistryHashes(
+                    string.Empty,
+                    string.Empty);
             }
         }
 
-        private bool TryAuthenticate(string userName, string password)
+        private bool TryAuthenticate(
+            string userName,
+            string password)
         {
             try
             {
-                if (userName == AGLobals.Utils.DevName)
+                if (userName ==
+                    AGLobals.Utils.DevName)
                 {
-                    if (password == DateTime.Now.ToString("ddMMyyyyHH"))
+                    if (password ==
+                        DateTime.Now.ToString(
+                            "ddMMyyyyHH"))
+                    {
                         return true;
+                    }
 
-                    MessageBox.Show("Incorrect password.", "Login Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(
+                        "Incorrect password.",
+                        "Login Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+
                     return false;
                 }
 
+                Dictionary<string, object> values =
+                    _userClass.GetRowAsDictionary(
+                        _LoginDataColumnName,
+                        userName);
 
-                var values = _userClass.GetRowAsDictionary(_LoginDataColumnName, userName);
-
-                if (values == null || values.Count == 0)
+                if (values == null ||
+                    values.Count == 0)
                 {
-                    MessageBox.Show("Username not found.", "Login Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(
+                        "Username not found.",
+                        "Login Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+
                     return false;
                 }
 
-                var dbUserName = values[_LoginDataColumnName]?.ToString() ?? string.Empty;
-                var dbPassword = values[_PasswordDataColumnName]?.ToString() ?? string.Empty;
+                string dbUserName =
+                    values[_LoginDataColumnName]
+                        ?.ToString() ??
+                    string.Empty;
 
+                string dbPassword =
+                    values[_PasswordDataColumnName]
+                        ?.ToString() ??
+                    string.Empty;
 
-                if (!string.Equals(userName, dbUserName, StringComparison.Ordinal))
+                if (!string.Equals(
+                    userName,
+                    dbUserName,
+                    StringComparison.Ordinal))
                 {
-                    MessageBox.Show("Username does not match.", "Login Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(
+                        "Username does not match.",
+                        "Login Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+
                     return false;
                 }
 
-
-                if (!string.Equals(password, dbPassword, StringComparison.Ordinal))
+                if (!string.Equals(
+                    password,
+                    dbPassword,
+                    StringComparison.Ordinal))
                 {
-                    MessageBox.Show("Incorrect password.", "Login Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(
+                        "Incorrect password.",
+                        "Login Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+
                     return false;
                 }
-
-
 
                 return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "An error occurred while checking login. Please contact support.\n\n" + ex.Message,
+                    "An error occurred while checking login. " +
+                    "Please contact support.\n\n" +
+                    ex.Message,
                     "Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
+
                 return false;
             }
         }
@@ -558,77 +1037,146 @@ namespace Aarohi.UserManagment
                 if (!File.Exists(LoginInfoPath))
                     return false;
 
-                string[] lines = File.ReadAllLines(LoginInfoPath);
+                string[] lines =
+                    File.ReadAllLines(
+                        LoginInfoPath);
+
                 if (lines.Length < 2)
                     return false;
 
-                string encryptedName = lines[0];
-                string encryptedPassword = lines[1];
+                string encryptedName =
+                    lines[0];
 
-                string realName = RegistryHelper.Decrypt(encryptedName);
-                string realPassword = RegistryHelper.Decrypt(encryptedPassword);
+                string encryptedPassword =
+                    lines[1];
+
+                string realName =
+                    RegistryHelper.Decrypt(
+                        encryptedName);
+
+                string realPassword =
+                    RegistryHelper.Decrypt(
+                        encryptedPassword);
 
                 if (string.IsNullOrWhiteSpace(realName) ||
                     string.IsNullOrWhiteSpace(realPassword))
-                    return false;
-
-                // restore UI
-                comboBoxUsername.SelectedItem = realName;
-                textBox2.Text = realPassword;
-                checkBoxRememberMe.Checked = true;
-
-                if (!TryAuthenticate(realName, realPassword))
                 {
-                    // If login fails → remove corrupted file
+                    return false;
+                }
+
+                comboBoxUsername.SelectedItem =
+                    realName;
+
+                textBox2.Text =
+                    realPassword;
+
+                checkBoxRememberMe.Checked =
+                    true;
+
+                if (!TryAuthenticate(
+                    realName,
+                    realPassword))
+                {
                     File.Delete(LoginInfoPath);
                     return false;
                 }
 
-                if (_loginFlowRunning) return true;
+                if (_loginFlowRunning)
+                    return true;
 
                 _loginFlowRunning = true;
-                LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(realName, realPassword));
+
+                LoginSuccess?.Invoke(
+                    this,
+                    new LoginSuccessEventArgs(
+                        realName,
+                        realPassword));
+
                 return true;
             }
             catch
             {
-                // if anything wrong → delete file
-                try { File.Delete(LoginInfoPath); } catch { }
+                try
+                {
+                    File.Delete(LoginInfoPath);
+                }
+                catch
+                {
+                }
+
                 return false;
             }
         }
 
-        public void SaveInfo(string userName, string password)
+        public void SaveInfo(
+            string userName,
+            string password)
         {
-            string encryptedName = RegistryHelper.Encrypt(userName);
-            string encryptedPassword = RegistryHelper.Encrypt(password);
+            string encryptedName =
+                RegistryHelper.Encrypt(
+                    userName);
 
-            string? folder = Path.GetDirectoryName(LoginInfoPath);
-            if (!string.IsNullOrEmpty(folder) && !Directory.Exists(folder))
+            string encryptedPassword =
+                RegistryHelper.Encrypt(
+                    password);
+
+            string? folder =
+                Path.GetDirectoryName(
+                    LoginInfoPath);
+
+            if (!string.IsNullOrEmpty(folder) &&
+                !Directory.Exists(folder))
             {
                 Directory.CreateDirectory(folder);
             }
 
-            File.WriteAllText(LoginInfoPath, encryptedName + Environment.NewLine + encryptedPassword);
+            File.WriteAllText(
+                LoginInfoPath,
+                encryptedName +
+                Environment.NewLine +
+                encryptedPassword);
         }
 
-        private void SetRegistryHashes(string userName, string password)
+        private void SetRegistryHashes(
+            string userName,
+            string password)
         {
-            using (var sha = SHA256.Create())
-            {
-                byte[] userBytes = Encoding.UTF8.GetBytes(userName ?? string.Empty);
-                string userHash = BitConverter.ToString(sha.ComputeHash(userBytes)).Replace("-", "");
+            using SHA256 sha =
+                SHA256.Create();
 
-                byte[] passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
-                string passwordHash = BitConverter.ToString(sha.ComputeHash(passwordBytes)).Replace("-", "");
+            byte[] userBytes =
+                Encoding.UTF8.GetBytes(
+                    userName ??
+                    string.Empty);
 
-                //Added
-                RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXU", userHash);
-                RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXP", passwordHash);
-            }
+            string userHash =
+                BitConverter.ToString(
+                    sha.ComputeHash(
+                        userBytes))
+                .Replace("-", "");
+
+            byte[] passwordBytes =
+                Encoding.UTF8.GetBytes(
+                    password ??
+                    string.Empty);
+
+            string passwordHash =
+                BitConverter.ToString(
+                    sha.ComputeHash(
+                        passwordBytes))
+                .Replace("-", "");
+
+            RegistryHelper.SaveString(
+                RegistryHelper.storeLocs.Credentials,
+                "AESPLXU",
+                userHash);
+
+            RegistryHelper.SaveString(
+                RegistryHelper.storeLocs.Credentials,
+                "AESPLXP",
+                passwordHash);
         }
 
-        // Call this when Program.cs finishes (success or fail) to re-enable login click
         public void ResetLoginTrigger()
         {
             _loginFlowRunning = false;
@@ -636,26 +1184,50 @@ namespace Aarohi.UserManagment
 
         #endregion
 
-        #region Post-login Loading (Fix overlap + safe UI)
+        #region Post-login Loading
 
-        public async Task<bool> StartPostLoginLoadingAsync(Func<IProgress<StartupProgress>, Task> loadFunc)
+        public async Task<bool>
+            StartPostLoginLoadingAsync(
+                Func<IProgress<StartupProgress>, Task>
+                    loadFunc)
         {
             if (InvokeRequired)
-                return await (Task<bool>)Invoke(new Func<Task<bool>>(() => StartPostLoginLoadingAsync(loadFunc)));
+            {
+                return await
+                    (Task<bool>)Invoke(
+                        new Func<Task<bool>>(
+                            () =>
+                                StartPostLoginLoadingAsync(
+                                    loadFunc)));
+            }
 
             ShowLoadingUi();
 
             progressBar1.Minimum = 0;
             progressBar1.Maximum = 100;
             progressBar1.Value = 0;
-            lblStatus.Text = "Starting...";
 
-            var progress = new Progress<StartupProgress>(p =>
-            {
-                int v = Math.Max(0, Math.Min(100, p.Percent));
-                progressBar1.Value = v;
-                lblStatus.Text = p.Message ?? "";
-            });
+            lblStatus.Text =
+                "Starting...";
+
+            Progress<StartupProgress> progress =
+                new Progress<StartupProgress>(
+                    p =>
+                    {
+                        int value =
+                            Math.Max(
+                                0,
+                                Math.Min(
+                                    100,
+                                    p.Percent));
+
+                        progressBar1.Value =
+                            value;
+
+                        lblStatus.Text =
+                            p.Message ??
+                            string.Empty;
+                    });
 
             try
             {
@@ -663,19 +1235,21 @@ namespace Aarohi.UserManagment
 
                 progressBar1.Value = 100;
                 lblStatus.Text = "Done.";
+
                 return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Startup loading failed:\n\n" + ex.Message,
+                    "Startup loading failed:\n\n" +
+                    ex.Message,
                     "Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
 
-                // back to login, no overlap
                 ShowLoginUi();
                 _loginFlowRunning = false;
+
                 return false;
             }
         }
@@ -683,8 +1257,12 @@ namespace Aarohi.UserManagment
         public sealed class StartupProgress
         {
             public int Percent { get; }
+
             public string Message { get; }
-            public StartupProgress(int percent, string message)
+
+            public StartupProgress(
+                int percent,
+                string message)
             {
                 Percent = percent;
                 Message = message;
@@ -693,45 +1271,74 @@ namespace Aarohi.UserManagment
 
         #endregion
 
-        private void LoadingWrapper_Paint(object sender, PaintEventArgs e)
+        private void LoadingWrapper_Paint(
+            object sender,
+            PaintEventArgs e)
         {
-
         }
 
-        private void label1_Click(object sender, EventArgs e)
+        private void label1_Click(
+            object sender,
+            EventArgs e)
         {
-
         }
 
-        private void PanelLoginElementWrapper_Paint(object sender, PaintEventArgs e)
+        private void PanelLoginElementWrapper_Paint(
+            object sender,
+            PaintEventArgs e)
         {
-
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void button1_Click(
+            object sender,
+            EventArgs e)
         {
-            _isPasswordVisible = !_isPasswordVisible;
+            _isPasswordVisible =
+                !_isPasswordVisible;
 
+            textBox2.UseSystemPasswordChar =
+                !_isPasswordVisible;
 
-            textBox2.UseSystemPasswordChar = !_isPasswordVisible;
-
-
-            button1.Text = _isPasswordVisible ? "Hide" : "Show";
+            button1.Text =
+                _isPasswordVisible
+                    ? "Hide"
+                    : "Show";
         }
 
-        private void textBox2_KeyDown(object sender, KeyEventArgs e)
+        private void textBox2_KeyDown(
+            object sender,
+            KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
-                e.SuppressKeyPress = true; // prevent the ding sound
-                LoginButton_Click(LoginButton, EventArgs.Empty);
+                e.SuppressKeyPress = true;
+
+                LoginButton_Click(
+                    LoginButton,
+                    EventArgs.Empty);
             }
         }
 
-        // Clear password when user changes username
-        private void comboBoxUsername_SelectedIndexChanged(object sender, EventArgs e)
+        private void comboBoxShiftLogin_KeyDown(
+            object sender,
+            KeyEventArgs e)
         {
-            textBox2.Text = string.Empty;
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+
+                LoginButton_Click(
+                    LoginButton,
+                    EventArgs.Empty);
+            }
+        }
+
+        private void comboBoxUsername_SelectedIndexChanged(
+            object sender,
+            EventArgs e)
+        {
+            textBox2.Text =
+                string.Empty;
         }
     }
 }
