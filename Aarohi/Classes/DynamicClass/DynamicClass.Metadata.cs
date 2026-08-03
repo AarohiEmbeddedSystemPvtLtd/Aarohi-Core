@@ -535,8 +535,8 @@ FROM sys.fn_listextendedproperty
         // Method: GetColumns
         /// <summary>
         /// Returns detailed column metadata for the target table, including PK/FK flags, identity,
-        /// defaults, CHECK constraints, parsed option lists, and selected extended properties
-        /// (DisplayName, Description, Unit, Format, Order, Visible).
+        /// defaults and selected extended properties, including option lists
+        /// (DisplayName, Description, Unit, Format, Order, Visible, Options).
         /// </summary>
         /// <returns>List of <see cref="ColumnInfo"/> items (can be empty).</returns>
         public List<ColumnInfo>? GetColumns()
@@ -576,9 +576,6 @@ SELECT
     CASE WHEN i.is_primary_key = 1 THEN 1 ELSE 0 END AS IsPrimaryKey,
     i.name AS PrimaryKeyName,
 
-    -- CHECK constraints aggregation
-    ca.CheckDefinition,
-
     -- ===== Extended Properties =====
     xp.DisplayName,
     xp.[Description],
@@ -596,6 +593,7 @@ SELECT
     xp.[ShowInThreePhase],
     xp.[HideInCrudForm],
     xp.[Visible],
+    xp.[Options],
     xp.SoftName
 
 FROM sys.columns c
@@ -629,14 +627,6 @@ LEFT JOIN sys.indexes i
       AND i.index_id   = ic.index_id
       AND i.is_primary_key = 1
 
--- CHECK
-OUTER APPLY (
-    SELECT STRING_AGG(cc.definition, ' AND ') AS CheckDefinition
-    FROM sys.check_constraints cc
-    WHERE cc.parent_object_id = c.object_id
-      AND cc.definition LIKE '%[' + c.name + ']%'
-) ca
-
 -- Extended Properties (normalized)
 OUTER APPLY (
     SELECT
@@ -650,6 +640,7 @@ OUTER APPLY (
         MAX(CASE WHEN ep.name='Format' THEN CAST(ep.value AS nvarchar(64)) END) AS [Format],
         MAX(CASE WHEN ep.name='Parameter' THEN CAST(ep.value AS nvarchar(256)) END) AS [Parameter],
         MAX(CASE WHEN ep.name='Group' THEN CAST(ep.value AS nvarchar(256)) END) AS [Group],
+        MAX(CASE WHEN ep.name='Options' THEN CAST(ep.value AS nvarchar(max)) END) AS [Options],
         MAX(TRY_CAST(CASE WHEN ep.name='Order' THEN ep.value END AS int)) AS [Order],
 
         -- Boolean normalization
@@ -715,7 +706,6 @@ ORDER BY c.column_id;";
                 ReferencedColumn = rd["ReferencedColumn"] as string,
 
                 DefaultSql = rd["DefaultDefinition"] as string,
-                CheckDefinition = rd["CheckDefinition"] as string,
 
                 DisplayName = rd["DisplayName"] as string,
                 Description = rd["Description"] as string,
@@ -738,10 +728,10 @@ ORDER BY c.column_id;";
             };
 
             ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
-
             // Resolve column options using Extended Properties if available, otherwise fall back to Check Constraints.
             ResolveColumnOptions(ci);
-
+            ci.Options = ParseOptionsExtendedProperty(rd["Options"] as string);
+            ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
             ci.Unit = "";
 
             list.Add(ci);
@@ -852,74 +842,19 @@ ORDER BY c.column_id;";
             return s;
         }
 
-        private static string[]? TryParseOptionsFromCheck(string? checkDefinition, string columnName)
+        private static string[]? ParseOptionsExtendedProperty(string? optionsText)
         {
-            if (string.IsNullOrWhiteSpace(checkDefinition) || string.IsNullOrWhiteSpace(columnName))
+            if (string.IsNullOrWhiteSpace(optionsText))
                 return null;
 
-            var colEsc = Regex.Escape(columnName);
-            var colPattern = $@"(?:\[\s*{colEsc}\s*\]|\b{colEsc}\b)";
+            var options = optionsText
+                .Split(new[] { ',', ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(option => option.Trim())
+                .Where(option => !string.IsNullOrWhiteSpace(option))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
-            var def = checkDefinition;
-
-            var inMatch = Regex.Match(def, $@"{colPattern}\s+IN\s*\(\s*(?<list>[^)]+)\)",
-                                      RegexOptions.IgnoreCase);
-            if (inMatch.Success)
-            {
-                var list = inMatch.Groups["list"].Value;
-                var tokens = new List<string>();
-                int i = 0;
-                while (i < list.Length)
-                {
-                    while (i < list.Length && (char.IsWhiteSpace(list[i]) || list[i] == ',')) i++;
-                    if (i >= list.Length) break;
-
-                    if (list[i] == '\'')
-                    {
-                        int start = ++i;
-                        var sb = new System.Text.StringBuilder();
-                        while (i < list.Length)
-                        {
-                            if (list[i] == '\'' && i + 1 < list.Length && list[i + 1] == '\'')
-                            { sb.Append('\''); i += 2; continue; }
-                            if (list[i] == '\'') { i++; break; }
-                            sb.Append(list[i]); i++;
-                        }
-                        tokens.Add(sb.ToString());
-                    }
-                    else
-                    {
-                        int start = i;
-                        while (i < list.Length && list[i] != ',' && list[i] != ')') i++;
-                        tokens.Add(list.Substring(start, i - start).Trim());
-                    }
-                }
-
-                var optsIn = tokens.Where(t => !string.IsNullOrWhiteSpace(t))
-                                   .Distinct(StringComparer.OrdinalIgnoreCase)
-                                   .ToArray();
-                return optsIn.Length >= 2 ? optsIn : null;
-            }
-
-            var strMatches = Regex.Matches(checkDefinition,
-                    $@"{colPattern}\s*=\s*\(?\s*N?'((?:''|[^'])*)'\s*\)?",
-                    RegexOptions.IgnoreCase)
-                .Cast<Match>()
-                .Select(m => m.Groups[1].Value.Replace("''", "'"))
-                .Where(s => !string.IsNullOrWhiteSpace(s));
-
-            var numMatches = Regex.Matches(checkDefinition,
-                    $@"{colPattern}\s*=\s*\(?\s*([-+]?\d+(?:\.\d+)?)\s*\)?",
-                    RegexOptions.IgnoreCase)
-                .Cast<Match>()
-                .Select(m => m.Groups[1].Value.Trim());
-
-
-            var options = strMatches.Concat(numMatches)
-                                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                                    .ToArray();
-
-            return options.Length >= 2 ? options : null;
+            return options.Length == 0 ? null : options;
         }
 
         #endregion

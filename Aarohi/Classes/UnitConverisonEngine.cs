@@ -16,6 +16,7 @@ namespace Aarohi.Classes
             public string ToUnit { get; init; } = string.Empty;
             public string FormulaText { get; init; } = string.Empty;
             public string Format { get; init; } = string.Empty;
+            public Func<double, double>? FastFormula { get; init; }
             public LogicalExpression? ParsedExpression { get; init; }
             public string? FormulaError { get; init; }
         }
@@ -286,6 +287,9 @@ namespace Aarohi.Classes
                     $"Invalid conversion formula for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}': {rule.FormulaError ?? "Formula could not be compiled."}");
             }
 
+            if (rule.FastFormula != null)
+                return (rule.FastFormula(value), rule.ToUnit, rule.Format);
+
             object? result = EvaluateFormula(rule.ParsedExpression, value);
             double convertedValue = ToDouble(result!);
 
@@ -396,6 +400,161 @@ namespace Aarohi.Classes
             return result;
         }
 
+        private static Func<double, double>? TryCreateFastFormula(string formula)
+        {
+            if (string.IsNullOrWhiteSpace(formula))
+                return null;
+
+            var parser = new FastFormulaParser(formula);
+            return parser.TryParse(out Func<double, double>? compiled) ? compiled : null;
+        }
+
+        private sealed class FastFormulaParser
+        {
+            private readonly string _text;
+            private int _pos;
+
+            public FastFormulaParser(string text)
+            {
+                _text = text;
+            }
+
+            public bool TryParse(out Func<double, double>? compiled)
+            {
+                compiled = null;
+                try
+                {
+                    Func<double, double> expression = ParseExpression();
+                    SkipWhiteSpace();
+                    if (_pos != _text.Length)
+                        return false;
+
+                    compiled = expression;
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            private Func<double, double> ParseExpression()
+            {
+                Func<double, double> left = ParseTerm();
+                while (true)
+                {
+                    SkipWhiteSpace();
+                    if (Match('+'))
+                    {
+                        Func<double, double> right = ParseTerm();
+                        Func<double, double> currentLeft = left;
+                        left = v => currentLeft(v) + right(v);
+                    }
+                    else if (Match('-'))
+                    {
+                        Func<double, double> right = ParseTerm();
+                        Func<double, double> currentLeft = left;
+                        left = v => currentLeft(v) - right(v);
+                    }
+                    else
+                    {
+                        return left;
+                    }
+                }
+            }
+
+            private Func<double, double> ParseTerm()
+            {
+                Func<double, double> left = ParseFactor();
+                while (true)
+                {
+                    SkipWhiteSpace();
+                    if (Match('*'))
+                    {
+                        Func<double, double> right = ParseFactor();
+                        Func<double, double> currentLeft = left;
+                        left = v => currentLeft(v) * right(v);
+                    }
+                    else if (Match('/'))
+                    {
+                        Func<double, double> right = ParseFactor();
+                        Func<double, double> currentLeft = left;
+                        left = v => currentLeft(v) / right(v);
+                    }
+                    else
+                    {
+                        return left;
+                    }
+                }
+            }
+
+            private Func<double, double> ParseFactor()
+            {
+                SkipWhiteSpace();
+
+                if (Match('+'))
+                    return ParseFactor();
+
+                if (Match('-'))
+                {
+                    Func<double, double> factor = ParseFactor();
+                    return v => -factor(v);
+                }
+
+                if (Match('('))
+                {
+                    Func<double, double> expression = ParseExpression();
+                    if (!Match(')'))
+                        throw new FormatException();
+
+                    return expression;
+                }
+
+                if (_pos < _text.Length && char.ToLowerInvariant(_text[_pos]) == 'v')
+                {
+                    _pos++;
+                    return v => v;
+                }
+
+                double number = ParseNumber();
+                return _ => number;
+            }
+
+            private double ParseNumber()
+            {
+                SkipWhiteSpace();
+                int start = _pos;
+
+                while (_pos < _text.Length &&
+                       (char.IsDigit(_text[_pos]) || _text[_pos] == '.' || _text[_pos] == 'e' || _text[_pos] == 'E' ||
+                        (_pos > start && (_text[_pos] == '+' || _text[_pos] == '-') && (_text[_pos - 1] == 'e' || _text[_pos - 1] == 'E'))))
+                {
+                    _pos++;
+                }
+
+                if (start == _pos)
+                    throw new FormatException();
+
+                return double.Parse(_text[start.._pos], NumberStyles.Float, CultureInfo.InvariantCulture);
+            }
+
+            private bool Match(char c)
+            {
+                SkipWhiteSpace();
+                if (_pos >= _text.Length || _text[_pos] != c)
+                    return false;
+
+                _pos++;
+                return true;
+            }
+
+            private void SkipWhiteSpace()
+            {
+                while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos]))
+                    _pos++;
+            }
+        }
+
         private static CacheSnapshot BuildCache(DataTable? rules, DataTable? parameterMapping)
         {
             var rulesByKey = new Dictionary<string, CachedRule>(StringComparer.OrdinalIgnoreCase);
@@ -438,6 +597,7 @@ namespace Aarohi.Classes
                         ToUnit = toUnit,
                         FormulaText = formulaText,
                         Format = format,
+                        FastFormula = TryCreateFastFormula(formulaText),
                         ParsedExpression = parsedExpression,
                         FormulaError = formulaError
                     };

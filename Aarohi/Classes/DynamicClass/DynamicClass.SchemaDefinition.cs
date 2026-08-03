@@ -598,15 +598,6 @@ WHERE ep.name = @propertyName
                 return removed;
             });
 
-        // Method: DropOptionsConstraint
-        /// <summary>
-        /// Removes the Options extended property for a column (idempotent).
-        /// </summary>
-        /// <param name="column">Column name.</param>
-        /// <returns><c>true</c> on success.</returns>
-        public bool DropOptionsConstraint(string column)
-            => ClearOptions(column);
-
         private static bool IsNumericType(string sqlType)
         {
             if (string.IsNullOrWhiteSpace(sqlType)) return false;
