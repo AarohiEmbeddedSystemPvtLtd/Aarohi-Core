@@ -248,6 +248,7 @@ namespace Aarohi.UserManagment
             comboBoxUsername.Size = new Size(390, 30);
             comboBoxUsername.TabIndex = 1;
             comboBoxUsername.SelectedIndexChanged += comboBoxUsername_SelectedIndexChanged;
+            comboBoxUsername.TextUpdate += comboBoxUsername_TextUpdate;
             // 
             // extendedPanel1
             // 
