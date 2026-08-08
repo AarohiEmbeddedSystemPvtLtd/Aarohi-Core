@@ -53,6 +53,9 @@ namespace Aarohi.UserManagment
         private string _LoginDataColumnName = string.Empty;
         private string _PasswordDataColumnName = string.Empty;
 
+        private readonly Timer _usernameDebounceTimer;
+        private readonly List<string> _allUserNames = new();
+
         private enum StartupStage
         {
             FormExpand,
@@ -302,9 +305,24 @@ namespace Aarohi.UserManagment
             bool WantRememberMe = false)
         {
             InitializeComponent();
+            _usernameDebounceTimer = new Timer
+            {
+                Interval = 250
+            };
+
+            _usernameDebounceTimer.Tick += UsernameDebounceTimer_Tick;
 
             textBox2.UseSystemPasswordChar = true;
-            button1.Text = "Show";
+            //button1.Text = "Show";
+
+            button1.Text = "";
+
+            button1.FlatStyle = FlatStyle.Flat;
+            button1.FlatAppearance.BorderSize = 0;
+            button1.Cursor = Cursors.Hand;
+
+            button1.Paint += button1_Paint;
+
             checkBoxRememberMe.Visible = WantRememberMe;
 
             // Hidden until the main project supplies shift records.
@@ -465,9 +483,17 @@ namespace Aarohi.UserManagment
         {
             Shown -= FormStartUp_Shown;
 
-            comboBoxUsername.Items.AddRange(
-                _userClass.GetColumnValues(
-                    _LoginDataColumnName));
+            //comboBoxUsername.Items.AddRange(
+            //    _userClass.GetColumnValues(
+            //        _LoginDataColumnName));
+
+            string[] users = _userClass.GetColumnValues(_LoginDataColumnName);
+
+            _allUserNames.Clear();
+            _allUserNames.AddRange(users);
+
+            comboBoxUsername.Items.AddRange(users);
+
 
             if (RegistryHelper.LoadBool(
                 RegistryHelper.storeLocs.Credentials,
@@ -1271,74 +1297,148 @@ namespace Aarohi.UserManagment
 
         #endregion
 
-        private void LoadingWrapper_Paint(
-            object sender,
-            PaintEventArgs e)
+        private void LoadingWrapper_Paint(object sender,PaintEventArgs e)
         {
         }
 
-        private void label1_Click(
-            object sender,
-            EventArgs e)
+        private void label1_Click(object sender,EventArgs e)
         {
         }
 
-        private void PanelLoginElementWrapper_Paint(
-            object sender,
-            PaintEventArgs e)
+        private void PanelLoginElementWrapper_Paint(object sender,PaintEventArgs e)
         {
         }
 
-        private void button1_Click(
-            object sender,
-            EventArgs e)
+        private void button1_Click(object sender, EventArgs e)
         {
-            _isPasswordVisible =
-                !_isPasswordVisible;
+            _isPasswordVisible =!_isPasswordVisible;
 
-            textBox2.UseSystemPasswordChar =
-                !_isPasswordVisible;
+            textBox2.UseSystemPasswordChar =!_isPasswordVisible;
 
-            button1.Text =
-                _isPasswordVisible
-                    ? "Hide"
-                    : "Show";
+            button1.Invalidate(); //marks button1 as needing repainting. Windows then calls your Paint event again:
+
+            //button1.Text =
+            //    _isPasswordVisible
+            //        ? "Hide"
+            //        : "Show";
         }
 
-        private void textBox2_KeyDown(
-            object sender,
-            KeyEventArgs e)
+        private void textBox2_KeyDown(object sender,KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
                 e.SuppressKeyPress = true;
 
-                LoginButton_Click(
-                    LoginButton,
-                    EventArgs.Empty);
+                LoginButton_Click(LoginButton,EventArgs.Empty);
             }
         }
 
-        private void comboBoxShiftLogin_KeyDown(
-            object sender,
-            KeyEventArgs e)
+        private void comboBoxShiftLogin_KeyDown(object sender,KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
                 e.SuppressKeyPress = true;
 
-                LoginButton_Click(
-                    LoginButton,
-                    EventArgs.Empty);
+                LoginButton_Click(LoginButton,EventArgs.Empty);
+            }
+        }
+      
+        private void comboBoxUsername_SelectedIndexChanged(object sender,EventArgs e)
+        {
+            textBox2.Text =string.Empty;
+        }
+        private void button1_Paint(object sender, PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int width = button1.ClientSize.Width;
+            int height = button1.ClientSize.Height;
+
+            float cx = width / 2f;
+            float cy = height / 2f;
+
+            using Pen pen = new Pen(Color.FromArgb(45, 50, 65), 2.2f);
+            using SolidBrush brush = new SolidBrush(Color.FromArgb(45, 50, 65));
+
+            // Eye shape
+            RectangleF eyeRect = new RectangleF(
+                cx - 11,
+                cy - 7,
+                22,
+                14);
+
+            using GraphicsPath eyePath = new GraphicsPath();
+
+            eyePath.AddBezier(
+                eyeRect.Left, cy,
+                cx - 6, cy - 8,
+                cx + 6, cy - 8,
+                eyeRect.Right, cy);
+
+            eyePath.AddBezier(
+                eyeRect.Right, cy,
+                cx + 6, cy + 8,
+                cx - 6, cy + 8,
+                eyeRect.Left, cy);
+
+            e.Graphics.DrawPath(pen, eyePath);
+
+            // Pupil
+            e.Graphics.FillEllipse(
+                brush,
+                cx - 3,
+                cy - 3,
+                6,
+                6);
+
+            // If password is VISIBLE → draw slash
+            if (_isPasswordVisible)
+            {
+                using Pen slashPen =
+                    new Pen(Color.FromArgb(45, 50, 65), 2.5f)
+                    {
+                        StartCap = LineCap.Round,
+                        EndCap = LineCap.Round
+                    };
+
+                e.Graphics.DrawLine(
+                    slashPen,
+                    cx - 12,
+                    cy - 10,
+                    cx + 12,
+                    cy + 10);
             }
         }
 
-        private void comboBoxUsername_SelectedIndexChanged(
-            object sender,
-            EventArgs e)
+        private void comboBoxUsername_TextUpdate(object sender, EventArgs e)
         {
-            textBox2.Text =
-                string.Empty;
+            _usernameDebounceTimer.Stop();
+            _usernameDebounceTimer.Start();
+        }
+
+        private void UsernameDebounceTimer_Tick(object? sender,EventArgs e)
+        {
+            _usernameDebounceTimer.Stop();
+
+            string enteredText = comboBoxUsername.Text;
+
+            var matchedUsers = _allUserNames.Where(x => x.StartsWith(enteredText,StringComparison.OrdinalIgnoreCase)).ToList();
+
+            comboBoxUsername.BeginUpdate();
+
+            comboBoxUsername.Items.Clear();
+            comboBoxUsername.Items.AddRange(matchedUsers.Cast<object>().ToArray());
+
+            comboBoxUsername.EndUpdate();
+            comboBoxUsername.Cursor = Cursors.Default;
+
+            comboBoxUsername.Text = enteredText;
+
+            comboBoxUsername.SelectionStart =enteredText.Length;
+
+            comboBoxUsername.SelectionLength = 0;
+
+            comboBoxUsername.DroppedDown =matchedUsers.Count > 0;
         }
     }
 }
