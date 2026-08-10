@@ -69,6 +69,17 @@ namespace Aarohi.UserManagment
 
         private AarohiLoadder? loader;
 
+        // Optional close button. Created in code so it never changes Designer layout.
+        private readonly Button _buttonClose;
+
+        // Responsive scaling keeps the COMPLETE original UI proportional.
+        // No control is moved/re-parented, so Username/Password/Shift can never disappear.
+        private const int ResponsiveBaseWidth = 1200;
+        private const int ResponsiveBaseHeightWithShift = 570;
+        private const int ResponsiveBaseHeightWithoutShift = 500;
+        private float _currentUiScale = 1.0f;
+        private bool _applyingResponsiveScale;
+
         [DesignerSerializationVisibility(
             DesignerSerializationVisibility.Hidden)]
         public double GuideFadeDelay { get; set; } = 0.10;
@@ -76,6 +87,24 @@ namespace Aarohi.UserManagment
         [DesignerSerializationVisibility(
             DesignerSerializationVisibility.Hidden)]
         public double GuideFadeDuration { get; set; } = 0.60;
+
+        /// <summary>
+        /// Shows or hides the optional Close button.
+        /// Default is false so other Aarohi.Core projects are unchanged.
+        /// </summary>
+        [DefaultValue(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public bool ShowCloseButton
+        {
+            get => _buttonClose.Visible;
+            set
+            {
+                _buttonClose.Visible = value;
+
+                if (value)
+                    _buttonClose.BringToFront();
+            }
+        }
 
         #endregion
 
@@ -222,6 +251,10 @@ namespace Aarohi.UserManagment
             Height = 570;
             CenterToScreen();
 
+            // If configuration changes after startup animation, keep the whole UI on-screen.
+            if (_stage == StartupStage.Finished)
+                ApplyResponsiveScale();
+
             PanelLoginElementWrapper.PerformLayout();
             LoginElementWrapper.PerformLayout();
             LoginWrapper.PerformLayout();
@@ -311,6 +344,14 @@ namespace Aarohi.UserManagment
             };
 
             _usernameDebounceTimer.Tick += UsernameDebounceTimer_Tick;
+
+            _buttonClose = CreateCloseButton();
+            LoginWrapper.Controls.Add(_buttonClose);
+            _buttonClose.BringToFront();
+
+            // Re-fit if Windows resolution/orientation changes while login is open.
+            Microsoft.Win32.SystemEvents.DisplaySettingsChanged +=
+                SystemEvents_DisplaySettingsChanged;
 
             textBox2.UseSystemPasswordChar = true;
             //button1.Text = "Show";
@@ -562,6 +603,10 @@ namespace Aarohi.UserManagment
                 case StartupStage.Finished:
                     _timer.Stop();
                     _stopwatch.Stop();
+
+                    // Important: scale only AFTER the existing animation/layout has finished.
+                    // This preserves the exact original design and prevents hidden controls.
+                    ApplyResponsiveScale();
                     break;
             }
         }
@@ -720,6 +765,8 @@ namespace Aarohi.UserManagment
                     StartupStage.Finished;
 
                 _stopwatch.Stop();
+
+                BeginInvoke(new Action(ApplyResponsiveScale));
             }
         }
 
@@ -856,6 +903,178 @@ namespace Aarohi.UserManagment
 
             LoadingWrapper.Invalidate(true);
             LoadingWrapper.Refresh();
+        }
+
+        #endregion
+
+        #region Optional Close Button / Responsive Screen Fit
+
+        private Button CreateCloseButton()
+        {
+            Button button = new Button
+            {
+                Name = "buttonClose",
+                Text = "×",
+                Size = new Size(32, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(
+                    Math.Max(0, LoginWrapper.ClientSize.Width - 48),
+                    10),
+                BackColor = Color.Transparent,
+                ForeColor = Color.FromArgb(45, 45, 45),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font(
+                    "Segoe UI",
+                    11F,
+                    FontStyle.Bold,
+                    GraphicsUnit.Point,
+                    0),
+                Cursor = Cursors.Hand,
+                TabStop = false,
+                Visible = false
+            };
+
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseOverBackColor =
+                Color.FromArgb(240, 240, 240);
+            button.FlatAppearance.MouseDownBackColor =
+                Color.FromArgb(225, 225, 225);
+
+            button.Click += (_, _) => Close();
+
+            return button;
+        }
+
+        /// <summary>
+        /// Fits the COMPLETE existing login UI into the current monitor's working area.
+        /// It does not move/re-parent individual controls. The whole form is scaled
+        /// uniformly, preserving the exact landscape design at every resolution.
+        /// </summary>
+        private void ApplyResponsiveScale()
+        {
+            if (IsDisposed ||
+                Disposing ||
+                _applyingResponsiveScale ||
+                _stage != StartupStage.Finished)
+            {
+                return;
+            }
+
+            try
+            {
+                _applyingResponsiveScale = true;
+
+                Rectangle workArea =
+                    Screen.FromControl(this).WorkingArea;
+
+                int baseHeight =
+                    LoginShiftWrapper.Visible
+                        ? ResponsiveBaseHeightWithShift
+                        : ResponsiveBaseHeightWithoutShift;
+
+                // Keep a small safe margin around the border.
+                const int screenMargin = 24;
+
+                float widthScale =
+                    (workArea.Width - screenMargin * 2) /
+                    (float)ResponsiveBaseWidth;
+
+                float heightScale =
+                    (workArea.Height - screenMargin * 2) /
+                    (float)baseHeight;
+
+                // Never enlarge above the original design.
+                float desiredScale =
+                    Math.Min(
+                        1.0f,
+                        Math.Min(widthScale, heightScale));
+
+                // Prevent unusably tiny UI on very small displays.
+                desiredScale =
+                    Math.Max(0.55f, desiredScale);
+
+                // Scale relative to the current state so rotation can go
+                // Landscape -> Portrait -> Landscape reliably.
+                float relativeScale =
+                    desiredScale / _currentUiScale;
+
+                if (Math.Abs(relativeScale - 1.0f) > 0.001f)
+                {
+                    SuspendLayout();
+
+                    Scale(
+                        new SizeF(
+                            relativeScale,
+                            relativeScale));
+
+                    ResumeLayout(true);
+
+                    _currentUiScale =
+                        desiredScale;
+                }
+
+                // Enforce exact proportional outer size after rounding.
+                Size =
+                    new Size(
+                        (int)Math.Round(
+                            ResponsiveBaseWidth *
+                            desiredScale),
+                        (int)Math.Round(
+                            baseHeight *
+                            desiredScale));
+
+                CenterToScreen();
+
+                ApplyRoundedCorners(
+                    Math.Max(
+                        40,
+                        (int)Math.Round(
+                            _cornerRadius *
+                            desiredScale)));
+
+                _buttonClose.BringToFront();
+
+                PanelMainWrapperBorder.PerformLayout();
+                PanelMainWrapper.PerformLayout();
+                PanelForm.PerformLayout();
+                LoginWrapper.PerformLayout();
+                LoginElementWrapper.PerformLayout();
+                PanelLoginElementWrapper.PerformLayout();
+
+                Invalidate(true);
+            }
+            finally
+            {
+                _applyingResponsiveScale = false;
+            }
+        }
+
+        private void SystemEvents_DisplaySettingsChanged(
+            object? sender,
+            EventArgs e)
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(
+                    new Action(
+                        ApplyResponsiveScale));
+
+                return;
+            }
+
+            ApplyResponsiveScale();
+        }
+
+        protected override void OnFormClosed(
+            FormClosedEventArgs e)
+        {
+            Microsoft.Win32.SystemEvents.DisplaySettingsChanged -=
+                SystemEvents_DisplaySettingsChanged;
+
+            base.OnFormClosed(e);
         }
 
         #endregion
