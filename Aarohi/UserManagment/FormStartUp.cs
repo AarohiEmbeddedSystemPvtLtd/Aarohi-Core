@@ -319,6 +319,10 @@ namespace Aarohi.UserManagment
 
             button1.FlatStyle = FlatStyle.Flat;
             button1.FlatAppearance.BorderSize = 0;
+            button1.BackColor = Color.Transparent;
+            button1.FlatAppearance.MouseOverBackColor = Color.Transparent;
+            button1.FlatAppearance.MouseDownBackColor = Color.Transparent;
+            button1.UseVisualStyleBackColor = false;
             button1.Cursor = Cursors.Hand;
 
             button1.Paint += button1_Paint;
@@ -1063,45 +1067,23 @@ namespace Aarohi.UserManagment
                 if (!File.Exists(LoginInfoPath))
                     return false;
 
-                string[] lines =
-                    File.ReadAllLines(
-                        LoginInfoPath);
+                string[] lines = File.ReadAllLines(LoginInfoPath);
 
                 if (lines.Length < 2)
                     return false;
 
-                string encryptedName =
-                    lines[0];
-
-                string encryptedPassword =
-                    lines[1];
-
-                string realName =
-                    RegistryHelper.Decrypt(
-                        encryptedName);
-
-                string realPassword =
-                    RegistryHelper.Decrypt(
-                        encryptedPassword);
-
-                if (string.IsNullOrWhiteSpace(realName) ||
-                    string.IsNullOrWhiteSpace(realPassword))
-                {
+                string encryptedName = lines[0];
+                string encryptedPassword = lines[1];
+                string realName = RegistryHelper.Decrypt(encryptedName);
+                string realPassword = RegistryHelper.Decrypt(encryptedPassword);
+                if (string.IsNullOrWhiteSpace(realName) || string.IsNullOrWhiteSpace(realPassword))
                     return false;
-                }
+                
+                comboBoxUsername.SelectedItem = realName;
+                textBox2.Text = realPassword;
+                checkBoxRememberMe.Checked = true;
 
-                comboBoxUsername.SelectedItem =
-                    realName;
-
-                textBox2.Text =
-                    realPassword;
-
-                checkBoxRememberMe.Checked =
-                    true;
-
-                if (!TryAuthenticate(
-                    realName,
-                    realPassword))
+                if (!TryAuthenticate(realName, realPassword))
                 {
                     File.Delete(LoginInfoPath);
                     return false;
@@ -1111,13 +1093,7 @@ namespace Aarohi.UserManagment
                     return true;
 
                 _loginFlowRunning = true;
-
-                LoginSuccess?.Invoke(
-                    this,
-                    new LoginSuccessEventArgs(
-                        realName,
-                        realPassword));
-
+                LoginSuccess?.Invoke(this, new LoginSuccessEventArgs(realName, realPassword));
                 return true;
             }
             catch
@@ -1347,6 +1323,7 @@ namespace Aarohi.UserManagment
         {
             textBox2.Text =string.Empty;
         }
+
         private void button1_Paint(object sender, PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
