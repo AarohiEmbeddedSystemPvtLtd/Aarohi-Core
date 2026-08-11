@@ -26,15 +26,15 @@ namespace Aarohi.UserManagment
 
         private readonly Timer _timer;
 
-        private readonly int _targetWidth = 1200;
-        private readonly int _startWidth = 200;
+        private int _targetWidth = 1200;
+        private int _startWidth = 200;
         private readonly int _durationMs = 400;
         private readonly int _cornerRadius = 190;
 
         private readonly double _loaderStartPercent = 0.8;
         private readonly int _loaderWaitMs = 4500;
 
-        private readonly int _panelTargetWidth = 500;
+        private int _panelTargetWidth = 500;
         private readonly int _panelShrinkDurationMs = 400;
 
         private readonly Stopwatch _stopwatch = new Stopwatch();
@@ -79,6 +79,7 @@ namespace Aarohi.UserManagment
         private const int ResponsiveBaseHeightWithoutShift = 500;
         private float _currentUiScale = 1.0f;
         private bool _applyingResponsiveScale;
+        private bool _firstDisplayPrepared;
 
         [DesignerSerializationVisibility(
             DesignerSerializationVisibility.Hidden)]
@@ -109,6 +110,36 @@ namespace Aarohi.UserManagment
         #endregion
 
         #region Shift Selection
+
+        private bool _showShiftSelection = true;
+
+        /// <summary>
+        /// Gets or sets whether the optional shift-selection row is displayed.
+        /// The default is true for backward compatibility with applications that
+        /// configure shifts. Set it to false before the form is first displayed
+        /// when shift selection is not required.
+        /// </summary>
+        [DefaultValue(true)]
+        [DesignerSerializationVisibility(
+            DesignerSerializationVisibility.Visible)]
+        public bool ShowShiftSelection
+        {
+            get => _showShiftSelection;
+            set
+            {
+                _showShiftSelection = value;
+                LoginShiftWrapper.Visible = value;
+                PanelLoginElementWrapper.GridRowCount =
+                    value ? 3 : 2;
+
+                if (_stage == StartupStage.Finished)
+                    ApplyResponsiveScale();
+
+                PanelLoginElementWrapper.PerformLayout();
+                LoginElementWrapper.PerformLayout();
+                LoginWrapper.PerformLayout();
+            }
+        }
 
         private readonly List<ShiftLoginItem> _configuredShifts =
             new List<ShiftLoginItem>();
@@ -244,12 +275,9 @@ namespace Aarohi.UserManagment
                 comboBoxShiftLogin.EndUpdate();
             }
 
-            PanelLoginElementWrapper.GridRowCount = 3;
-            LoginShiftWrapper.Visible = true;
-
-            // Give the new third row enough vertical space.
-            Height = 570;
-            CenterToScreen();
+            PanelLoginElementWrapper.GridRowCount =
+                ShowShiftSelection ? 3 : 2;
+            LoginShiftWrapper.Visible = ShowShiftSelection;
 
             // If configuration changes after startup animation, keep the whole UI on-screen.
             if (_stage == StartupStage.Finished)
@@ -444,13 +472,12 @@ namespace Aarohi.UserManagment
                 FormBorderStyle.None;
 
             StartPosition =
-                FormStartPosition.CenterScreen;
+                FormStartPosition.Manual;
 
             DoubleBuffered = true;
 
             Width = _startWidth;
-            Height = 500;
-            CenterToScreen();
+            Height = ResponsiveBaseHeightWithoutShift;
 
             _timer =
                 new Timer
@@ -494,10 +521,89 @@ namespace Aarohi.UserManagment
             }
         }
 
+        /// <summary>
+        /// Prepares the startup form for the current monitor after optional shift
+        /// configuration and before its normal animation begins.
+        /// </summary>
+        public void PrepareForFirstDisplay()
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            Rectangle workArea = GetCurrentWorkingArea();
+            int baseHeight = LoginShiftWrapper.Visible
+                ? ResponsiveBaseHeightWithShift
+                : ResponsiveBaseHeightWithoutShift;
+
+            const int screenMargin = 24;
+            float widthScale =
+                (workArea.Width - (screenMargin * 2)) /
+                (float)ResponsiveBaseWidth;
+            float heightScale =
+                (workArea.Height - (screenMargin * 2)) /
+                (float)baseHeight;
+            float desiredScale = Math.Max(
+                0.55f,
+                Math.Min(1.0f, Math.Min(widthScale, heightScale)));
+
+            SuspendLayout();
+
+            try
+            {
+                if (Math.Abs(desiredScale - _currentUiScale) > 0.001f)
+                {
+                    float relativeScale = desiredScale / _currentUiScale;
+                    Scale(new SizeF(relativeScale, relativeScale));
+                    _currentUiScale = desiredScale;
+                }
+
+                _targetWidth = (int)Math.Round(
+                    ResponsiveBaseWidth * desiredScale);
+                _startWidth = Math.Max(
+                    120,
+                    (int)Math.Round(200 * desiredScale));
+                _panelTargetWidth = Math.Max(
+                    250,
+                    (int)Math.Round(500 * desiredScale));
+
+                Width = _startWidth;
+                Height = (int)Math.Round(baseHeight * desiredScale);
+                StartPosition = FormStartPosition.Manual;
+                Left = workArea.Left + ((workArea.Width - Width) / 2);
+                Top = workArea.Top + ((workArea.Height - Height) / 2);
+
+                ApplyRoundedCorners(
+                    Math.Max(
+                        30,
+                        (int)Math.Round(_cornerRadius * desiredScale)));
+                NormalizeLoginInputRows();
+                _firstDisplayPrepared = true;
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
+        }
+
+        private Rectangle GetCurrentWorkingArea()
+        {
+            if (Owner != null)
+                return Screen.FromControl(Owner).WorkingArea;
+
+            if (Screen.AllScreens.Length > 0)
+                return Screen.FromPoint(Cursor.Position).WorkingArea;
+
+            return Screen.PrimaryScreen?.WorkingArea ??
+                   new Rectangle(0, 0, 1920, 1080);
+        }
+
         private void FormStartUp_Load(
             object? sender,
             EventArgs e)
         {
+            if (!_firstDisplayPrepared)
+                PrepareForFirstDisplay();
+
             loader =
                 new AarohiLoadder
                 {
@@ -882,6 +988,11 @@ namespace Aarohi.UserManagment
             LoginWrapper.Enabled = true;
             LoginWrapper.BringToFront();
 
+            NormalizeLoginInputRows();
+
+            if (_buttonClose.Visible)
+                _buttonClose.BringToFront();
+
             Invalidate(true);
             Update();
 
@@ -906,6 +1017,112 @@ namespace Aarohi.UserManagment
         }
 
         #endregion
+
+        /// <summary>
+        /// Keeps the username, password and optional shift input rows aligned
+        /// after responsive scaling without changing their existing behavior.
+        /// </summary>
+        private void NormalizeLoginInputRows()
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            PanelLoginElementWrapper.PerformLayout();
+            LoginUsernameWrapper.PerformLayout();
+            extendedPanel1.PerformLayout();
+
+            if (LoginShiftWrapper.Visible)
+                LoginShiftWrapper.PerformLayout();
+
+            int commonLabelWidth = Math.Max(
+                TextRenderer.MeasureText(
+                    labelUsername.Text,
+                    labelUsername.Font).Width,
+                Math.Max(
+                    TextRenderer.MeasureText(
+                        labelPassword.Text,
+                        labelPassword.Font).Width,
+                    TextRenderer.MeasureText(
+                        labelShift.Text,
+                        labelShift.Font).Width));
+
+            commonLabelWidth += Math.Max(
+                8,
+                (int)Math.Round(12 * _currentUiScale));
+
+            labelUsername.AutoSize = false;
+            labelPassword.AutoSize = false;
+            labelUsername.Width = commonLabelWidth;
+            labelPassword.Width = commonLabelWidth;
+            labelUsername.TextAlign = ContentAlignment.MiddleLeft;
+            labelPassword.TextAlign = ContentAlignment.MiddleLeft;
+
+            if (LoginShiftWrapper.Visible)
+            {
+                labelShift.AutoSize = false;
+                labelShift.Width = commonLabelWidth;
+                labelShift.TextAlign = ContentAlignment.MiddleLeft;
+            }
+
+            int gap = Math.Max(
+                6,
+                (int)Math.Round(10 * _currentUiScale));
+            int usernameUsableWidth =
+                LoginUsernameWrapper.ClientSize.Width -
+                LoginUsernameWrapper.Padding.Horizontal;
+
+            if (usernameUsableWidth > 0)
+            {
+                comboBoxUsername.Width = Math.Max(
+                    120,
+                    usernameUsableWidth - commonLabelWidth - gap);
+                comboBoxUsername.DropDownWidth = Math.Max(
+                    comboBoxUsername.Width,
+                    220);
+            }
+
+            int passwordUsableWidth =
+                extendedPanel1.ClientSize.Width -
+                extendedPanel1.Padding.Horizontal;
+
+            if (passwordUsableWidth > 0)
+            {
+                int eyeButtonWidth = Math.Max(
+                    34,
+                    (int)Math.Round(48 * _currentUiScale));
+                textBox2.Width = Math.Max(
+                    100,
+                    passwordUsableWidth - commonLabelWidth -
+                    eyeButtonWidth - (gap * 2));
+                button1.Width = eyeButtonWidth;
+                button1.Height = Math.Max(textBox2.Height, 30);
+            }
+
+            if (LoginShiftWrapper.Visible)
+            {
+                int shiftUsableWidth =
+                    LoginShiftWrapper.ClientSize.Width -
+                    LoginShiftWrapper.Padding.Horizontal;
+
+                if (shiftUsableWidth > 0)
+                {
+                    comboBoxShiftLogin.Width = Math.Max(
+                        120,
+                        shiftUsableWidth - commonLabelWidth - gap);
+                    comboBoxShiftLogin.DropDownWidth = Math.Max(
+                        comboBoxShiftLogin.Width,
+                        220);
+                }
+            }
+
+            LoginUsernameWrapper.PerformLayout();
+            extendedPanel1.PerformLayout();
+
+            if (LoginShiftWrapper.Visible)
+                LoginShiftWrapper.PerformLayout();
+
+            PanelLoginElementWrapper.PerformLayout();
+        }
 
         #region Optional Close Button / Responsive Screen Fit
 
@@ -1040,6 +1257,8 @@ namespace Aarohi.UserManagment
                 LoginWrapper.PerformLayout();
                 LoginElementWrapper.PerformLayout();
                 PanelLoginElementWrapper.PerformLayout();
+
+                NormalizeLoginInputRows();
 
                 Invalidate(true);
             }
