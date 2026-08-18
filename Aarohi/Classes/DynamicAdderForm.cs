@@ -122,6 +122,9 @@ namespace Aarohi.Classes
         DynamicClass ComboBoxValues = new DynamicClass("dbo", "ComboBoxValues");
         DynamicClass Column_Permissions = new DynamicClass("dbo", "Column_Permissions");
 
+        private bool _applyingResponsiveLayout;
+
+        private readonly List<ExtendedPanel> _dynamicInputGrids = new List<ExtendedPanel>();
         #endregion
 
         #region ====== Constructors ======
@@ -234,10 +237,50 @@ namespace Aarohi.Classes
         private void InitCommon(string title)
         {
             LabelHeading.Text += title ?? string.Empty;
+
             EnableDoubleBuffer(this, true);
             EnableDoubleBuffer(PanelHolder, true);
             EnableDoubleBuffer(PanelSelection, true);
+
             PanelSelection.Visible = false; // constructors decide
+
+            // Register only once.
+            Resize -= DynamicAdderForm_Resize;
+            Resize += DynamicAdderForm_Resize;
+            Shown -= DynamicAdderForm_Shown;
+            Shown += DynamicAdderForm_Shown;
+        }
+
+        private void DynamicAdderForm_Resize(object? sender, EventArgs e)
+        {
+            ApplyResponsiveInputLayout();
+        }
+
+        private void ApplyWorkingAreaBounds()
+        {
+            Screen screen = Screen.FromControl(this);
+            Rectangle workingArea = screen.WorkingArea;
+
+            bool isPortrait = workingArea.Height > workingArea.Width;
+
+            // Preserve existing landscape behavior exactly.
+            if (!isPortrait)
+                return;
+
+            /*
+             * In portrait, explicitly use the Windows working area
+             * so the form does not extend underneath the taskbar.
+             */
+            WindowState = FormWindowState.Normal;
+            StartPosition = FormStartPosition.Manual;
+
+            Bounds = workingArea;
+        }
+
+        private void DynamicAdderForm_Shown(object? sender, EventArgs e)
+        {
+            ApplyWorkingAreaBounds();
+            ApplyResponsiveInputLayout();
         }
         #endregion
 
@@ -623,23 +666,89 @@ namespace Aarohi.Classes
         /// <summary>
         /// Creates a grid panel with the given column count for compact layout.
         /// </summary>
-        private ExtendedPanel MakeDecimalGrid(int I)
+        private ExtendedPanel MakeDecimalGrid(int columnCount)
         {
-            return new ExtendedPanel
+            ExtendedPanel panel = new ExtendedPanel
             {
                 Dock = DockStyle.Top,
                 Padding = new Padding(0),
                 Margin = new Padding(0),
+
                 DisplayMode = DisplayMode.Grid,
+
                 GridAutoColumnWidth = false,
                 GridAutoRowHeight = true,
-                GridColumnCount = I,
+
+                GridColumnCount = Math.Max(1, columnCount),
+
                 GridColumnGap = 10,
                 GridRowCount = 0,
                 GridRowGap = 10,
+
                 CornerRadius = 0,
-                BackColor = System.Drawing.Color.White
+
+                BackColor = Color.White
             };
+
+            _dynamicInputGrids.Add(panel);
+
+            return panel;
+        }
+
+        private int GetResponsiveColumnCount(ExtendedPanel panel, int itemCount)
+        {
+            if (itemCount <= 0)
+                return 1;
+
+            bool isPortrait =
+                ClientSize.Height > ClientSize.Width;
+
+            // Landscape:
+            // preserve the existing DynamicAdderForm behaviour.
+            if (!isPortrait)
+            {
+                return Math.Max(
+                    1,
+                    GetColumnCount(itemCount));
+            }
+
+            int availableWidth =
+                PanelHolder.ClientSize.Width -
+                PanelHolder.Padding.Horizontal;
+
+            if (availableWidth <= 0)
+            {
+                availableWidth =
+                    ClientSize.Width -
+                    Padding.Horizontal;
+            }
+
+            if (availableWidth <= 0)
+                return 1;
+
+            /*
+             * Minimum comfortable DataInput width.
+             *
+             * We calculate from the current available area rather than
+             * checking for a particular screen resolution.
+             */
+            const int preferredInputWidth = 280;
+            const int gap = 10;
+
+            int possibleColumns =
+                (availableWidth + gap) /
+                (preferredInputWidth + gap);
+
+            possibleColumns =
+                Math.Max(1, possibleColumns);
+
+            // Portrait should never become a very wide multi-column row.
+            possibleColumns =
+                Math.Min(3, possibleColumns);
+
+            return Math.Min(
+                itemCount,
+                possibleColumns);
         }
 
         /// <summary>
@@ -702,7 +811,7 @@ namespace Aarohi.Classes
                 try
                 {
                     PanelHolder.Controls.Clear();
-
+                    _dynamicInputGrids.Clear();
                     var ControlArray = new List<Control>();
 
                     foreach (var dyn in entities)
@@ -893,9 +1002,9 @@ namespace Aarohi.Classes
                         }
 
                         // Compute columns & heights
-                        decimalPanel.GridColumnCount = GetColumnCount(decimalPanel.Controls.Count);
-                        DropDownPanel.GridColumnCount = GetColumnCount(DropDownPanel.Controls.Count);
-                        TextPanel.GridColumnCount = GetColumnCount(TextPanel.Controls.Count);
+                        decimalPanel.GridColumnCount = GetResponsiveColumnCount(decimalPanel, decimalPanel.Controls.Count);
+                        DropDownPanel.GridColumnCount = GetResponsiveColumnCount(DropDownPanel, DropDownPanel.Controls.Count);
+                        TextPanel.GridColumnCount = GetResponsiveColumnCount(TextPanel, TextPanel.Controls.Count);
 
                         decimalPanel.Height = CalculatePanelHeight(decimalPanel);
                         DropDownPanel.Height = CalculatePanelHeight(DropDownPanel);
@@ -1201,6 +1310,98 @@ namespace Aarohi.Classes
         private void buttonCancel_Click(object sender, EventArgs e)
         {
             this.Close();
+        }
+
+        private void ApplyResponsiveInputLayout()
+        {
+            if (_applyingResponsiveLayout ||
+                IsDisposed ||
+                Disposing ||
+                PanelHolder.ClientSize.Width <= 0 ||
+                PanelHolder.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                _applyingResponsiveLayout = true;
+
+                foreach (ExtendedPanel grid in
+                         _dynamicInputGrids.ToList())
+                {
+                    if (grid == null ||
+                        grid.IsDisposed)
+                    {
+                        continue;
+                    }
+
+                    int itemCount =
+                        grid.Controls.Count;
+
+                    grid.GridColumnCount =
+                        GetResponsiveColumnCount(
+                            grid,
+                            itemCount);
+
+                    grid.Height =
+                        CalculatePanelHeight(grid);
+
+                    grid.PerformLayout();
+                }
+
+                ApplyResponsiveFooterLayout();
+
+                PanelHolder.PerformLayout();
+            }
+            finally
+            {
+                _applyingResponsiveLayout = false;
+            }
+        }
+
+        private void ApplyResponsiveFooterLayout()
+        {
+            bool isPortrait =
+                ClientSize.Height > ClientSize.Width;
+
+            if (!isPortrait)
+            {
+                extendedPanel1.Dock = DockStyle.Right;
+                extendedPanel1.Width = 396;
+
+                buttonCancel.Width = 183;
+                ButtonSave.Width = 183;
+
+                Padding originalPadding =
+                    new Padding(14, 8, 14, 8);
+
+                buttonCancel.Padding = originalPadding;
+                ButtonSave.Padding = originalPadding;
+
+                return;
+            }
+
+            extendedPanel1.Dock = DockStyle.Fill;
+
+            int usableWidth =
+                PanelFooter.ClientSize.Width -
+                PanelFooter.Padding.Horizontal -
+                extendedPanel1.Padding.Horizontal;
+
+            int buttonWidth =
+                Math.Max(
+                    100,
+                    (usableWidth - 10) / 2);
+
+            buttonCancel.Width = buttonWidth;
+            ButtonSave.Width = buttonWidth;
+
+            Padding portraitPadding =
+                new Padding(4, 8, 4, 8);
+
+            buttonCancel.Padding = portraitPadding;
+            ButtonSave.Padding = portraitPadding;
         }
     }
 }
