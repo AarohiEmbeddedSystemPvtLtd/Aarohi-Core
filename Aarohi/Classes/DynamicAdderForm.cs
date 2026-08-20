@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
@@ -1080,6 +1081,104 @@ namespace Aarohi.Classes
                         allErrors.AddRange(errs);
                         continue;
                     }
+
+
+                    if (dyn.Table.Equals("Users", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bool isEdit =_InitVal != null && _InitVal.Count > 0;
+
+                        // =====================================================
+                        // USERNAME DUPLICATE VALIDATION
+                        // =====================================================
+                        if (vals.TryGetValue("UserName", out object? userNameObj))
+                        {
+                            string userName =userNameObj?.ToString()?.Trim() ?? string.Empty;
+
+                            if (!string.IsNullOrWhiteSpace(userName))
+                            {
+                                using var userDc =new DynamicClass("dbo", "Users");
+
+                                var existingUser =userDc.GetRowAsDictionary("UserName",userName);
+
+                                string oldUserName = string.Empty;
+
+                                if (isEdit &&_InitVal.TryGetValue("UserName",out object? oldUserNameObj))
+                                {
+                                    oldUserName =oldUserNameObj?.ToString()?.Trim()?? string.Empty;
+                                }
+
+                                bool sameUser =isEdit &&string.Equals(oldUserName,userName,StringComparison.OrdinalIgnoreCase);
+
+                                if (existingUser != null && existingUser.Count > 0 && !sameUser)
+                                {
+                                    allErrors.Add($"UserName '{userName}' already exists.");
+
+                                    if (TryGetInput(dyn.Table,"UserName",out var userNameInput))
+                                    {
+                                        _errors.SetError(userNameInput,"UserName already exists.");
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // =====================================================
+                        // NAME DUPLICATE VALIDATION
+                        // =====================================================
+                        if (vals.TryGetValue("Name", out object? nameObj))
+                        {
+                            string name =nameObj?.ToString()?.Trim()?? string.Empty;
+
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                using var userDc =new DynamicClass("dbo", "Users");
+
+                                var existingName =userDc.GetRowAsDictionary("Name",name);
+
+                                string oldName = string.Empty;
+
+                                if (isEdit && _InitVal.TryGetValue("Name",out object? oldNameObj))
+                                {
+                                    oldName =oldNameObj?.ToString()?.Trim()?? string.Empty;
+                                }
+
+                                bool sameName =isEdit &&string.Equals(oldName,name,StringComparison.OrdinalIgnoreCase);
+
+                                if (existingName != null && existingName.Count > 0 && !sameName)
+                                {
+                                    allErrors.Add($"Name '{name}' already exists.");
+
+                                    if (TryGetInput(dyn.Table,"Name",out var nameInput))
+                                    {
+                                        _errors.SetError(nameInput,"Name already exists.");
+                                    }
+
+                                    continue;
+                                }
+                            }
+                        }
+                        // =====================================================
+                        // SHIFT VALIDATION
+                        // =====================================================
+                        if (!vals.TryGetValue("Shift", out object? shiftObj) ||
+                            string.IsNullOrWhiteSpace(shiftObj?.ToString()) ||
+                            shiftObj?.ToString()?.Trim() == "--Select--")
+                        {
+                            allErrors.Add("Shift is required.");
+
+                            if (TryGetInput(
+                                dyn.Table,
+                                "Shift",
+                                out var shiftInput))
+                            {
+                                _errors.SetError(
+                                    shiftInput,
+                                    "Shift is required.");
+                            }
+
+                            continue;
+                        }
+                    }
                     perEntityValues.Add((dyn, vals));
                 }
 
@@ -1158,6 +1257,37 @@ namespace Aarohi.Classes
                 if (raw is string s && s.Trim() == "--Select--")
                     raw = null;
 
+                // =====================================================
+                // Reserved name validation
+                // Do not allow "All" for GroupName or CategoryName
+                // =====================================================
+                bool isRestrictedName =
+                    string.Equals(column, "GroupName",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(column, "CategoryName",
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (isRestrictedName &&
+                    raw is string enteredValue &&
+                    string.Equals(
+                        enteredValue.Trim(),
+                        "All",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    string displayName =
+                        string.Equals(column, "GroupName",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? "Group Name"
+                            : "Category Name";
+
+                    errors.Add($"{displayName} cannot be 'All'.");
+
+                    _errors.SetError(
+                        di,
+                        $"{displayName} cannot be 'All'.");
+
+                    continue;
+                }
                 var key = KeyOf(dyn.Table, column);
                 bool isRequired = flags.HasFlag(PropertyUiFlags.Required) || _dynamicRequired.Contains(key);
 
