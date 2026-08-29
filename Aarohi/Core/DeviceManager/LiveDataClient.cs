@@ -484,15 +484,56 @@ namespace Aarohi.Core.DeviceManager
             return result.ValueText;
         }
 
-        public async Task<CommunicationServiceRegisterBatchResult> WriteRegistersAsync(
-            Guid deviceId,
-            IEnumerable<WriteRegisterItem> writes,
-            CancellationToken cancellationToken = default)
+        public Task<CommunicationServiceRegisterBatchResult> WriteRegistersAsync(
+        Guid deviceId,
+        IEnumerable<WriteRegisterItem> writes,
+        CancellationToken cancellationToken = default)
         {
-            if (deviceId == Guid.Empty)
-                throw new ArgumentException("Device ID is required.", nameof(deviceId));
+            return WriteRegistersCoreAsync(
+                commandType: "WriteRegisters",
+                deviceId,
+                writes,
+                cancellationToken);
+        }
 
-            var writesList = writes?.ToList() ?? new List<WriteRegisterItem>();
+        public Task<CommunicationServiceRegisterBatchResult>
+            WriteRegistersBatchAsync(
+                Guid deviceId,
+                IEnumerable<WriteRegisterItem> writes,
+                CancellationToken cancellationToken = default)
+        {
+            return WriteRegistersCoreAsync(
+                commandType: "WriteRegistersBatch",
+                deviceId,
+                writes,
+                cancellationToken);
+        }
+
+        private async Task<CommunicationServiceRegisterBatchResult>
+            WriteRegistersCoreAsync(
+                string commandType,
+                Guid deviceId,
+                IEnumerable<WriteRegisterItem> writes,
+                CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(commandType))
+            {
+                throw new ArgumentException(
+                    "Write command type is required.",
+                    nameof(commandType));
+            }
+
+            if (deviceId == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "Device ID is required.",
+                    nameof(deviceId));
+            }
+
+            List<WriteRegisterItem> writesList =
+                writes?.ToList()
+                ?? new List<WriteRegisterItem>();
+
             if (writesList.Count == 0)
             {
                 return new CommunicationServiceRegisterBatchResult
@@ -502,93 +543,175 @@ namespace Aarohi.Core.DeviceManager
                 };
             }
 
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureConnectedAsync(
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-            string correlationId = Guid.NewGuid().ToString("N");
-            var tcs = new TaskCompletionSource<PipeEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
+            string correlationId =
+                Guid.NewGuid().ToString("N");
+
+            TaskCompletionSource<PipeEnvelope> tcs =
+                new(
+                    TaskCreationOptions
+                        .RunContinuationsAsynchronously);
+
             _pending[correlationId] = tcs;
 
             try
             {
-                var envelope = new PipeEnvelope
-                {
-                    Type = "WriteRegisters",
-                    CorrelationId = correlationId,
-                    Payload = JsonSerializer.SerializeToElement(
-                        new
-                        {
-                            DeviceId = deviceId,
-                            Writes = writesList.Select(x => new
-                            {
-                                x.RegisterName,
-                                x.Address,
-                                Value = ToWriteString(x.Value)
-                            }).ToList()
-                        },
-                        _jsonOptions)
-                };
-
-                await SendAsync(envelope, cancellationToken).ConfigureAwait(false);
-
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(10));
-                using (timeout.Token.Register(() => tcs.TrySetCanceled()))
-                {
-                    PipeEnvelope response = await tcs.Task.ConfigureAwait(false);
-
-                    if (string.Equals(response.Type, "WriteRegistersAck", StringComparison.OrdinalIgnoreCase))
+                PipeEnvelope envelope =
+                    new()
                     {
-                        WriteRegistersAckPayload? ack = JsonSerializer.Deserialize<WriteRegistersAckPayload>(
-                            response.Payload.GetRawText(), _jsonOptions);
+                        Type = commandType,
+                        CorrelationId = correlationId,
 
-                        List<CommunicationServiceRegisterResult> results = ack?.Results?.Select(x => new CommunicationServiceRegisterResult
-                        {
-                            Success = x.Success,
-                            Message = x.Message,
-                            CorrelationId = correlationId,
-                            DeviceName = x.DeviceName,
-                            RegisterName = x.RegisterName,
-                            Address = x.Address,
-                            RequestedValue = x.RequestedValue,
-                            ReadBackValue = NormalizeJsonValue(x.ReadBackValue),
-                            VerificationSucceeded = x.VerificationSucceeded,
-                            VerificationAttempts = x.VerificationAttempts
-                        }).ToList() ?? new List<CommunicationServiceRegisterResult>();
+                        Payload =
+                            JsonSerializer.SerializeToElement(
+                                new
+                                {
+                                    DeviceId = deviceId,
+
+                                    Writes =
+                                        writesList.Select(x => new
+                                        {
+                                            x.RegisterName,
+                                            x.Address,
+
+                                            Value =
+                                                ToWriteString(x.Value)
+                                        }).ToList()
+                                },
+                                _jsonOptions)
+                    };
+
+                await SendAsync(
+                        envelope,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                using CancellationTokenSource timeout =
+                    CancellationTokenSource
+                        .CreateLinkedTokenSource(
+                            cancellationToken);
+
+                timeout.CancelAfter(
+                    TimeSpan.FromSeconds(10));
+
+                using (
+                    timeout.Token.Register(
+                        () => tcs.TrySetCanceled()))
+                {
+                    PipeEnvelope response =
+                        await tcs.Task.ConfigureAwait(false);
+
+                    if (string.Equals(
+                            response.Type,
+                            "WriteRegistersAck",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        WriteRegistersAckPayload? ack =
+                            JsonSerializer.Deserialize<
+                                WriteRegistersAckPayload>(
+                                response.Payload.GetRawText(),
+                                _jsonOptions);
+
+                        List<CommunicationServiceRegisterResult>
+                            results =
+                                ack?.Results?.Select(x =>
+                                    new CommunicationServiceRegisterResult
+                                    {
+                                        Success =
+                                            x.Success,
+
+                                        Message =
+                                            x.Message,
+
+                                        CorrelationId =
+                                            correlationId,
+
+                                        DeviceName =
+                                            x.DeviceName,
+
+                                        RegisterName =
+                                            x.RegisterName,
+
+                                        Address =
+                                            x.Address,
+
+                                        RequestedValue =
+                                            x.RequestedValue,
+
+                                        ReadBackValue =
+                                            NormalizeJsonValue(
+                                                x.ReadBackValue),
+
+                                        VerificationSucceeded =
+                                            x.VerificationSucceeded,
+
+                                        VerificationAttempts =
+                                            x.VerificationAttempts
+                                    }).ToList()
+                                ?? new List<
+                                    CommunicationServiceRegisterResult>();
 
                         return new CommunicationServiceRegisterBatchResult
                         {
-                            DeviceId = ack?.DeviceId ?? deviceId,
-                            Results = results,
-                            TimeStamp = ack?.TimeStamp ?? DateTime.Now
+                            DeviceId =
+                                ack?.DeviceId ?? deviceId,
+
+                            Results =
+                                results,
+
+                            TimeStamp =
+                                ack?.TimeStamp ?? DateTime.Now
                         };
                     }
 
-                    ErrorPayload? err = JsonSerializer.Deserialize<ErrorPayload>(
-                        response.Payload.GetRawText(), _jsonOptions);
+                    ErrorPayload? error =
+                        JsonSerializer.Deserialize<ErrorPayload>(
+                            response.Payload.GetRawText(),
+                            _jsonOptions);
+
                     return new CommunicationServiceRegisterBatchResult
                     {
                         DeviceId = deviceId,
-                        Results = new List<CommunicationServiceRegisterResult>
-                        {
-                            new CommunicationServiceRegisterResult
+
+                        Results =
+                            new List<
+                                CommunicationServiceRegisterResult>
                             {
-                                Success = false,
-                                Message = BuildResponseErrorMessage(response.Type, err?.Message, "Error from communication service."),
-                                CorrelationId = correlationId
-                            }
+                        new()
+                        {
+                            Success = false,
+
+                            Message =
+                                BuildResponseErrorMessage(
+                                    response.Type,
+                                    error?.Message,
+                                    "Error from communication service."),
+
+                            CorrelationId =
+                                correlationId
                         }
+                            }
                     };
                 }
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
+                when (!cancellationToken.IsCancellationRequested)
             {
-                throw new TimeoutException("Communication service did not acknowledge the batch register write in time.");
+                throw new TimeoutException(
+                    "Communication service did not acknowledge " +
+                    "the batch register write in time.");
             }
             finally
             {
-                _pending.TryRemove(correlationId, out _);
+                _pending.TryRemove(
+                    correlationId,
+                    out _);
             }
         }
+
         private async Task<CommunicationServiceRegisterResult> WriteRegisterCoreAsync(
             Guid deviceId,
             string? registerName,
