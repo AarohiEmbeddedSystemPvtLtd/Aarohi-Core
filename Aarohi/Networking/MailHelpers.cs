@@ -14,12 +14,6 @@ namespace Aarohi.Networking
         private const string SenderEmail =
             "panel@aarohies.in";
 
-        // ------------------------------------------------------------
-        // KEEP YOUR EXISTING WORKING ZOHO SMTP APP PASSWORD HERE.
-        //
-        // IMPORTANT:
-        // Rotate the old exposed password before production.
-        // ------------------------------------------------------------
         private const string AppPassword =
             "mDfrnvMPXpaM";
 
@@ -29,15 +23,16 @@ namespace Aarohi.Networking
         private const int SmtpPort =
             587;
 
-        private static readonly LookupClient _lookup =
-            new LookupClient(
-                new LookupClientOptions
-                {
-                    Timeout =
-                        TimeSpan.FromSeconds(3),
 
-                    Retries =
-                        1,
+        private static readonly LookupClient _lookup = new LookupClient(
+     new LookupClientOptions(
+         IPAddress.Parse("8.8.8.8"),
+         IPAddress.Parse("1.1.1.1"))
+     {
+         Timeout = TimeSpan.FromSeconds(3),
+         Retries = 1,
+         UseCache = true
+     });
 
                     UseCache =
                         true
@@ -91,15 +86,14 @@ namespace Aarohi.Networking
             {
                 return false;
             }
+            catch (Exception ex)
+            {
+                throw new Exception(
+                    "Unable to verify the email domain due to a DNS/network problem.\n" +
+                    "Please check the internet and DNS connection.",
+                    ex);
+            }
         }
-
-        // ============================================================
-        // OTP EMAIL
-        //
-        // IMPORTANT:
-        // OTP remains unchanged.
-        // No Zoho Sent cleanup is done for OTP.
-        // ============================================================
 
         public static async Task SendOtpEmail(
             string email,
