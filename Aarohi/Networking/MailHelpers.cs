@@ -14,12 +14,7 @@ namespace Aarohi.Networking
         private const string SenderEmail =
             "panel@aarohies.in";
 
-        // ------------------------------------------------------------
-        // KEEP YOUR EXISTING WORKING ZOHO SMTP APP PASSWORD HERE.
-        //
-        // IMPORTANT:
-        // Rotate the old exposed password before production.
-        // ------------------------------------------------------------
+    
         private const string AppPassword =
             "mDfrnvMPXpaM";
 
@@ -29,77 +24,103 @@ namespace Aarohi.Networking
         private const int SmtpPort =
             587;
 
-        private static readonly LookupClient _lookup =
-            new LookupClient(
-                new LookupClientOptions
-                {
-                    Timeout =
-                        TimeSpan.FromSeconds(3),
+        //private static readonly LookupClient _lookup =
+        //    new LookupClient(
+        //        new LookupClientOptions
+        //        {
+        //            Timeout =
+        //                TimeSpan.FromSeconds(3),
 
-                    Retries =
-                        1,
+        //            Retries =
+        //                1,
 
-                    UseCache =
-                        true
-                });
+        //            UseCache =
+        //                true
+        //        });
 
-        // ============================================================
-        // DOMAIN VALIDATION
-        // ============================================================
 
-        public static async Task<bool> HasValidEmailDomain(
-            string email)
+
+        //public static async Task<bool> HasValidEmailDomain(
+        //    string email)
+        //{
+        //    if (string.IsNullOrWhiteSpace(
+        //            email))
+        //    {
+        //        return false;
+        //    }
+
+        //    int atIndex =
+        //        email.LastIndexOf('@');
+
+        //    if (atIndex <= 0 ||
+        //        atIndex >= email.Length - 1)
+        //    {
+        //        return false;
+        //    }
+
+        //    string domain =
+        //        email[(atIndex + 1)..]
+        //            .Trim();
+
+        //    if (string.IsNullOrWhiteSpace(
+        //            domain))
+        //    {
+        //        return false;
+        //    }
+
+        //    try
+        //    {
+        //        var result =
+        //            await _lookup.QueryAsync(
+        //                domain,
+        //                QueryType.MX);
+
+        //        return result
+        //            .Answers
+        //            .MxRecords()
+        //            .Any();
+        //    }
+        //    catch
+        //    {
+        //        return false;
+        //    }
+        //}
+
+        private static readonly LookupClient _lookup = new LookupClient(
+new LookupClientOptions(
+IPAddress.Parse("8.8.8.8"),
+IPAddress.Parse("1.1.1.1"))
+{
+Timeout = TimeSpan.FromSeconds(3),
+Retries = 1,
+UseCache = true
+});
+
+        public static async Task<bool> HasValidEmailDomain(string email)
         {
-            if (string.IsNullOrWhiteSpace(
-                    email))
-            {
-                return false;
-            }
-
-            int atIndex =
-                email.LastIndexOf('@');
-
-            if (atIndex <= 0 ||
-                atIndex >= email.Length - 1)
-            {
-                return false;
-            }
-
-            string domain =
-                email[(atIndex + 1)..]
-                    .Trim();
-
-            if (string.IsNullOrWhiteSpace(
-                    domain))
-            {
-                return false;
-            }
-
             try
             {
-                var result =
-                    await _lookup.QueryAsync(
-                        domain,
-                        QueryType.MX);
+                if (!MailAddress.TryCreate(email, out var mailAddress))
+                    return false;
 
-                return result
-                    .Answers
-                    .MxRecords()
-                    .Any();
+                string domain = mailAddress.Host;
+
+                var result = await _lookup.QueryAsync(domain, QueryType.MX);
+
+                return result.Answers.MxRecords().Any();
             }
-            catch
+            catch (DnsResponseException)
             {
                 return false;
             }
+            catch (Exception ex)
+            {
+                throw new Exception(
+                    "Unable to verify the email domain due to a DNS/network problem.\n" +
+                    "Please check the internet and DNS connection.",
+                    ex);
+            }
         }
-
-        // ============================================================
-        // OTP EMAIL
-        //
-        // IMPORTANT:
-        // OTP remains unchanged.
-        // No Zoho Sent cleanup is done for OTP.
-        // ============================================================
 
         public static async Task SendOtpEmail(
             string email,
