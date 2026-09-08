@@ -32,29 +32,67 @@ namespace Aarohi.Networking
         //        return false;
         //    }
         //}
-        private static readonly LookupClient _lookup = new LookupClient(new LookupClientOptions
-        {
-            Timeout = TimeSpan.FromSeconds(3),
-            Retries = 1,
-            UseCache = true
-        });
+
+        //private static readonly LookupClient _lookup = new LookupClient(new LookupClientOptions
+        //{
+        //    Timeout = TimeSpan.FromSeconds(3),
+        //    Retries = 1,
+        //    UseCache = true
+        //});
+
+        //public static async Task<bool> HasValidEmailDomain(string email)
+        //{
+        //    string domain = email[(email.IndexOf('@') + 1)..];
+
+        //    try
+        //    {
+        //        var result = await _lookup.QueryAsync(domain, QueryType.MX);
+
+        //        return result.Answers.MxRecords().Any();
+        //    }
+        //    catch (DnsResponseException)
+        //    {
+        //        // Domain genuinely doesn't exist
+        //        return false;
+        //    }
+        //}
+
+        private static readonly LookupClient _lookup = new LookupClient(
+     new LookupClientOptions(
+         IPAddress.Parse("8.8.8.8"),
+         IPAddress.Parse("1.1.1.1"))
+     {
+         Timeout = TimeSpan.FromSeconds(3),
+         Retries = 1,
+         UseCache = true
+     });
 
         public static async Task<bool> HasValidEmailDomain(string email)
         {
-            string domain = email[(email.IndexOf('@') + 1)..];
-
             try
             {
+                if (!MailAddress.TryCreate(email, out var mailAddress))
+                    return false;
+
+                string domain = mailAddress.Host;
+
                 var result = await _lookup.QueryAsync(domain, QueryType.MX);
 
                 return result.Answers.MxRecords().Any();
             }
             catch (DnsResponseException)
             {
-                // Domain genuinely doesn't exist
                 return false;
             }
+            catch (Exception ex)
+            {
+                throw new Exception(
+                    "Unable to verify the email domain due to a DNS/network problem.\n" +
+                    "Please check the internet and DNS connection.",
+                    ex);
+            }
         }
+
 
         public static async Task SendOtpEmail(string email, string fromName, string subject, string body)
         {
