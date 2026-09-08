@@ -1,0 +1,4 @@
+Needs to be taken care of In Aarohi Core
+
+Aarohi/Networking/MailHelpers.cs
+ => HasValidEmailDomain(bool, string) -> catch Exceptions

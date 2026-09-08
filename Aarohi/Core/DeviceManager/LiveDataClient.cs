@@ -117,6 +117,7 @@ namespace Aarohi.Core.DeviceManager
         private CancellationTokenSource? _cts;
         private Task? _readLoop;
         private Task? _valuesDispatchLoop;
+        private int _connectionFaulted;
 
         private static void Trace(string message)
         {
@@ -139,7 +140,9 @@ namespace Aarohi.Core.DeviceManager
             }
         }
 
-        public bool IsConnected => _pipe?.IsConnected == true;
+        public bool IsConnected =>
+            Volatile.Read(ref _connectionFaulted) == 0 &&
+            _pipe?.IsConnected == true;
 
         public LiveDataClient(string pipeName = DefaultPipeName)
         {
@@ -179,6 +182,7 @@ namespace Aarohi.Core.DeviceManager
                 _writer = new StreamWriter(_pipe, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true };
 
                 _cts = new CancellationTokenSource();
+                Volatile.Write(ref _connectionFaulted, 0);
                 _valuesDispatchLoop = Task.Run(() => DispatchValuesLoopAsync(_cts.Token));
                 _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token));
                 Trace($"Connected to pipe '{_pipeName}'.");
@@ -960,6 +964,16 @@ namespace Aarohi.Core.DeviceManager
                 await _writer.WriteLineAsync(json.AsMemory(), cancellationToken);
                 Trace($"TX Type={envelope.Type}, CorrelationId={envelope.CorrelationId}");
             }
+            catch (IOException)
+            {
+                MarkConnectionFaulted();
+                throw;
+            }
+            catch (ObjectDisposedException)
+            {
+                MarkConnectionFaulted();
+                throw;
+            }
             finally
             {
                 _writeLock.Release();
@@ -977,7 +991,11 @@ namespace Aarohi.Core.DeviceManager
                 {
                     string? line = await _reader.ReadLineAsync(cancellationToken);
                     if (line == null)
+                    {
+                        Trace("Communication service closed the pipe.");
+                        MarkConnectionFaulted();
                         break;
+                    }
 
                     if (string.IsNullOrWhiteSpace(line))
                         continue;
@@ -1035,14 +1053,17 @@ namespace Aarohi.Core.DeviceManager
             }
             catch (IOException ex)
             {
+                MarkConnectionFaulted();
                 Trace($"Read loop IO error: {ex.Message}");
             }
             catch (Exception ex)
             {
+                MarkConnectionFaulted();
                 Trace($"Read loop error: {ex.Message}");
             }
             finally
             {
+                MarkConnectionFaulted();
                 FailPendingRequests(new IOException("Communication service connection was closed."));
             }
         }
@@ -1118,43 +1139,185 @@ namespace Aarohi.Core.DeviceManager
 
         private async Task DisposeConnectionAsync()
         {
-            _cts?.Cancel();
-            if (_readLoop != null)
-            {
-                try
-                {
-                    await _readLoop.ConfigureAwait(false);
-                }
-                catch
-                {
-                }
+            Volatile.Write(ref _connectionFaulted, 1);
 
-                _readLoop = null;
+            CancellationTokenSource? cts = _cts;
+            Task? readLoop = _readLoop;
+            Task? valuesDispatchLoop = _valuesDispatchLoop;
+
+            _cts = null;
+            _readLoop = null;
+            _valuesDispatchLoop = null;
+
+            try
+            {
+                cts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
             }
 
-            _cts?.Dispose();
-            _cts = null;
+            await IgnoreCleanupFailureAsync(readLoop).ConfigureAwait(false);
+            await IgnoreCleanupFailureAsync(valuesDispatchLoop).ConfigureAwait(false);
 
-            _reader?.Dispose();
-            _reader = null;
-            _writer?.Dispose();
-            _writer = null;
-            _pipe?.Dispose();
-            _pipe = null;
+            bool writeLockTaken = false;
+            try
+            {
+                await _writeLock.WaitAsync().ConfigureAwait(false);
+                writeLockTaken = true;
+
+                StreamReader? reader = _reader;
+                StreamWriter? writer = _writer;
+                NamedPipeClientStream? pipe = _pipe;
+
+                _reader = null;
+                _writer = null;
+                _pipe = null;
+
+                DisposeConnectionResource(reader, "reader");
+                DisposeConnectionResource(writer, "writer");
+                DisposeConnectionResource(pipe, "pipe");
+            }
+            finally
+            {
+                if (writeLockTaken)
+                    _writeLock.Release();
+            }
+
+            DisposeConnectionResource(cts, "cancellation source");
 
             FailPendingRequests(new IOException("Communication service connection was closed."));
         }
 
+        private static async Task IgnoreCleanupFailureAsync(Task? task)
+        {
+            if (task == null)
+                return;
+
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Connection cleanup is best effort. The old session is discarded.
+            }
+        }
+
+        private static void DisposeConnectionResource(IDisposable? resource, string resourceName)
+        {
+            if (resource == null)
+                return;
+
+            try
+            {
+                resource.Dispose();
+            }
+            catch (IOException ex)
+            {
+                Trace($"Ignoring {resourceName} cleanup IO error: {ex.Message}");
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        private void MarkConnectionFaulted()
+        {
+            Volatile.Write(ref _connectionFaulted, 1);
+        }
+
         public void Dispose()
         {
-            _cts?.Cancel();
-            _cts?.Dispose();
-            _reader?.Dispose();
-            _writer?.Dispose();
-            _pipe?.Dispose();
+            Volatile.Write(ref _connectionFaulted, 1);
+
+            CancellationTokenSource? cts = _cts;
+            StreamReader? reader = _reader;
+            StreamWriter? writer = _writer;
+            NamedPipeClientStream? pipe = _pipe;
+
+            _cts = null;
+            _readLoop = null;
+            _valuesDispatchLoop = null;
+            _reader = null;
+            _writer = null;
+            _pipe = null;
+
+            try
+            {
+                cts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            DisposeConnectionResource(reader, "reader");
+            DisposeConnectionResource(writer, "writer");
+            DisposeConnectionResource(pipe, "pipe");
+            DisposeConnectionResource(cts, "cancellation source");
             FailPendingRequests(new IOException("Communication service connection was closed."));
             _connectionLock.Dispose();
             _writeLock.Dispose();
+        }
+
+        public async Task<CommunicationServiceRegisterResult> SetS7FullScanCycleIntervalAsync(
+            int s7FullScanCycleInterval,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectedAsync(cancellationToken);
+
+            string correlationId = Guid.NewGuid().ToString("N");
+            var tcs = new TaskCompletionSource<PipeEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pending[correlationId] = tcs;
+
+            try
+            {
+                var envelope = new PipeEnvelope
+                {
+                    Type = "SetS7FullScanCycleInterval",
+                    CorrelationId = correlationId,
+                    Payload = JsonSerializer.SerializeToElement(
+                        new { S7FullScanCycleInterval = s7FullScanCycleInterval }, _jsonOptions)
+                };
+
+                await SendAsync(envelope, cancellationToken);
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                using (timeout.Token.Register(() => tcs.TrySetCanceled()))
+                {
+                    PipeEnvelope response = await tcs.Task;
+
+                    if (string.Equals(response.Type, "Ack", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AckPayload? ack = JsonSerializer.Deserialize<AckPayload>(
+                            response.Payload.GetRawText(), _jsonOptions);
+                        return new CommunicationServiceRegisterResult
+                        {
+                            Success = ack?.Success ?? false,
+                            Message = ack?.Message ?? string.Empty,
+                            CorrelationId = correlationId
+                        };
+                    }
+
+                    ErrorPayload? err = JsonSerializer.Deserialize<ErrorPayload>(
+                        response.Payload.GetRawText(), _jsonOptions);
+                    return new CommunicationServiceRegisterResult
+                    {
+                        Success = false,
+                        Message = BuildResponseErrorMessage(response.Type, err?.Message, "Error from communication service."),
+                        CorrelationId = correlationId
+                    };
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("Communication service did not acknowledge the S7 full scan cycle interval request in time.");
+            }
+            finally
+            {
+                _pending.TryRemove(correlationId, out _);
+            }
         }
 
         private static string BuildResponseErrorMessage(string? responseType, string? responseMessage, string fallbackMessage)
