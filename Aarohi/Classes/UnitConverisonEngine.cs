@@ -27,12 +27,15 @@ namespace Aarohi.Classes
 
             public DataTable? RulesTable { get; init; }
             public DataTable? ParameterMappingTable { get; init; }
+            public DataTable? UnitFormatRulesTable { get; init; }
             public bool RulesReady { get; init; }
             public bool ParameterMappingReady { get; init; }
+            public bool UnitFormatRulesReady { get; init; }
             public bool HasFormatColumn { get; init; }
             public Dictionary<string, CachedRule> RulesByKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<string, string> FormatsByToKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<string, string> FormatsByFromKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> UnitFormatsByKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
             public HashSet<string> FromUnits { get; init; } = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<string, string[]> UnitsByParameter { get; init; } = new(StringComparer.OrdinalIgnoreCase);
             public string[] Parameters { get; init; } = Array.Empty<string>();
@@ -53,17 +56,36 @@ namespace Aarohi.Classes
 
         private static string sParameterCol = "Perameter";
         private static string sUnitsCol = "Units";
+        private static string sUnitFormatUnitCol = "Unit";
 
         public static DataTable? ConversionRules
         {
             get => Volatile.Read(ref _cache).RulesTable;
-            set => Load(value, Volatile.Read(ref _cache).ParameterMappingTable);
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(value, current.ParameterMappingTable, current.UnitFormatRulesTable);
+            }
         }
 
         public static DataTable? ParameterUnitMapping
         {
             get => Volatile.Read(ref _cache).ParameterMappingTable;
-            set => Load(Volatile.Read(ref _cache).RulesTable, value);
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(current.RulesTable, value, current.UnitFormatRulesTable);
+            }
+        }
+
+        public static DataTable? UnitFormatRules
+        {
+            get => Volatile.Read(ref _cache).UnitFormatRulesTable;
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(current.RulesTable, current.ParameterMappingTable, value);
+            }
         }
 
         public static string Quantity
@@ -146,9 +168,24 @@ namespace Aarohi.Classes
             }
         }
 
+        public static string UnitFormatUnitColumnName
+        {
+            get => sUnitFormatUnitCol;
+            set
+            {
+                sUnitFormatUnitCol = string.IsNullOrWhiteSpace(value) ? "Unit" : value.Trim();
+                RebuildCurrentCache();
+            }
+        }
+
         public static void Load(DataTable? conversionRules, DataTable? parameterUnitMapping)
         {
-            CacheSnapshot replacement = BuildCache(conversionRules, parameterUnitMapping);
+            Load(conversionRules, parameterUnitMapping, Volatile.Read(ref _cache).UnitFormatRulesTable);
+        }
+
+        public static void Load(DataTable? conversionRules, DataTable? parameterUnitMapping, DataTable? unitFormatRules)
+        {
+            CacheSnapshot replacement = BuildCache(conversionRules, parameterUnitMapping, unitFormatRules);
 
             lock (CacheBuildGate)
             {
@@ -159,7 +196,7 @@ namespace Aarohi.Classes
         private static void RebuildCurrentCache()
         {
             CacheSnapshot current = Volatile.Read(ref _cache);
-            Load(current.RulesTable, current.ParameterMappingTable);
+            Load(current.RulesTable, current.ParameterMappingTable, current.UnitFormatRulesTable);
         }
 
         public static bool HasMapping(string fromUnit)
@@ -288,12 +325,12 @@ namespace Aarohi.Classes
             }
 
             if (rule.FastFormula != null)
-                return (rule.FastFormula(value), rule.ToUnit, rule.Format);
+                return (rule.FastFormula(value), rule.ToUnit, selectedFormat);
 
             object? result = EvaluateFormula(rule.ParsedExpression, value);
             double convertedValue = ToDouble(result!);
 
-            return (convertedValue, rule.ToUnit, rule.Format);
+            return (convertedValue, rule.ToUnit, selectedFormat);
         }
 
         public static string GetUnitFromParameter(string parameter)
@@ -555,11 +592,12 @@ namespace Aarohi.Classes
             }
         }
 
-        private static CacheSnapshot BuildCache(DataTable? rules, DataTable? parameterMapping)
+        private static CacheSnapshot BuildCache(DataTable? rules, DataTable? parameterMapping, DataTable? unitFormatRules)
         {
             var rulesByKey = new Dictionary<string, CachedRule>(StringComparer.OrdinalIgnoreCase);
             var formatsByToKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var formatsByFromKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var unitFormatsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var fromUnits = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (HasRuleColumns(rules))
@@ -609,6 +647,23 @@ namespace Aarohi.Classes
                 }
             }
 
+            if (HasUnitFormatColumns(unitFormatRules))
+            {
+                foreach (DataRow row in unitFormatRules!.Rows)
+                {
+                    string quantity = ReadCell(row, sQuantity);
+                    string unit = ReadCell(row, sUnitFormatUnitCol);
+
+                    if (string.IsNullOrWhiteSpace(quantity) || string.IsNullOrWhiteSpace(unit))
+                        continue;
+
+                    string format = ReadCell(row, sFormat);
+                    unitFormatsByKey.TryAdd(
+                        GetPairKey(quantity, unit),
+                        string.IsNullOrWhiteSpace(format) ? sDefaultFormat : format);
+                }
+            }
+
             var unitsByParameter = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             var parameterDisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -641,12 +696,15 @@ namespace Aarohi.Classes
             {
                 RulesTable = rules,
                 ParameterMappingTable = parameterMapping,
+                UnitFormatRulesTable = unitFormatRules,
                 RulesReady = HasRuleColumns(rules),
                 ParameterMappingReady = HasParameterMappingColumns(parameterMapping),
+                UnitFormatRulesReady = HasUnitFormatColumns(unitFormatRules),
                 HasFormatColumn = rules?.Columns.Contains(sFormat) == true,
                 RulesByKey = rulesByKey,
                 FormatsByToKey = formatsByToKey,
                 FormatsByFromKey = formatsByFromKey,
+                UnitFormatsByKey = unitFormatsByKey,
                 FromUnits = fromUnits,
                 UnitsByParameter = unitsByParameter,
                 Parameters = parameterDisplayNames.Values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray()
@@ -655,6 +713,9 @@ namespace Aarohi.Classes
 
         private static string ResolveFormat(CacheSnapshot cache, string parameter, string fromUnit, string toUnit)
         {
+            if (cache.UnitFormatsByKey.TryGetValue(GetPairKey(parameter, toUnit), out string? unitFormat))
+                return unitFormat;
+
             if (!cache.HasFormatColumn)
                 return sDefaultFormat;
 
@@ -667,7 +728,7 @@ namespace Aarohi.Classes
             if (cache.FormatsByToKey.TryGetValue(GetPairKey(parameter, toUnit), out string? toFormat))
                 return toFormat;
 
-            return cache.FormatsByFromKey.TryGetValue(GetPairKey(parameter, toUnit), out string? fromFormat)
+            return cache.FormatsByFromKey.TryGetValue(GetPairKey(parameter, fromUnit), out string? fromFormat)
                 ? fromFormat
                 : sDefaultFormat;
         }
@@ -681,6 +742,12 @@ namespace Aarohi.Classes
         private static bool HasParameterMappingColumns(DataTable? table)
         {
             return table != null && table.Columns.Contains(sParameterCol) && table.Columns.Contains(sUnitsCol);
+        }
+
+        private static bool HasUnitFormatColumns(DataTable? table)
+        {
+            return table != null && table.Columns.Contains(sQuantity) && table.Columns.Contains(sUnitFormatUnitCol) &&
+                   table.Columns.Contains(sFormat);
         }
 
         private static string ReadCell(DataRow row, string columnName)
