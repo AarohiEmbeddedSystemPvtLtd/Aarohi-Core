@@ -337,7 +337,7 @@ namespace Aarohi.Classes
             return cn;
         }
 
-        private static readonly Regex ValidIdent = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+        private static readonly Regex ValidIdent = new(@"^[A-Za-z0-9][A-Za-z0-9_]*$", RegexOptions.Compiled);
         private static void EnsureIdent(string name)
         {
             if (string.IsNullOrWhiteSpace(name) || !ValidIdent.IsMatch(name))
