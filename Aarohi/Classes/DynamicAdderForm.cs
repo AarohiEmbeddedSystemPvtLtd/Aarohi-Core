@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
@@ -122,6 +123,9 @@ namespace Aarohi.Classes
         DynamicClass ComboBoxValues = new DynamicClass("dbo", "ComboBoxValues");
         DynamicClass Column_Permissions = new DynamicClass("dbo", "Column_Permissions");
 
+        private bool _applyingResponsiveLayout;
+
+        private readonly List<ExtendedPanel> _dynamicInputGrids = new List<ExtendedPanel>();
         #endregion
 
         #region ====== Constructors ======
@@ -234,10 +238,50 @@ namespace Aarohi.Classes
         private void InitCommon(string title)
         {
             LabelHeading.Text += title ?? string.Empty;
+
             EnableDoubleBuffer(this, true);
             EnableDoubleBuffer(PanelHolder, true);
             EnableDoubleBuffer(PanelSelection, true);
+
             PanelSelection.Visible = false; // constructors decide
+
+            // Register only once.
+            Resize -= DynamicAdderForm_Resize;
+            Resize += DynamicAdderForm_Resize;
+            Shown -= DynamicAdderForm_Shown;
+            Shown += DynamicAdderForm_Shown;
+        }
+
+        private void DynamicAdderForm_Resize(object? sender, EventArgs e)
+        {
+            ApplyResponsiveInputLayout();
+        }
+
+        private void ApplyWorkingAreaBounds()
+        {
+            Screen screen = Screen.FromControl(this);
+            Rectangle workingArea = screen.WorkingArea;
+
+            bool isPortrait = workingArea.Height > workingArea.Width;
+
+            // Preserve existing landscape behavior exactly.
+            if (!isPortrait)
+                return;
+
+            /*
+             * In portrait, explicitly use the Windows working area
+             * so the form does not extend underneath the taskbar.
+             */
+            WindowState = FormWindowState.Normal;
+            StartPosition = FormStartPosition.Manual;
+
+            Bounds = workingArea;
+        }
+
+        private void DynamicAdderForm_Shown(object? sender, EventArgs e)
+        {
+            ApplyWorkingAreaBounds();
+            ApplyResponsiveInputLayout();
         }
         #endregion
 
@@ -623,23 +667,89 @@ namespace Aarohi.Classes
         /// <summary>
         /// Creates a grid panel with the given column count for compact layout.
         /// </summary>
-        private ExtendedPanel MakeDecimalGrid(int I)
+        private ExtendedPanel MakeDecimalGrid(int columnCount)
         {
-            return new ExtendedPanel
+            ExtendedPanel panel = new ExtendedPanel
             {
                 Dock = DockStyle.Top,
                 Padding = new Padding(0),
                 Margin = new Padding(0),
+
                 DisplayMode = DisplayMode.Grid,
+
                 GridAutoColumnWidth = false,
                 GridAutoRowHeight = true,
-                GridColumnCount = I,
+
+                GridColumnCount = Math.Max(1, columnCount),
+
                 GridColumnGap = 10,
                 GridRowCount = 0,
                 GridRowGap = 10,
+
                 CornerRadius = 0,
-                BackColor = System.Drawing.Color.White
+
+                BackColor = Color.White
             };
+
+            _dynamicInputGrids.Add(panel);
+
+            return panel;
+        }
+
+        private int GetResponsiveColumnCount(ExtendedPanel panel, int itemCount)
+        {
+            if (itemCount <= 0)
+                return 1;
+
+            bool isPortrait =
+                ClientSize.Height > ClientSize.Width;
+
+            // Landscape:
+            // preserve the existing DynamicAdderForm behaviour.
+            if (!isPortrait)
+            {
+                return Math.Max(
+                    1,
+                    GetColumnCount(itemCount));
+            }
+
+            int availableWidth =
+                PanelHolder.ClientSize.Width -
+                PanelHolder.Padding.Horizontal;
+
+            if (availableWidth <= 0)
+            {
+                availableWidth =
+                    ClientSize.Width -
+                    Padding.Horizontal;
+            }
+
+            if (availableWidth <= 0)
+                return 1;
+
+            /*
+             * Minimum comfortable DataInput width.
+             *
+             * We calculate from the current available area rather than
+             * checking for a particular screen resolution.
+             */
+            const int preferredInputWidth = 280;
+            const int gap = 10;
+
+            int possibleColumns =
+                (availableWidth + gap) /
+                (preferredInputWidth + gap);
+
+            possibleColumns =
+                Math.Max(1, possibleColumns);
+
+            // Portrait should never become a very wide multi-column row.
+            possibleColumns =
+                Math.Min(3, possibleColumns);
+
+            return Math.Min(
+                itemCount,
+                possibleColumns);
         }
 
         /// <summary>
@@ -702,7 +812,7 @@ namespace Aarohi.Classes
                 try
                 {
                     PanelHolder.Controls.Clear();
-
+                    _dynamicInputGrids.Clear();
                     var ControlArray = new List<Control>();
 
                     foreach (var dyn in entities)
@@ -893,9 +1003,9 @@ namespace Aarohi.Classes
                         }
 
                         // Compute columns & heights
-                        decimalPanel.GridColumnCount = GetColumnCount(decimalPanel.Controls.Count);
-                        DropDownPanel.GridColumnCount = GetColumnCount(DropDownPanel.Controls.Count);
-                        TextPanel.GridColumnCount = GetColumnCount(TextPanel.Controls.Count);
+                        decimalPanel.GridColumnCount = GetResponsiveColumnCount(decimalPanel, decimalPanel.Controls.Count);
+                        DropDownPanel.GridColumnCount = GetResponsiveColumnCount(DropDownPanel, DropDownPanel.Controls.Count);
+                        TextPanel.GridColumnCount = GetResponsiveColumnCount(TextPanel, TextPanel.Controls.Count);
 
                         decimalPanel.Height = CalculatePanelHeight(decimalPanel);
                         DropDownPanel.Height = CalculatePanelHeight(DropDownPanel);
@@ -1080,6 +1190,104 @@ namespace Aarohi.Classes
                         allErrors.AddRange(errs);
                         continue;
                     }
+
+
+                    if (dyn.Table.Equals("Users", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bool isEdit =_InitVal != null && _InitVal.Count > 0;
+
+                        // =====================================================
+                        // USERNAME DUPLICATE VALIDATION
+                        // =====================================================
+                        if (vals.TryGetValue("UserName", out object? userNameObj))
+                        {
+                            string userName =userNameObj?.ToString()?.Trim() ?? string.Empty;
+
+                            if (!string.IsNullOrWhiteSpace(userName))
+                            {
+                                using var userDc =new DynamicClass("dbo", "Users");
+
+                                var existingUser =userDc.GetRowAsDictionary("UserName",userName);
+
+                                string oldUserName = string.Empty;
+
+                                if (isEdit &&_InitVal.TryGetValue("UserName",out object? oldUserNameObj))
+                                {
+                                    oldUserName =oldUserNameObj?.ToString()?.Trim()?? string.Empty;
+                                }
+
+                                bool sameUser =isEdit &&string.Equals(oldUserName,userName,StringComparison.OrdinalIgnoreCase);
+
+                                if (existingUser != null && existingUser.Count > 0 && !sameUser)
+                                {
+                                    allErrors.Add($"UserName '{userName}' already exists.");
+
+                                    if (TryGetInput(dyn.Table,"UserName",out var userNameInput))
+                                    {
+                                        _errors.SetError(userNameInput,"UserName already exists.");
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // =====================================================
+                        // NAME DUPLICATE VALIDATION
+                        // =====================================================
+                        if (vals.TryGetValue("Name", out object? nameObj))
+                        {
+                            string name =nameObj?.ToString()?.Trim()?? string.Empty;
+
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                using var userDc =new DynamicClass("dbo", "Users");
+
+                                var existingName =userDc.GetRowAsDictionary("Name",name);
+
+                                string oldName = string.Empty;
+
+                                if (isEdit && _InitVal.TryGetValue("Name",out object? oldNameObj))
+                                {
+                                    oldName =oldNameObj?.ToString()?.Trim()?? string.Empty;
+                                }
+
+                                bool sameName =isEdit &&string.Equals(oldName,name,StringComparison.OrdinalIgnoreCase);
+
+                                if (existingName != null && existingName.Count > 0 && !sameName)
+                                {
+                                    allErrors.Add($"Name '{name}' already exists.");
+
+                                    if (TryGetInput(dyn.Table,"Name",out var nameInput))
+                                    {
+                                        _errors.SetError(nameInput,"Name already exists.");
+                                    }
+
+                                    continue;
+                                }
+                            }
+                        }
+                        // =====================================================
+                        // SHIFT VALIDATION
+                        // =====================================================
+                        if (!vals.TryGetValue("Shift", out object? shiftObj) ||
+                            string.IsNullOrWhiteSpace(shiftObj?.ToString()) ||
+                            shiftObj?.ToString()?.Trim() == "--Select--")
+                        {
+                            allErrors.Add("Shift is required.");
+
+                            if (TryGetInput(
+                                dyn.Table,
+                                "Shift",
+                                out var shiftInput))
+                            {
+                                _errors.SetError(
+                                    shiftInput,
+                                    "Shift is required.");
+                            }
+
+                            continue;
+                        }
+                    }
                     perEntityValues.Add((dyn, vals));
                 }
 
@@ -1158,6 +1366,37 @@ namespace Aarohi.Classes
                 if (raw is string s && s.Trim() == "--Select--")
                     raw = null;
 
+                // =====================================================
+                // Reserved name validation
+                // Do not allow "All" for GroupName or CategoryName
+                // =====================================================
+                bool isRestrictedName =
+                    string.Equals(column, "GroupName",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(column, "CategoryName",
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (isRestrictedName &&
+                    raw is string enteredValue &&
+                    string.Equals(
+                        enteredValue.Trim(),
+                        "All",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    string displayName =
+                        string.Equals(column, "GroupName",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? "Group Name"
+                            : "Category Name";
+
+                    errors.Add($"{displayName} cannot be 'All'.");
+
+                    _errors.SetError(
+                        di,
+                        $"{displayName} cannot be 'All'.");
+
+                    continue;
+                }
                 var key = KeyOf(dyn.Table, column);
                 bool isRequired = flags.HasFlag(PropertyUiFlags.Required) || _dynamicRequired.Contains(key);
 
@@ -1201,6 +1440,98 @@ namespace Aarohi.Classes
         private void buttonCancel_Click(object sender, EventArgs e)
         {
             this.Close();
+        }
+
+        private void ApplyResponsiveInputLayout()
+        {
+            if (_applyingResponsiveLayout ||
+                IsDisposed ||
+                Disposing ||
+                PanelHolder.ClientSize.Width <= 0 ||
+                PanelHolder.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                _applyingResponsiveLayout = true;
+
+                foreach (ExtendedPanel grid in
+                         _dynamicInputGrids.ToList())
+                {
+                    if (grid == null ||
+                        grid.IsDisposed)
+                    {
+                        continue;
+                    }
+
+                    int itemCount =
+                        grid.Controls.Count;
+
+                    grid.GridColumnCount =
+                        GetResponsiveColumnCount(
+                            grid,
+                            itemCount);
+
+                    grid.Height =
+                        CalculatePanelHeight(grid);
+
+                    grid.PerformLayout();
+                }
+
+                ApplyResponsiveFooterLayout();
+
+                PanelHolder.PerformLayout();
+            }
+            finally
+            {
+                _applyingResponsiveLayout = false;
+            }
+        }
+
+        private void ApplyResponsiveFooterLayout()
+        {
+            bool isPortrait =
+                ClientSize.Height > ClientSize.Width;
+
+            if (!isPortrait)
+            {
+                extendedPanel1.Dock = DockStyle.Right;
+                extendedPanel1.Width = 396;
+
+                buttonCancel.Width = 183;
+                ButtonSave.Width = 183;
+
+                Padding originalPadding =
+                    new Padding(14, 8, 14, 8);
+
+                buttonCancel.Padding = originalPadding;
+                ButtonSave.Padding = originalPadding;
+
+                return;
+            }
+
+            extendedPanel1.Dock = DockStyle.Fill;
+
+            int usableWidth =
+                PanelFooter.ClientSize.Width -
+                PanelFooter.Padding.Horizontal -
+                extendedPanel1.Padding.Horizontal;
+
+            int buttonWidth =
+                Math.Max(
+                    100,
+                    (usableWidth - 10) / 2);
+
+            buttonCancel.Width = buttonWidth;
+            ButtonSave.Width = buttonWidth;
+
+            Padding portraitPadding =
+                new Padding(4, 8, 4, 8);
+
+            buttonCancel.Padding = portraitPadding;
+            ButtonSave.Padding = portraitPadding;
         }
     }
 }

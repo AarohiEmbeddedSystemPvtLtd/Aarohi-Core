@@ -19,3 +19,10 @@ Aarohi Core Library Version History
 	  - Integrated transaction safety with rollback on script failure.
 ================================================================================
 
+ 1.0.14.54
+
+Add username debounce autocomplete and eye button
+
+ Introduce a 250ms debounce autocomplete for the username ComboBox: cache all usernames in _allUserNames, handle TextUpdate to filter items, and show the dropdown with  matched results. Replace the password toggle text button with a custom painted eye icon (with slash when visible) that toggles textBox2.UseSystemPasswordChar and  repaints. Wire up events and clear the password when a username is selected. Miscellaneous UI/event wiring and small formatting cleanups.
+
+

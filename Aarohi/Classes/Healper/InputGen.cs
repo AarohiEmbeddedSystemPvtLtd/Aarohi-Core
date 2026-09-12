@@ -1331,7 +1331,8 @@ namespace Aarohi.Classes.Healper
                             LeftEditable = true,
                             LeftText = string.Empty,
                             AutoConvertOnUnitChange = true,
-                            AutoLoadUnitsFromParameter = false
+                            AutoLoadUnitsFromParameter = false,
+                            UseHighPrecisionConversion = true
                         };
 
                         etb.SetUnits(etbUnits);

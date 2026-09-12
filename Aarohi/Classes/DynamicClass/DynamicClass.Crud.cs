@@ -1,4 +1,4 @@
-﻿using Aarohi.Core.Logger;
+using Aarohi.Core.Logger;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
 using System;
@@ -144,13 +144,13 @@ namespace Aarohi.Classes
                 string colName = cols[i];
                 object? val = physicalValues[colName];
 
-                if (val is string s && string.IsNullOrWhiteSpace(s))
-                    val = DBNull.Value;
-
                 ColumnInfo info = infos.FirstOrDefault(x => x.Name.Equals(colName, StringComparison.OrdinalIgnoreCase));
 
                 if (info == null)
                     throw new Exception($"Column metadata not found for {colName}");
+
+                if (val is string s && string.IsNullOrWhiteSpace(s) && info.Nullable)
+                    val = DBNull.Value;
 
                 string dataType = info.DataType;
                 var param = cmd.Parameters.Add(parNames[i], GetSqlDbType(dataType));
@@ -934,6 +934,16 @@ FROM @Actions;";
             var physicalTable = ResolveTableName();
             var physicalKeyColumn = ResolveKeyColumnName(columns);
             EnsureIdent(physicalKeyColumn);
+
+            var inspector = new DatabaseRelationshipInspector(() => Open());
+
+            var usages = inspector.GetWhereRecordIsUsed(Schema, physicalTable, physicalKeyColumn, keyValue);
+
+            if (usages.Count > 0)
+            {
+                string message = inspector.BuildDeleteBlockedMessage(usages);
+                throw new ForeignKeyDeleteBlockedException(message, usages[0].ForeignKeyName, $"{usages[0].ChildSchema}.{usages[0].ChildTable}", usages[0].ChildColumn);
+            }
 
             var sql = $"DELETE FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)}=@k";
 
