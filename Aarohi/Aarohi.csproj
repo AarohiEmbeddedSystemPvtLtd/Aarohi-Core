@@ -10,7 +10,7 @@
 		<!-- Suppresses warning for public members without XML comments -->
 		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.54</Version>
+		<Version>1.0.14.58</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<Description>Aarohi Core.</Description>
@@ -47,8 +47,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Reference Include="Aarohi.ExtendedUI">
-	    <HintPath>..\..\Aarohi_ExtendedUI\Aarohi.ExtendedUI_Root\Aarohi.ExtendedUI_V1\Aarohi.ExtendedUI\bin\Debug\net9.0-windows\Aarohi.ExtendedUI.dll</HintPath>
 	  </Reference>
 	</ItemGroup>
 
