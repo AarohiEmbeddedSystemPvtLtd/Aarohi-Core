@@ -47,10 +47,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  </Reference>
-	</ItemGroup>
-
-	<ItemGroup>
 	  <Compile Update="Classes\DynamicCrudForm.cs" />
 	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
