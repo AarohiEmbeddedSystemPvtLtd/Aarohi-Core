@@ -24,67 +24,10 @@ namespace Aarohi.Networking
         private const int SmtpPort =
             587;
 
-        //private static readonly LookupClient _lookup =
-        //    new LookupClient(
-        //        new LookupClientOptions
-        //        {
-        //            Timeout =
-        //                TimeSpan.FromSeconds(3),
-
-        //            Retries =
-        //                1,
-
-        //            UseCache =
-        //                true
-        //        });
+      
 
 
-
-        //public static async Task<bool> HasValidEmailDomain(
-        //    string email)
-        //{
-        //    if (string.IsNullOrWhiteSpace(
-        //            email))
-        //    {
-        //        return false;
-        //    }
-
-        //    int atIndex =
-        //        email.LastIndexOf('@');
-
-        //    if (atIndex <= 0 ||
-        //        atIndex >= email.Length - 1)
-        //    {
-        //        return false;
-        //    }
-
-        //    string domain =
-        //        email[(atIndex + 1)..]
-        //            .Trim();
-
-        //    if (string.IsNullOrWhiteSpace(
-        //            domain))
-        //    {
-        //        return false;
-        //    }
-
-        //    try
-        //    {
-        //        var result =
-        //            await _lookup.QueryAsync(
-        //                domain,
-        //                QueryType.MX);
-
-        //        return result
-        //            .Answers
-        //            .MxRecords()
-        //            .Any();
-        //    }
-        //    catch
-        //    {
-        //        return false;
-        //    }
-        //}
+        
 
         private static readonly LookupClient _lookup = new LookupClient(
 new LookupClientOptions(
@@ -265,9 +208,14 @@ UseCache = true
                     "IMTS MAIL: SMTP was successful, but Zoho Sent cleanup failed: " +
                     cleanupException);
             }
-        }
-
-        
+            catch (Exception ex)
+            {
+                throw new Exception(
+                    "Unable to verify the email domain due to a DNS/network problem.\n" +
+                    "Please check the internet and DNS connection.",
+                    ex);
+            }
+        }        
 
         private static SmtpClient CreateSmtpClient()
         {
