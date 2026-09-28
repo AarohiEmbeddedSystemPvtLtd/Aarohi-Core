@@ -95,32 +95,12 @@ Timeout = TimeSpan.FromSeconds(3),
 Retries = 1,
 UseCache = true
 });
-
         public static async Task<bool> HasValidEmailDomain(string email)
         {
-            try
-            {
-                if (!MailAddress.TryCreate(email, out var mailAddress))
-                    return false;
-
-                string domain = mailAddress.Host;
-
-                var result = await _lookup.QueryAsync(domain, QueryType.MX);
-
-                return result.Answers.MxRecords().Any();
-            }
-            catch (DnsResponseException)
-            {
-                return false;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(
-                    "Unable to verify the email domain due to a DNS/network problem.\n" +
-                    "Please check the internet and DNS connection.",
-                    ex);
-            }
+            
+            return await Task.FromResult(true);
         }
+       
 
         public static async Task SendOtpEmail(
             string email,
@@ -159,26 +139,9 @@ UseCache = true
                 message);
         }
 
-        // ============================================================
-        // REPORT EMAIL
-        //
-        // Final automatic flow:
-        //
-        // 1. Create unique hidden cleanup marker.
-        // 2. Send report normally through existing SMTP.
-        // 3. SMTP success = MAIL SUCCESS.
-        // 4. Zoho OAuth automatically creates access token.
-        // 5. Zoho API automatically discovers Account ID.
-        // 6. Zoho API automatically discovers Sent Folder ID.
-        // 7. Read newest Sent messages.
-        // 8. Find exact message by subject + sender + hidden marker.
-        // 9. Move ONLY that exact message to Trash.
-        //
-        // Manual IMTS Send Mail and Auto Mail both get this behavior
-        // because both use this same method.
-        // ============================================================
+      
 
-        public static async Task SendReportEmail(
+      public static async Task SendReportEmail(
       string toEmails,
       string? ccEmails,
       string? bccEmails,
@@ -304,9 +267,7 @@ UseCache = true
             }
         }
 
-        // ============================================================
-        // SMTP CLIENT
-        // ============================================================
+        
 
         private static SmtpClient CreateSmtpClient()
         {
@@ -337,12 +298,7 @@ UseCache = true
             };
         }
 
-        // ============================================================
-        // RECIPIENTS
-        //
-        // An invalid recipient does not prevent all other valid
-        // recipients from receiving the report.
-        // ============================================================
+        
 
         private static void AddValidAddresses(
             MailAddressCollection addressList,
@@ -409,17 +365,6 @@ UseCache = true
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 //using DnsClient;
 //using System;
