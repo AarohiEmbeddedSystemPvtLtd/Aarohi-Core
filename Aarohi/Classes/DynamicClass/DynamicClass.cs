@@ -47,7 +47,7 @@ namespace Aarohi.Classes
         private static Func<SqlConnection>? _factory;
         public static Func<SqlConnection>? ConnectionFactory
         {
-            get => Volatile.Read(ref _factory) ?? throw new InvalidOperationException("DefaultConnectionFactory is not set.");
+            get =>  Volatile.Read(ref _factory) ?? throw new InvalidOperationException("DefaultConnectionFactory is not set.");
             set
             {
                 if (value is null) throw new ArgumentNullException(nameof(ConnectionFactory));

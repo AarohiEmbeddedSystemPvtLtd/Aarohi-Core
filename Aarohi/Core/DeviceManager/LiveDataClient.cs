@@ -69,7 +69,9 @@ namespace Aarohi.Core.DeviceManager
         public string? RegisterName { get; set; }
         public int? Address { get; set; }
         public object? Value { get; set; }
+        public bool WriteAckRequired { get; set; } = true;
     }
+
     public sealed class CommunicationServiceRegisterReadResult
     {
         public bool Success { get; init; }
@@ -510,7 +512,51 @@ namespace Aarohi.Core.DeviceManager
 
             try
             {
+<<<<<<< Updated upstream
                 var envelope = new PipeEnvelope
+=======
+                PipeEnvelope envelope =
+                    new()
+                    {
+                        Type = commandType,
+                        CorrelationId = correlationId,
+
+                        Payload =
+                            JsonSerializer.SerializeToElement(
+                                new
+                                {
+                                    DeviceId = deviceId,
+
+                                    Writes =
+                                        writesList.Select(x => new
+                                        {
+                                            x.RegisterName,
+                                            x.Address,
+                                            Value = ToWriteString(x.Value),                                        
+                                            x.WriteAckRequired
+
+                                        }).ToList()
+                                },
+                                _jsonOptions)
+                    };
+
+                await SendAsync(
+                        envelope,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                using CancellationTokenSource timeout =
+                    CancellationTokenSource
+                        .CreateLinkedTokenSource(
+                            cancellationToken);
+
+                timeout.CancelAfter(
+                    TimeSpan.FromSeconds(10));
+
+                using (
+                    timeout.Token.Register(
+                        () => tcs.TrySetCanceled()))
+>>>>>>> Stashed changes
                 {
                     Type = "WriteRegisters",
                     CorrelationId = correlationId,

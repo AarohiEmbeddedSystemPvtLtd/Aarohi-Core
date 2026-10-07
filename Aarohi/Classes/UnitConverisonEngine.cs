@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Aarohi.Classes
@@ -15,10 +16,14 @@ namespace Aarohi.Classes
         {
             public string ToUnit { get; init; } = string.Empty;
             public string FormulaText { get; init; } = string.Empty;
+            public string NumericFormulaText { get; init; } = string.Empty;
             public string Format { get; init; } = string.Empty;
             public Func<double, double>? FastFormula { get; init; }
             public LogicalExpression? ParsedExpression { get; init; }
-            public string? FormulaError { get; init; }
+            public (string Name, LogicalExpression Expression, Dictionary<string, string> Parameters)[] TemplateParts { get; init; }
+                = Array.Empty<(string Name, LogicalExpression Expression, Dictionary<string, string> Parameters)>();
+            public string? NumericFormulaError { get; init; }
+            public string? TemplateFormulaError { get; init; }
         }
 
         private sealed class CacheSnapshot
@@ -188,9 +193,37 @@ namespace Aarohi.Classes
             string fromUnit,
             string toUnit)
         {
+            CacheSnapshot cache = GetRulesCache();
+
+            if (string.IsNullOrWhiteSpace(parameter))
+                throw new ArgumentException("Parameter cannot be null or empty.", nameof(parameter));
+
+            if (string.IsNullOrWhiteSpace(fromUnit))
+                throw new ArgumentException("FromUnit cannot be null or empty.", nameof(fromUnit));
+
+            if (string.IsNullOrWhiteSpace(toUnit))
+                throw new ArgumentException("ToUnit cannot be null or empty.", nameof(toUnit));
+
+            if (!string.Equals(fromUnit.Trim(), toUnit.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                cache.RulesByKey.TryGetValue(GetRuleKey(parameter, fromUnit, toUnit), out CachedRule? rule))
+            {
+                string format = ResolveFormat(cache, parameter, fromUnit, toUnit);
+
+                if (rule.TemplateParts.Length > 0 && Regex.IsMatch(format, @"\{[^{}]+\}"))
+                {
+                    if (!string.IsNullOrWhiteSpace(rule.TemplateFormulaError))
+                    {
+                        throw new InvalidOperationException(
+                            $"Invalid template formula for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}': {rule.TemplateFormulaError}");
+                    }
+
+                    var values = EvaluateTemplate(rule, ToDouble(inputValue));
+                    return (ApplyTemplate(format, values), rule.ToUnit);
+                }
+            }
+
             var result = ConvertInternal(parameter, inputValue, fromUnit, toUnit);
-            string formattedValue = FormatValue(result.value, result.format);
-            return (formattedValue, result.toUnit);
+            return (FormatValue(result.value, result.format), result.toUnit);
         }
 
         public static double ConvertValue(
@@ -263,7 +296,6 @@ namespace Aarohi.Classes
                 throw new ArgumentException("ToUnit cannot be null or empty.", nameof(toUnit));
 
             double value = ToDouble(inputValue);
-
             string selectedFormat = ResolveFormat(cache, parameter, fromUnit, toUnit);
 
             if (string.Equals(fromUnit.Trim(), toUnit.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -281,19 +313,31 @@ namespace Aarohi.Classes
                     $"Formula is empty for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}'.");
             }
 
-            if (rule.ParsedExpression == null)
+            if (string.IsNullOrWhiteSpace(rule.NumericFormulaText))
             {
                 throw new InvalidOperationException(
-                    $"Invalid conversion formula for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}': {rule.FormulaError ?? "Formula could not be compiled."}");
+                    $"Numeric conversion expression is missing for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}'. " +
+                    "When template variables are used, keep the numeric expression first, for example: v/60000;{a}=...;{b}=...");
+            }
+
+            if (rule.ParsedExpression == null || !string.IsNullOrWhiteSpace(rule.NumericFormulaError))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid numeric conversion formula for parameter='{parameter}', FromUnit='{fromUnit}', ToUnit='{toUnit}': " +
+                    $"{rule.NumericFormulaError ?? "Formula could not be compiled."}");
             }
 
             if (rule.FastFormula != null)
                 return (rule.FastFormula(value), rule.ToUnit, rule.Format);
 
             object? result = EvaluateFormula(rule.ParsedExpression, value);
+<<<<<<< Updated upstream
             double convertedValue = ToDouble(result!);
 
             return (convertedValue, rule.ToUnit, rule.Format);
+=======
+            return (ToDouble(result!), rule.ToUnit, selectedFormat);
+>>>>>>> Stashed changes
         }
 
         public static string GetUnitFromParameter(string parameter)
@@ -398,6 +442,55 @@ namespace Aarohi.Classes
                 return (double)dec;
 
             return result;
+        }
+
+        private static Dictionary<string, double> EvaluateTemplate(CachedRule rule, double inputValue)
+        {
+            var values = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["v"] = inputValue
+            };
+
+            foreach (var part in rule.TemplateParts)
+            {
+                var exp = new Expression(part.Expression, EvaluateOptions.IgnoreCase);
+                exp.Parameters["v"] = inputValue;
+
+                foreach (var parameter in part.Parameters)
+                {
+                    if (!values.TryGetValue(parameter.Value, out double tokenValue))
+                    {
+                        throw new InvalidOperationException(
+                            $"Template variable '{{{parameter.Value}}}' must be calculated before '{{{part.Name}}}'.");
+                    }
+
+                    exp.Parameters[parameter.Key] = tokenValue;
+                }
+
+                values[part.Name] = ToDouble(exp.Evaluate()!);
+            }
+
+            return values;
+        }
+
+        private static string ApplyTemplate(string format, IReadOnlyDictionary<string, double> values)
+        {
+            return Regex.Replace(
+                format,
+                @"\{(?<name>[^{}:]+)(?::(?<format>[^{}]+))?\}",
+                match =>
+                {
+                    string name = match.Groups["name"].Value.Trim();
+
+                    if (!values.TryGetValue(name, out double value))
+                        throw new InvalidOperationException($"Unknown template token '{{{name}}}'.");
+
+                    string numberFormat = match.Groups["format"].Success
+                        ? match.Groups["format"].Value
+                        : "0.########";
+
+                    return value.ToString(numberFormat, CultureInfo.InvariantCulture);
+                });
         }
 
         private static Func<double, double>? TryCreateFastFormula(string formula)
@@ -570,25 +663,115 @@ namespace Aarohi.Classes
                     string fromUnit = ReadCell(row, sFrom);
                     string toUnit = ReadCell(row, sTo);
 
-                    if (string.IsNullOrWhiteSpace(quantity) || string.IsNullOrWhiteSpace(fromUnit) || string.IsNullOrWhiteSpace(toUnit))
+                    if (string.IsNullOrWhiteSpace(quantity) ||
+                        string.IsNullOrWhiteSpace(fromUnit) ||
+                        string.IsNullOrWhiteSpace(toUnit))
+                    {
                         continue;
+                    }
 
                     string formulaText = ReadCell(row, sFormula);
                     string format = rules.Columns.Contains(sFormat) ? ReadCell(row, sFormat) : string.Empty;
                     format = string.IsNullOrWhiteSpace(format) ? sDefaultFormat : format;
 
+                    string numericFormulaText = string.Empty;
                     LogicalExpression? parsedExpression = null;
-                    string? formulaError = null;
+                    string? numericFormulaError = null;
+                    string? templateFormulaError = null;
+
+                    var templateParts =
+                        new List<(string Name, LogicalExpression Expression, Dictionary<string, string> Parameters)>();
 
                     if (!string.IsNullOrWhiteSpace(formulaText))
                     {
-                        try
+                        var templateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                        foreach (string part in formulaText.Split(
+                                     ';',
+                                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         {
-                            parsedExpression = Expression.Compile(formulaText, false);
+                            Match assignment = Regex.Match(
+                                part,
+                                @"^\s*\{(?<name>[^{}:=;]+)\}\s*=\s*(?<expression>.+?)\s*$");
+
+                            if (assignment.Success)
+                            {
+                                string name = assignment.Groups["name"].Value.Trim();
+
+                                if (string.Equals(name, "v", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    templateFormulaError ??=
+                                        "'v' is reserved for the input value and cannot be a template variable name.";
+                                    continue;
+                                }
+
+                                if (!templateNames.Add(name))
+                                {
+                                    templateFormulaError ??= $"Duplicate template variable '{{{name}}}'.";
+                                    continue;
+                                }
+
+                                try
+                                {
+                                    var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                                    var safeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                                    string expressionText = Regex.Replace(
+                                        assignment.Groups["expression"].Value,
+                                        @"\{(?<name>[^{}:]+)\}",
+                                        token =>
+                                        {
+                                            string tokenName = token.Groups["name"].Value.Trim();
+
+                                            if (!safeNames.TryGetValue(tokenName, out string? safeName))
+                                            {
+                                                safeName = $"__p{safeNames.Count}";
+                                                safeNames[tokenName] = safeName;
+                                                parameters[safeName] = tokenName;
+                                            }
+
+                                            return safeName;
+                                        });
+
+                                    templateParts.Add((
+                                        name,
+                                        Expression.Compile(expressionText, false),
+                                        parameters));
+                                }
+                                catch (Exception ex)
+                                {
+                                    templateFormulaError ??= ex.Message;
+                                }
+
+                                continue;
+                            }
+
+                            if (part.TrimStart().StartsWith("{", StringComparison.Ordinal))
+                            {
+                                templateFormulaError ??= $"Invalid template assignment '{part}'.";
+                                continue;
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(numericFormulaText))
+                            {
+                                numericFormulaError ??=
+                                    "Only one numeric conversion expression is allowed before template assignments.";
+                                continue;
+                            }
+
+                            numericFormulaText = part.Trim();
                         }
-                        catch (Exception ex)
+
+                        if (!string.IsNullOrWhiteSpace(numericFormulaText))
                         {
-                            formulaError = ex.Message;
+                            try
+                            {
+                                parsedExpression = Expression.Compile(numericFormulaText, false);
+                            }
+                            catch (Exception ex)
+                            {
+                                numericFormulaError = ex.Message;
+                            }
                         }
                     }
 
@@ -596,10 +779,15 @@ namespace Aarohi.Classes
                     {
                         ToUnit = toUnit,
                         FormulaText = formulaText,
+                        NumericFormulaText = numericFormulaText,
                         Format = format,
-                        FastFormula = TryCreateFastFormula(formulaText),
+                        FastFormula = string.IsNullOrWhiteSpace(numericFormulaError)
+                            ? TryCreateFastFormula(numericFormulaText)
+                            : null,
                         ParsedExpression = parsedExpression,
-                        FormulaError = formulaError
+                        TemplateParts = templateParts.ToArray(),
+                        NumericFormulaError = numericFormulaError,
+                        TemplateFormulaError = templateFormulaError
                     };
 
                     rulesByKey.TryAdd(GetRuleKey(quantity, fromUnit, toUnit), cachedRule);
@@ -623,11 +811,15 @@ namespace Aarohi.Classes
                     string normalizedParameter = Normalize(parameter);
                     parameterDisplayNames.TryAdd(normalizedParameter, parameter);
 
-                    IEnumerable<string> currentUnits = unitsByParameter.TryGetValue(normalizedParameter, out string[]? existing)
-                        ? existing
-                        : Array.Empty<string>();
+                    IEnumerable<string> currentUnits =
+                        unitsByParameter.TryGetValue(normalizedParameter, out string[]? existing)
+                            ? existing
+                            : Array.Empty<string>();
+
                     string[] combinedUnits = currentUnits
-                        .Concat(ReadCell(row, sUnitsCol).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                        .Concat(ReadCell(row, sUnitsCol).Split(
+                            new[] { ',' },
+                            StringSplitOptions.RemoveEmptyEntries))
                         .Select(unit => unit.Trim())
                         .Where(unit => !string.IsNullOrWhiteSpace(unit))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -649,7 +841,9 @@ namespace Aarohi.Classes
                 FormatsByFromKey = formatsByFromKey,
                 FromUnits = fromUnits,
                 UnitsByParameter = unitsByParameter,
-                Parameters = parameterDisplayNames.Values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray()
+                Parameters = parameterDisplayNames.Values
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
             };
         }
 
