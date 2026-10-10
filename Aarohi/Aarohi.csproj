@@ -49,12 +49,18 @@
 
 	<ItemGroup>
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
 	  <ProjectReference Include="..\..\..\..\Projects\Aarohi.ExtendedUI\Aarohi.ExtendedUI\Aarohi.ExtendedUI.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
+<<<<<<< HEAD
 =======
 >>>>>>> 2eed83b537f4cbceadd7e9a0701bc1c597bf8f20
+=======
+>>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
 	  <Compile Update="Classes\DynamicCrudForm.cs" />
 	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />

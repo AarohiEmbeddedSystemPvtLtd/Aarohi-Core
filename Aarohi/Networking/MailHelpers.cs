@@ -230,6 +230,7 @@ namespace Aarohi.Networking
             }
         }
 
+
         private static SmtpClient CreateSmtpClient()
         {
             return new SmtpClient
