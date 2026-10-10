@@ -23,6 +23,7 @@ namespace Aarohi.Classes.Healper
             Settings,
             Credentials,
             Miscellaneous,
+            Company,
             root,
             Paths
         }
@@ -175,6 +176,120 @@ namespace Aarohi.Classes.Healper
         {
             SaveString(location, name, value ? "1" : "0");
         }
+
+        #region Comapny Information
+        public static void LoadCompanyDetails(
+    string defaultCompanyName,
+    string defaultCompanyAddress,
+    out string companyName,
+    out string companyAddress,
+    out byte[] companyLogo)
+        {
+            bool loaded = LoadCompanyDetails(
+                out companyName,
+                out companyAddress,
+                out companyLogo);
+
+            if (!loaded || string.IsNullOrWhiteSpace(companyName))
+            {
+                companyName = defaultCompanyName ?? string.Empty;
+            }
+
+            if (!loaded || string.IsNullOrWhiteSpace(companyAddress))
+            {
+                companyAddress = defaultCompanyAddress ?? string.Empty;
+            }
+        }
+
+        public static bool LoadCompanyDetails(
+    out string companyName,
+    out string companyAddress,
+    out byte[] companyLogo)
+        {
+            companyName = string.Empty;
+            companyAddress = string.Empty;
+            companyLogo = null;
+
+            try
+            {
+                string registryPath = GetRegistryPath(storeLocs.Company);
+
+                using (RegistryKey key =
+                       Registry.CurrentUser.OpenSubKey(registryPath))
+                {
+                    if (key == null)
+                        return false;
+
+                    companyName =
+                        key.GetValue(
+                            "CompanyName",
+                            string.Empty) as string
+                        ?? string.Empty;
+
+                    companyAddress =
+                        key.GetValue(
+                            "CompanyAddress",
+                            string.Empty) as string
+                        ?? string.Empty;
+
+                    companyLogo =
+                        key.GetValue("CompanyLogo") as byte[];
+
+                    return true;
+                }
+            }
+            catch
+            {
+                companyName = string.Empty;
+                companyAddress = string.Empty;
+                companyLogo = null;
+
+                return false;
+            }
+        }
+
+        public static bool SaveCompanyDetails(
+    string companyName,
+    string companyAddress,
+    byte[] companyLogo)
+        {
+            try
+            {
+                string registryPath = GetRegistryPath(storeLocs.Company);
+
+                using (RegistryKey key =
+                       Registry.CurrentUser.CreateSubKey(registryPath))
+                {
+                    if (key == null)
+                        return false;
+
+                    key.SetValue(
+                        "CompanyName",
+                        companyName ?? string.Empty,
+                        RegistryValueKind.String);
+
+                    key.SetValue(
+                        "CompanyAddress",
+                        companyAddress ?? string.Empty,
+                        RegistryValueKind.String);
+
+                    if (companyLogo != null && companyLogo.Length > 0)
+                    {
+                        key.SetValue(
+                            "CompanyLogo",
+                            companyLogo,
+                            RegistryValueKind.Binary);
+                    }
+
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        #endregion
 
         public static bool LoadBool(storeLocs location, string name, bool defaultValue = false)
         {
