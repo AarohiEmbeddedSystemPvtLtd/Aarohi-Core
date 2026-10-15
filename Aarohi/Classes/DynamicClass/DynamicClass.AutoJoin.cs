@@ -1,9 +1,8 @@
-﻿using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Data.SqlClient;
+using Aarohi.Core.Logger;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -60,7 +59,7 @@ namespace Aarohi.Classes
             foreach (var c in baseCols)
                 selectParts.Add($"{tBase}.{QSafe(c.Name)}");
 
-            string QTbl(string s, string t) => $"{QSafe(s)}.{QSafe(t)}";
+            string QTbl(string s, string t) => FormatTableName(s, t, SqlType);
             string QC(string alias, string col) { EnsureIdent(col); return $"{alias}.{QSafe(col)}"; }
 
             var joins = new List<string>();
@@ -101,22 +100,19 @@ namespace Aarohi.Classes
 
             var sql =
                 $"SELECT {string.Join(", ", selectParts)} " +
-                $"FROM {QTbl(Schema, physicalTable)} {tBase} " +
-                string.Join(" ", joins) + " " +
+                $"FROM {FormatTableName()} {tBase} " +
+                (joins.Count > 0 ? string.Join(" ", joins) + " " : "") +
                 (string.IsNullOrWhiteSpace(whereSql) ? "" : $"WHERE {ResolveSqlNamePlaceholders(whereSql)} ") +
                 orderClause;
 
             using var cn = Open();
-            using var da = new SqlDataAdapter(sql, cn);
+            using var cmd = CreateCommand(cn, sql);
 
             if (parameters != null)
             {
-                da.SelectCommand!.Parameters.Clear();
                 foreach (var kv in parameters)
                 {
-                    var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-                    var p = da.SelectCommand.Parameters.Add(name, SqlDbType.NVarChar);
-                    p.Value = kv.Value ?? DBNull.Value;
+                    AddCommandParameter(cmd, kv.Key, kv.Value);
                 }
             }
 
@@ -125,9 +121,7 @@ namespace Aarohi.Classes
                 ("fkCount", fkCols.Count),
                 ("leftJoin", leftJoin));
 
-            var dt = new DataTable();
-            da.Fill(dt);
-            return dt;
+            return ExecuteDataTable(cmd);
         });
 
         private List<string> GetTableColumnNames(string schema, string table)
@@ -136,20 +130,49 @@ namespace Aarohi.Classes
             EnsureIdent(table);
 
             using var cn = Open();
-            using var cmd = new SqlCommand(@"
+            var list = new List<string>();
+
+            if (SqlType == SqlType.Sqlite)
+            {
+                using var cmd = CreateCommand(cn, $"PRAGMA table_info(\"{table}\");");
+                using var rd = cmd.ExecuteReader();
+                while (rd.Read())
+                {
+                    var col = rd["name"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(col))
+                        list.Add(col);
+                }
+            }
+            else if (SqlType == SqlType.PostgreSql)
+            {
+                var s = ResolveSchema(schema, SqlType);
+                using var cmd = CreateCommand(cn, @"
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = @s AND table_name = @t
+ORDER BY ordinal_position;");
+                AddCommandParameter(cmd, "@s", s);
+                AddCommandParameter(cmd, "@t", table);
+
+                using var rd = cmd.ExecuteReader();
+                while (rd.Read()) list.Add(rd.GetString(0));
+            }
+            else
+            {
+                using var cmd = CreateCommand(cn, @"
 SELECT c.name
 FROM sys.columns c
 JOIN sys.tables  t ON t.object_id = c.object_id
 JOIN sys.schemas s ON s.schema_id = t.schema_id
 WHERE s.name = @s AND t.name = @t
-ORDER BY c.column_id;", cn);
+ORDER BY c.column_id;");
+                AddCommandParameter(cmd, "@s", schema);
+                AddCommandParameter(cmd, "@t", table);
 
-            cmd.Parameters.AddWithValue("@s", schema);
-            cmd.Parameters.AddWithValue("@t", table);
+                using var rd = cmd.ExecuteReader();
+                while (rd.Read()) list.Add(rd.GetString(0));
+            }
 
-            var list = new List<string>();
-            using var rd = cmd.ExecuteReader();
-            while (rd.Read()) list.Add(rd.GetString(0));
             return list;
         }
 
