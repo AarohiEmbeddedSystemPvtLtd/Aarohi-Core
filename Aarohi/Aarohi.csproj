@@ -10,7 +10,7 @@
 		<!-- Suppresses warning for public members without XML comments -->
 		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.58</Version>
+		<Version>1.0.14.65</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<Description>Aarohi Core.</Description>
@@ -21,12 +21,15 @@
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="\" />
-		<None Include="build\Aarohi.targets" Pack="true" PackagePath="build\" />
-		<None Include="..\Aarohi.DbPackager\bin\$(Configuration)\net9.0-windows\**\*.*" Pack="true" PackagePath="build\tools\" />
 	</ItemGroup>
 
   <ItemGroup>
+<<<<<<< Updated upstream
     <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />
+=======
+    <!--<PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />-->
+    <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
+>>>>>>> Stashed changes
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
