@@ -1,9 +1,10 @@
 using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -21,6 +22,45 @@ namespace Aarohi.Classes
         #region Schema metadata and extended properties
         #region Extended Properties Manager
 
+        private static void EnsureMetadataTableExists(DbConnection cn, DbTransaction? tx = null, SqlType sqlType = SqlType.Sqlite, string schema = "public")
+        {
+            if (sqlType == SqlType.PostgreSql)
+            {
+                var s = ResolveSchema(schema, sqlType);
+                var sql = $@"
+CREATE TABLE IF NOT EXISTS ""{s}"".""__Aarohi_Metadata"" (
+    ""Id"" BIGSERIAL PRIMARY KEY,
+    ""TargetType"" text NOT NULL,
+    ""SchemaName"" text NOT NULL,
+    ""TableName"" text NOT NULL,
+    ""ColumnName"" text NOT NULL,
+    ""PropertyName"" text NOT NULL,
+    ""PropertyValue"" text NULL,
+    ""UpdatedAt"" text NOT NULL,
+    CONSTRAINT UQ_Aarohi_Meta_{s} UNIQUE (""TargetType"", ""SchemaName"", ""TableName"", ""ColumnName"", ""PropertyName"")
+);";
+                using var cmd = CreateCommand(cn, sql, tx);
+                cmd.ExecuteNonQuery();
+            }
+            else
+            {
+                const string sql = @"
+CREATE TABLE IF NOT EXISTS [__Aarohi_Metadata] (
+    [Id] INTEGER PRIMARY KEY AUTOINCREMENT,
+    [TargetType] TEXT NOT NULL,
+    [SchemaName] TEXT NOT NULL,
+    [TableName] TEXT NOT NULL,
+    [ColumnName] TEXT NOT NULL,
+    [PropertyName] TEXT NOT NULL,
+    [PropertyValue] TEXT NULL,
+    [UpdatedAt] TEXT NOT NULL,
+    CONSTRAINT UQ_Aarohi_Meta UNIQUE ([TargetType], [SchemaName], [TableName], [ColumnName], [PropertyName])
+);";
+                using var cmd = CreateCommand(cn, sql, tx);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         private bool UpsertExtendedProperty(string propName, object value, string? column = null)
         {
             EnsureIdent(Schema);
@@ -31,7 +71,38 @@ namespace Aarohi.Classes
             using var tx = cn.BeginTransaction();
             try
             {
-                var existsSql = @"
+                if (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+                {
+                    EnsureMetadataTableExists(cn, tx, SqlType, Schema);
+                    var targetType = string.IsNullOrWhiteSpace(physicalColumn) ? "TABLE" : "COLUMN";
+                    var colKey = physicalColumn ?? "";
+                    var s = ResolveSchema(Schema, SqlType);
+
+                    string upsertSql = SqlType == SqlType.PostgreSql
+                        ? $@"
+INSERT INTO ""{s}"".""__Aarohi_Metadata"" (""TargetType"", ""SchemaName"", ""TableName"", ""ColumnName"", ""PropertyName"", ""PropertyValue"", ""UpdatedAt"")
+VALUES (@type, @s, @t, @c, @prop, @val, @now)
+ON CONFLICT (""TargetType"", ""SchemaName"", ""TableName"", ""ColumnName"", ""PropertyName"")
+DO UPDATE SET ""PropertyValue"" = EXCLUDED.""PropertyValue"", ""UpdatedAt"" = EXCLUDED.""UpdatedAt"";"
+                        : @"
+INSERT INTO [__Aarohi_Metadata] (TargetType, SchemaName, TableName, ColumnName, PropertyName, PropertyValue, UpdatedAt)
+VALUES (@type, @s, @t, @c, @prop, @val, @now)
+ON CONFLICT (TargetType, SchemaName, TableName, ColumnName, PropertyName)
+DO UPDATE SET PropertyValue = excluded.PropertyValue, UpdatedAt = excluded.UpdatedAt;";
+
+                    using var cmd = CreateCommand(cn, upsertSql, tx);
+                    AddCommandParameter(cmd, "@type", targetType);
+                    AddCommandParameter(cmd, "@s", s);
+                    AddCommandParameter(cmd, "@t", physicalTable);
+                    AddCommandParameter(cmd, "@c", colKey);
+                    AddCommandParameter(cmd, "@prop", propName);
+                    AddCommandParameter(cmd, "@val", value != null ? Convert.ToString(value) : (object)DBNull.Value);
+                    AddCommandParameter(cmd, "@now", DateTime.UtcNow.ToString("o"));
+                    cmd.ExecuteNonQuery();
+                }
+                else
+                {
+                    var existsSql = @"
 DECLARE @colId int = NULL;
 IF @col IS NOT NULL
     SELECT @colId = c.column_id
@@ -49,31 +120,32 @@ SELECT CASE WHEN EXISTS (
     AND ((@col IS NULL AND ep.minor_id = 0) OR (@col IS NOT NULL AND ep.minor_id = @colId))
 ) THEN 1 ELSE 0 END;";
 
-                using (var chk = new SqlCommand(existsSql, cn, tx))
-                {
-                    chk.Parameters.AddWithValue("@n", propName);
-                    chk.Parameters.AddWithValue("@s", Schema);
-                    chk.Parameters.AddWithValue("@t", physicalTable);
-                    chk.Parameters.AddWithValue("@col", (object?)physicalColumn ?? DBNull.Value);
-                    var exists = Convert.ToInt32(chk.ExecuteScalar()) == 1;
+                    using (var chk = CreateCommand(cn, existsSql, tx))
+                    {
+                        AddCommandParameter(chk, "@n", propName);
+                        AddCommandParameter(chk, "@s", Schema);
+                        AddCommandParameter(chk, "@t", physicalTable);
+                        AddCommandParameter(chk, "@col", (object?)physicalColumn ?? DBNull.Value);
+                        var exists = Convert.ToInt32(chk.ExecuteScalar()) == 1;
 
-                    var proc = exists ? "sys.sp_updateextendedproperty" : "sys.sp_addextendedproperty";
-                    var sql = $@"
+                        var proc = exists ? "sys.sp_updateextendedproperty" : "sys.sp_addextendedproperty";
+                        var sql = $@"
 EXEC {proc}
   @name=@n, @value=@v,
   @level0type=N'SCHEMA', @level0name=@s,
   @level1type=N'TABLE',  @level1name=@t
 {(string.IsNullOrWhiteSpace(column) ? "" : ",  @level2type=N'COLUMN', @level2name=@c")};";
 
-                    using var cmd = new SqlCommand(sql, cn, tx);
-                    cmd.Parameters.AddWithValue("@n", propName);
-                    cmd.Parameters.AddWithValue("@v", value ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@s", Schema);
-                    cmd.Parameters.AddWithValue("@t", physicalTable);
-                    if (!string.IsNullOrWhiteSpace(physicalColumn))
-                        cmd.Parameters.AddWithValue("@c", physicalColumn);
+                        using var cmd = CreateCommand(cn, sql, tx);
+                        AddCommandParameter(cmd, "@n", propName);
+                        AddCommandParameter(cmd, "@v", value ?? DBNull.Value);
+                        AddCommandParameter(cmd, "@s", Schema);
+                        AddCommandParameter(cmd, "@t", physicalTable);
+                        if (!string.IsNullOrWhiteSpace(physicalColumn))
+                            AddCommandParameter(cmd, "@c", physicalColumn);
 
-                    cmd.ExecuteNonQuery();
+                        cmd.ExecuteNonQuery();
+                    }
                 }
 
                 tx.Commit();
@@ -94,7 +166,30 @@ EXEC {proc}
             var physicalColumn = string.IsNullOrWhiteSpace(column) ? null : ResolveColumnName(column);
 
             using var cn = Open();
-            var sql = $@"
+
+            if (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+            {
+                EnsureMetadataTableExists(cn, sqlType: SqlType, schema: Schema);
+                var targetType = string.IsNullOrWhiteSpace(physicalColumn) ? "TABLE" : "COLUMN";
+                var colKey = physicalColumn ?? "";
+                var s = ResolveSchema(Schema, SqlType);
+
+                string dropSql = SqlType == SqlType.PostgreSql
+                    ? $@"DELETE FROM ""{s}"".""__Aarohi_Metadata"" WHERE ""TargetType"" = @type AND ""TableName"" = @t AND ""ColumnName"" = @c AND ""PropertyName"" = @prop;"
+                    : @"DELETE FROM [__Aarohi_Metadata] WHERE TargetType = @type AND TableName = @t AND ColumnName = @c AND PropertyName = @prop;";
+
+                using var cmd = CreateCommand(cn, dropSql);
+                AddCommandParameter(cmd, "@type", targetType);
+                AddCommandParameter(cmd, "@t", physicalTable);
+                AddCommandParameter(cmd, "@c", colKey);
+                AddCommandParameter(cmd, "@prop", propName);
+                cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
+                return true;
+            }
+            else
+            {
+                var sql = $@"
 BEGIN TRY
   EXEC sys.sp_dropextendedproperty
     @name=@n,
@@ -107,51 +202,48 @@ BEGIN CATCH
   -- Property might not exist; treat as success for idempotency
   RETURN 1;
 END CATCH";
-            using var cmd = new SqlCommand(sql, cn);
-            cmd.Parameters.AddWithValue("@n", propName);
-            cmd.Parameters.AddWithValue("@s", Schema);
-            cmd.Parameters.AddWithValue("@t", physicalTable);
-            if (!string.IsNullOrWhiteSpace(physicalColumn))
-                cmd.Parameters.AddWithValue("@c", physicalColumn);
-            cmd.ExecuteNonQuery();
-            InvalidateColumnMetadataCache();
-            return true;
+                using var cmd = CreateCommand(cn, sql);
+                AddCommandParameter(cmd, "@n", propName);
+                AddCommandParameter(cmd, "@s", Schema);
+                AddCommandParameter(cmd, "@t", physicalTable);
+                if (!string.IsNullOrWhiteSpace(physicalColumn))
+                    AddCommandParameter(cmd, "@c", physicalColumn);
+                cmd.ExecuteNonQuery();
+                InvalidateColumnMetadataCache();
+                return true;
+            }
         }
 
-        //        private object? ReadExtendedProperty(string propName, string? column = null)
-        //        {
-        //            EnsureIdent(Schema); EnsureIdent(Table);
-        //            if (!string.IsNullOrWhiteSpace(column)) EnsureIdent(column);
-
-        //            const string sql = @"
-        //SELECT CAST(ep.value AS sql_variant) AS v
-        //FROM sys.extended_properties ep
-        //JOIN sys.tables t  ON t.object_id = ep.major_id
-        //JOIN sys.schemas s ON s.schema_id = t.schema_id
-        //LEFT JOIN sys.columns c ON c.object_id = t.object_id AND c.column_id = ep.minor_id
-        //WHERE ep.name=@n AND s.name=@s AND t.name=@t
-        //  AND ((@c IS NULL AND ep.minor_id = 0) OR (@c IS NOT NULL AND c.name=@c));";
-
-        //            using var cn = Open();
-        //            using var cmd = new SqlCommand(sql, cn);
-        //            cmd.Parameters.AddWithValue("@n", propName);
-        //            cmd.Parameters.AddWithValue("@s", Schema);
-        //            cmd.Parameters.AddWithValue("@t", Table);
-        //            cmd.Parameters.AddWithValue("@c", (object?)column ?? DBNull.Value);
-
-        //            var obj = cmd.ExecuteScalar();
-        //            return obj == null || obj == DBNull.Value ? null : obj;
-        //        }
         public object? ReadExtendedProperty(string propName, string? column = null)
         {
             EnsureIdent(Schema);
             var physicalTable = ResolveTableName();
             var physicalColumn = string.IsNullOrWhiteSpace(column) ? null : ResolveColumnName(column);
 
-            // NOTE:
-            // - If column == null => table-level EP
-            // - If column != null => column-level EP
-            const string sql = @"
+            using var cn = Open();
+
+            if (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+            {
+                EnsureMetadataTableExists(cn, sqlType: SqlType, schema: Schema);
+                var targetType = string.IsNullOrWhiteSpace(physicalColumn) ? "TABLE" : "COLUMN";
+                var colKey = physicalColumn ?? "";
+                var s = ResolveSchema(Schema, SqlType);
+
+                string readSql = SqlType == SqlType.PostgreSql
+                    ? $@"SELECT ""PropertyValue"" FROM ""{s}"".""__Aarohi_Metadata"" WHERE ""TargetType"" = @type AND ""TableName"" = @t AND ""ColumnName"" = @c AND ""PropertyName"" = @prop LIMIT 1;"
+                    : @"SELECT PropertyValue FROM [__Aarohi_Metadata] WHERE TargetType = @type AND TableName = @t AND ColumnName = @c AND PropertyName = @prop LIMIT 1;";
+
+                using var cmd = CreateCommand(cn, readSql);
+                AddCommandParameter(cmd, "@type", targetType);
+                AddCommandParameter(cmd, "@t", physicalTable);
+                AddCommandParameter(cmd, "@c", colKey);
+                AddCommandParameter(cmd, "@prop", propName);
+                var obj = cmd.ExecuteScalar();
+                return obj == null || obj == DBNull.Value ? null : obj;
+            }
+            else
+            {
+                const string sql = @"
 SELECT TOP (1) [value]
 FROM sys.fn_listextendedproperty
 (
@@ -162,17 +254,15 @@ FROM sys.fn_listextendedproperty
     @column
 );";
 
-            using var cn = Open();
-            using var cmd = new SqlCommand(sql, cn);
+                using var cmd = CreateCommand(cn, sql);
+                AddCommandParameter(cmd, "@propName", propName);
+                AddCommandParameter(cmd, "@schema", Schema);
+                AddCommandParameter(cmd, "@table", physicalTable);
+                AddCommandParameter(cmd, "@column", (object?)physicalColumn ?? DBNull.Value);
 
-            cmd.Parameters.Add("@propName", System.Data.SqlDbType.NVarChar, 128).Value = propName;
-            cmd.Parameters.Add("@schema", System.Data.SqlDbType.NVarChar, 128).Value = Schema;
-            cmd.Parameters.Add("@table", System.Data.SqlDbType.NVarChar, 128).Value = physicalTable;
-            cmd.Parameters.Add("@column", System.Data.SqlDbType.NVarChar, 128).Value =
-                (object?)physicalColumn ?? DBNull.Value;
-
-            var obj = cmd.ExecuteScalar();
-            return obj == null || obj == DBNull.Value ? null : obj;
+                var obj = cmd.ExecuteScalar();
+                return obj == null || obj == DBNull.Value ? null : obj;
+            }
         }
 
         #endregion
@@ -553,7 +643,325 @@ FROM sys.fn_listextendedproperty
         EnsureIdent(Schema);
         var physicalTable = ResolveTableName();
 
-        const string sql = @"
+        using var cn = Open();
+        var list = new List<ColumnInfo>();
+
+        if (SqlType == SqlType.Sqlite)
+        {
+            EnsureMetadataTableExists(cn);
+
+            // Read metadata properties for columns of this table
+            var metaDict = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            using (var metaCmd = CreateCommand(cn, "SELECT ColumnName, PropertyName, PropertyValue FROM [__Aarohi_Metadata] WHERE TargetType='COLUMN' AND TableName=@t"))
+            {
+                AddCommandParameter(metaCmd, "@t", physicalTable);
+                using var rdMeta = metaCmd.ExecuteReader();
+                while (rdMeta.Read())
+                {
+                    var col = rdMeta["ColumnName"]?.ToString() ?? "";
+                    var prop = rdMeta["PropertyName"]?.ToString() ?? "";
+                    var val = rdMeta["PropertyValue"]?.ToString() ?? "";
+                    if (!metaDict.TryGetValue(col, out var props))
+                    {
+                        props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        metaDict[col] = props;
+                    }
+                    props[prop] = val;
+                }
+            }
+
+            // Read Foreign Keys
+            var fkDict = new Dictionary<string, (string RefTable, string RefCol, string FkName)>(StringComparer.OrdinalIgnoreCase);
+            using (var fkCmd = CreateCommand(cn, $"PRAGMA foreign_key_list(\"{physicalTable}\");"))
+            {
+                using var rdFk = fkCmd.ExecuteReader();
+                while (rdFk.Read())
+                {
+                    var fromCol = rdFk["from"]?.ToString() ?? "";
+                    var toTable = rdFk["table"]?.ToString() ?? "";
+                    var toCol = rdFk["to"]?.ToString() ?? "";
+                    var fkId = rdFk["id"]?.ToString() ?? "";
+                    fkDict[fromCol] = (toTable, toCol, $"FK_{physicalTable}_{toTable}_{fkId}");
+                }
+            }
+
+            // Check if table SQL has AUTOINCREMENT
+            var isAutoIncrement = false;
+            using (var sqlCmd = CreateCommand(cn, "SELECT sql FROM sqlite_master WHERE type='table' AND name=@t;"))
+            {
+                AddCommandParameter(sqlCmd, "@t", physicalTable);
+                var tableSql = sqlCmd.ExecuteScalar()?.ToString() ?? "";
+                if (tableSql.IndexOf("AUTOINCREMENT", StringComparison.OrdinalIgnoreCase) >= 0)
+                    isAutoIncrement = true;
+            }
+
+            // Read Columns via PRAGMA table_info
+            using (var colCmd = CreateCommand(cn, $"PRAGMA table_info(\"{physicalTable}\");"))
+            using (var rdCol = colCmd.ExecuteReader())
+            {
+                while (rdCol.Read())
+                {
+                    var name = rdCol["name"]?.ToString() ?? "";
+                    var typeStr = rdCol["type"]?.ToString() ?? "TEXT";
+                    var notNull = Convert.ToInt32(rdCol["notnull"]) == 1;
+                    var dfltVal = rdCol["dflt_value"] != DBNull.Value ? rdCol["dflt_value"]?.ToString() : null;
+                    var pkOrder = Convert.ToInt32(rdCol["pk"]);
+                    var isPk = pkOrder > 0;
+
+                    var ci = new ColumnInfo
+                    {
+                        ParentTable = physicalTable,
+                        Name = name,
+                        DataType = typeStr,
+                        Nullable = !notNull,
+                        IsPrimaryKey = isPk,
+                        DefaultSql = dfltVal,
+                        Identity = isPk && (isAutoIncrement || typeStr.IndexOf("INT", StringComparison.OrdinalIgnoreCase) >= 0)
+                    };
+
+                    if (fkDict.TryGetValue(name, out var fk))
+                    {
+                        ci.IsForeignKey = true;
+                        ci.ReferencedTable = fk.RefTable;
+                        ci.ReferencedColumn = fk.RefCol;
+                        ci.ForeignKeyName = fk.FkName;
+                    }
+
+                    if (metaDict.TryGetValue(name, out var props))
+                    {
+                        if (props.TryGetValue("DisplayName", out var dn)) ci.DisplayName = dn;
+                        if (props.TryGetValue("Description", out var desc)) ci.Description = desc;
+                        if (props.TryGetValue("DefaultUnit", out var du)) ci.DefaultUnit = du;
+                        if (props.TryGetValue("InputUnit", out var iu)) ci.InputUnit = iu;
+                        if (props.TryGetValue("LastUsedUnit", out var lu)) ci.LastUsedUnit = lu;
+                        if (props.TryGetValue("ShowUnit", out var su)) ci.ShowUnit = su;
+                        if (props.TryGetValue("ReportUnit", out var ru)) ci.ReportUnit = ru;
+                        if (props.TryGetValue("Format", out var fmt)) ci.Format = fmt;
+                        if (props.TryGetValue("Parameter", out var param)) ci.Parameter = param;
+                        if (props.TryGetValue("Group", out var grp)) ci.Group = grp;
+                        if (props.TryGetValue("SoftName", out var sn)) ci.SoftName = sn;
+
+                        if (props.TryGetValue("Options", out var optStr))
+                        {
+                            ci.Options = ParseOptionsExtendedProperty(optStr);
+                            ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
+                        }
+
+                        if (props.TryGetValue("Order", out var ordStr) && int.TryParse(ordStr, out var ord))
+                            ci.Order = ord;
+
+                        if (props.TryGetValue("DatagridShow", out var dgShow))
+                            ci.DatagridShow = dgShow.Equals("1", StringComparison.OrdinalIgnoreCase) || dgShow.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("ShowInOnePhase", out var s1p))
+                            ci.ShowInOnePhase = s1p.Equals("1", StringComparison.OrdinalIgnoreCase) || s1p.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("ShowInThreePhase", out var s3p))
+                            ci.ShowInThreePhase = s3p.Equals("1", StringComparison.OrdinalIgnoreCase) || s3p.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("HideInCrudForm", out var hideCrud))
+                            ci.HideInCrudForm = hideCrud.Equals("1", StringComparison.OrdinalIgnoreCase) || hideCrud.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("Visible", out var vis))
+                            ci.Visible = vis.Equals("1", StringComparison.OrdinalIgnoreCase) || vis.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        foreach (var kvp in props)
+                        {
+                            ci.CustomProperties[kvp.Key] = kvp.Value;
+                        }
+                    }
+
+                    ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
+                    list.Add(ci);
+                }
+            }
+        }
+        else if (SqlType == SqlType.PostgreSql)
+        {
+            var s = ResolveSchema(Schema, SqlType);
+            EnsureMetadataTableExists(cn, sqlType: SqlType, schema: s);
+
+            // 1. Read metadata properties from __Aarohi_Metadata
+            var metaDict = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            using (var metaCmd = CreateCommand(cn, $"SELECT \"ColumnName\", \"PropertyName\", \"PropertyValue\" FROM \"{s}\".\"__Aarohi_Metadata\" WHERE \"TargetType\"='COLUMN' AND \"TableName\"=@t"))
+            {
+                AddCommandParameter(metaCmd, "@t", physicalTable);
+                using var rdMeta = metaCmd.ExecuteReader();
+                while (rdMeta.Read())
+                {
+                    var col = rdMeta["ColumnName"]?.ToString() ?? "";
+                    var prop = rdMeta["PropertyName"]?.ToString() ?? "";
+                    var val = rdMeta["PropertyValue"]?.ToString() ?? "";
+                    if (!metaDict.TryGetValue(col, out var props))
+                    {
+                        props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        metaDict[col] = props;
+                    }
+                    props[prop] = val;
+                }
+            }
+
+            // 2. Read Primary Keys
+            var pkSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var pkCmd = CreateCommand(cn, @"
+SELECT kcu.column_name
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+WHERE tc.constraint_type = 'PRIMARY KEY'
+  AND tc.table_schema = @s AND tc.table_name = @t;"))
+            {
+                AddCommandParameter(pkCmd, "@s", s);
+                AddCommandParameter(pkCmd, "@t", physicalTable);
+                using var rdPk = pkCmd.ExecuteReader();
+                while (rdPk.Read())
+                {
+                    var col = rdPk.GetString(0);
+                    pkSet.Add(col);
+                }
+            }
+
+            // 3. Read Foreign Keys
+            var fkDict = new Dictionary<string, (string RefTable, string RefCol, string FkName)>(StringComparer.OrdinalIgnoreCase);
+            using (var fkCmd = CreateCommand(cn, @"
+SELECT 
+    kcu.column_name AS from_column,
+    ccu.table_name AS to_table,
+    ccu.column_name AS to_column,
+    tc.constraint_name AS fk_name
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+JOIN information_schema.constraint_column_usage ccu
+  ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_schema = @s AND tc.table_name = @t;"))
+            {
+                AddCommandParameter(fkCmd, "@s", s);
+                AddCommandParameter(fkCmd, "@t", physicalTable);
+                using var rdFk = fkCmd.ExecuteReader();
+                while (rdFk.Read())
+                {
+                    var fromCol = rdFk["from_column"]?.ToString() ?? "";
+                    var toTable = rdFk["to_table"]?.ToString() ?? "";
+                    var toCol = rdFk["to_column"]?.ToString() ?? "";
+                    var fkName = rdFk["fk_name"]?.ToString() ?? "";
+                    fkDict[fromCol] = (toTable, toCol, fkName);
+                }
+            }
+
+            // 4. Read Columns
+            using (var colCmd = CreateCommand(cn, @"
+SELECT 
+    column_name, 
+    data_type, 
+    character_maximum_length, 
+    numeric_precision, 
+    numeric_scale, 
+    is_nullable, 
+    column_default
+FROM information_schema.columns 
+WHERE table_schema = @s AND table_name = @t
+ORDER BY ordinal_position;"))
+            {
+                AddCommandParameter(colCmd, "@s", s);
+                AddCommandParameter(colCmd, "@t", physicalTable);
+                using var rdCol = colCmd.ExecuteReader();
+                while (rdCol.Read())
+                {
+                    var name = rdCol["column_name"]?.ToString() ?? "";
+                    var typeStr = rdCol["data_type"]?.ToString() ?? "text";
+                    var isNullable = string.Equals(rdCol["is_nullable"]?.ToString(), "YES", StringComparison.OrdinalIgnoreCase);
+                    var dfltVal = rdCol["column_default"] != DBNull.Value ? rdCol["column_default"]?.ToString() : null;
+                    var isPk = pkSet.Contains(name);
+                    var isIdentity = (dfltVal != null && dfltVal.Contains("nextval(")) || isPk;
+
+                    short maxLen = 0;
+                    if (rdCol["character_maximum_length"] != DBNull.Value)
+                        maxLen = Convert.ToInt16(rdCol["character_maximum_length"]);
+
+                    byte prec = 0;
+                    if (rdCol["numeric_precision"] != DBNull.Value)
+                        prec = Convert.ToByte(rdCol["numeric_precision"]);
+
+                    byte scale = 0;
+                    if (rdCol["numeric_scale"] != DBNull.Value)
+                        scale = Convert.ToByte(rdCol["numeric_scale"]);
+
+                    var ci = new ColumnInfo
+                    {
+                        ParentTable = physicalTable,
+                        Name = name,
+                        DataType = typeStr,
+                        Nullable = isNullable,
+                        IsPrimaryKey = isPk,
+                        DefaultSql = dfltVal,
+                        Identity = isIdentity,
+                        MaxLength = maxLen,
+                        Precision = prec,
+                        Scale = scale
+                    };
+
+                    if (fkDict.TryGetValue(name, out var fk))
+                    {
+                        ci.IsForeignKey = true;
+                        ci.ReferencedTable = fk.RefTable;
+                        ci.ReferencedColumn = fk.RefCol;
+                        ci.ForeignKeyName = fk.FkName;
+                    }
+
+                    if (metaDict.TryGetValue(name, out var props))
+                    {
+                        if (props.TryGetValue("DisplayName", out var dn)) ci.DisplayName = dn;
+                        if (props.TryGetValue("Description", out var desc)) ci.Description = desc;
+                        if (props.TryGetValue("DefaultUnit", out var du)) ci.DefaultUnit = du;
+                        if (props.TryGetValue("InputUnit", out var iu)) ci.InputUnit = iu;
+                        if (props.TryGetValue("LastUsedUnit", out var lu)) ci.LastUsedUnit = lu;
+                        if (props.TryGetValue("ShowUnit", out var su)) ci.ShowUnit = su;
+                        if (props.TryGetValue("ReportUnit", out var ru)) ci.ReportUnit = ru;
+                        if (props.TryGetValue("Format", out var fmt)) ci.Format = fmt;
+                        if (props.TryGetValue("Parameter", out var param)) ci.Parameter = param;
+                        if (props.TryGetValue("Group", out var grp)) ci.Group = grp;
+                        if (props.TryGetValue("SoftName", out var sn)) ci.SoftName = sn;
+
+                        if (props.TryGetValue("Options", out var optStr))
+                        {
+                            ci.Options = ParseOptionsExtendedProperty(optStr);
+                            ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
+                        }
+
+                        if (props.TryGetValue("Order", out var ordStr) && int.TryParse(ordStr, out var ord))
+                            ci.Order = ord;
+
+                        if (props.TryGetValue("DatagridShow", out var dgShow))
+                            ci.DatagridShow = dgShow.Equals("1", StringComparison.OrdinalIgnoreCase) || dgShow.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("ShowInOnePhase", out var s1p))
+                            ci.ShowInOnePhase = s1p.Equals("1", StringComparison.OrdinalIgnoreCase) || s1p.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("ShowInThreePhase", out var s3p))
+                            ci.ShowInThreePhase = s3p.Equals("1", StringComparison.OrdinalIgnoreCase) || s3p.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("HideInCrudForm", out var hideCrud))
+                            ci.HideInCrudForm = hideCrud.Equals("1", StringComparison.OrdinalIgnoreCase) || hideCrud.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        if (props.TryGetValue("Visible", out var vis))
+                            ci.Visible = vis.Equals("1", StringComparison.OrdinalIgnoreCase) || vis.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                        foreach (var kvp in props)
+                        {
+                            ci.CustomProperties[kvp.Key] = kvp.Value;
+                        }
+                    }
+
+                    ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
+                    list.Add(ci);
+                }
+            }
+        }
+        else
+        {
+            const string sql = @"
 SELECT 
     c.name AS ColumnName,
     t.name AS DataType,
@@ -674,67 +1082,63 @@ OUTER APPLY (
 WHERE tb.name = @t AND s.name = @s
 ORDER BY c.column_id;";
 
-        using var cn = Open();
-        using var cmd = new SqlCommand(sql, cn);
-        cmd.Parameters.AddWithValue("@t", physicalTable);
-        cmd.Parameters.AddWithValue("@s", Schema);
+            using var cmd = CreateCommand(cn, sql);
+            AddCommandParameter(cmd, "@t", physicalTable);
+            AddCommandParameter(cmd, "@s", Schema);
 
-        var list = new List<ColumnInfo>();
+            using var rd = cmd.ExecuteReader();
 
-        using var rd = cmd.ExecuteReader();
-
-        while (rd.Read())
-        {
-            var ci = new ColumnInfo
+            while (rd.Read())
             {
-                ParentTable = physicalTable,
-                Name = rd["ColumnName"].ToString(),
-                DataType = rd["DataType"].ToString(),
+                var ci = new ColumnInfo
+                {
+                    ParentTable = physicalTable,
+                    Name = rd["ColumnName"].ToString(),
+                    DataType = rd["DataType"].ToString(),
 
-                MaxLength = rd["MaxLength"] as short? ?? 0,
-                Precision = rd["Precision"] as byte? ?? 0,
-                Scale = rd["Scale"] as byte? ?? 0,
+                    MaxLength = rd["MaxLength"] as short? ?? 0,
+                    Precision = rd["Precision"] as byte? ?? 0,
+                    Scale = rd["Scale"] as byte? ?? 0,
 
-                Nullable = rd["IsNullable"] as bool? ?? false,
-                Identity = Convert.ToInt32(rd["IsIdentity"]) == 1,
+                    Nullable = rd["IsNullable"] as bool? ?? false,
+                    Identity = Convert.ToInt32(rd["IsIdentity"]) == 1,
 
-                IsPrimaryKey = Convert.ToInt32(rd["IsPrimaryKey"]) == 1,
-                IsForeignKey = Convert.ToInt32(rd["IsForeignKey"]) == 1,
+                    IsPrimaryKey = Convert.ToInt32(rd["IsPrimaryKey"]) == 1,
+                    IsForeignKey = Convert.ToInt32(rd["IsForeignKey"]) == 1,
 
-                ForeignKeyName = rd["ForeignKeyName"] as string,
-                ReferencedTable = rd["ReferencedTable"] as string,
-                ReferencedColumn = rd["ReferencedColumn"] as string,
+                    ForeignKeyName = rd["ForeignKeyName"] as string,
+                    ReferencedTable = rd["ReferencedTable"] as string,
+                    ReferencedColumn = rd["ReferencedColumn"] as string,
 
-                DefaultSql = rd["DefaultDefinition"] as string,
+                    DefaultSql = rd["DefaultDefinition"] as string,
 
-                DisplayName = rd["DisplayName"] as string,
-                Description = rd["Description"] as string,
-                DefaultUnit = rd["DefaultUnit"] as string,
-                InputUnit = rd["InputUnit"] as string,
-                ReportUnit = rd["ReportUnit"] as string,
-                ShowUnit = rd["ShowUnit"] as string,
-                LastUsedUnit = rd["LastUsedUnit"] as string,
-                Format = rd["Format"] as string,
-                Parameter = rd["Parameter"] as string,
-                Group = rd["Group"] as string,
-                Order = rd["Order"] as int?,
+                    DisplayName = rd["DisplayName"] as string,
+                    Description = rd["Description"] as string,
+                    DefaultUnit = rd["DefaultUnit"] as string,
+                    InputUnit = rd["InputUnit"] as string,
+                    ReportUnit = rd["ReportUnit"] as string,
+                    ShowUnit = rd["ShowUnit"] as string,
+                    LastUsedUnit = rd["LastUsedUnit"] as string,
+                    Format = rd["Format"] as string,
+                    Parameter = rd["Parameter"] as string,
+                    Group = rd["Group"] as string,
+                    Order = rd["Order"] as int?,
 
-                DatagridShow = rd["DatagridShow"] as int? == 1,
-                ShowInOnePhase = rd["ShowInOnePhase"] as int? == 1,
-                ShowInThreePhase = rd["ShowInThreePhase"] as int? == 1,
-                HideInCrudForm = rd["HideInCrudForm"] as int? == 1,   // <-- ADD THIS
-                Visible = rd["Visible"] as int? == 1,
-                SoftName = rd["SoftName"] as string
-            };
+                    DatagridShow = rd["DatagridShow"] as int? == 1,
+                    ShowInOnePhase = rd["ShowInOnePhase"] as int? == 1,
+                    ShowInThreePhase = rd["ShowInThreePhase"] as int? == 1,
+                    HideInCrudForm = rd["HideInCrudForm"] as int? == 1,
+                    Visible = rd["Visible"] as int? == 1,
+                    SoftName = rd["SoftName"] as string
+                };
 
-            ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
-            // Resolve column options using Extended Properties if available, otherwise fall back to Check Constraints.
-            //ResolveColumnOptions(ci);
-            ci.Options = ParseOptionsExtendedProperty(rd["Options"] as string);
-            ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
-            ci.Unit = "";
+                ci.DefaultValue = TryParseDefaultValue(ci.DefaultSql);
+                ci.Options = ParseOptionsExtendedProperty(rd["Options"] as string);
+                ci.HasOptions = (ci.Options?.Length ?? 0) >= 2;
+                ci.Unit = "";
 
-            list.Add(ci);
+                list.Add(ci);
+            }
         }
 
         var ordered = list

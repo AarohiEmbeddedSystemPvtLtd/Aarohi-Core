@@ -1,9 +1,8 @@
-﻿using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Data.SqlClient;
+using Aarohi.Core.Logger;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -42,127 +41,134 @@ namespace Aarohi.Classes
             // Multiple values support
             public List<object?> Values { get; set; } = new();
         }
+
         public DataTable? SelectWithRelationFilters(
-     List<RelationFilter> relationFilters,
-     string? whereSql = null,
-     IDictionary<string, object?>? parameters = null,
-     int? top = null,
-     string? orderBy = null,
-     bool leftJoin = true,
-     bool displayName = true)
- => SafeExecute("SELECT_WITH_RELATION_FILTERS", extras =>
- {
-     EnsureIdent(Schema);
-     var physicalTable = ResolveTableName();
-     var baseColumns = GetColumns() ?? new List<ColumnInfo>();
+            List<RelationFilter> relationFilters,
+            string? whereSql = null,
+            IDictionary<string, object?>? parameters = null,
+            int? top = null,
+            string? orderBy = null,
+            bool leftJoin = true,
+            bool displayName = true)
+        => SafeExecute("SELECT_WITH_RELATION_FILTERS", extras =>
+        {
+            EnsureIdent(Schema);
+            var physicalTable = ResolveTableName();
+            var baseColumns = GetColumns() ?? new List<ColumnInfo>();
 
-     relationFilters ??= new List<RelationFilter>();
+            relationFilters ??= new List<RelationFilter>();
 
-     string baseAlias = "A";
-     var joinClauses = new List<string>();
-     var whereClauses = new List<string>();
-     var sqlParams = new List<SqlParameter>();
-     int paramIndex = 0;
-     int joinIndex = 1;
+            string baseAlias = "A";
+            var joinClauses = new List<string>();
+            var whereClauses = new List<string>();
+            var sqlParams = new List<(string Name, object? Value)>();
+            int paramIndex = 0;
+            int joinIndex = 1;
 
-     foreach (var rf in relationFilters)
-     {
-         if (rf == null) continue;
+            foreach (var rf in relationFilters)
+            {
+                if (rf == null) continue;
 
-         var physicalBaseColumn = ResolveColumnName(rf.BaseColumn, baseColumns);
-         EnsureIdent(physicalBaseColumn);
-         EnsureIdent(rf.RefSchema);
-         EnsureIdent(rf.RefTable);
-         EnsureIdent(rf.RefColumn);
-         EnsureIdent(rf.FilterColumn);
+                var physicalBaseColumn = ResolveColumnName(rf.BaseColumn, baseColumns);
+                EnsureIdent(physicalBaseColumn);
+                EnsureIdent(rf.RefSchema);
+                EnsureIdent(rf.RefTable);
+                EnsureIdent(rf.RefColumn);
+                EnsureIdent(rf.FilterColumn);
 
-         string refAlias = "J" + joinIndex++;
-         string joinType = leftJoin ? "LEFT JOIN" : "INNER JOIN";
+                string refAlias = "J" + joinIndex++;
+                string joinType = leftJoin ? "LEFT JOIN" : "INNER JOIN";
 
-         string joinClause;
+                string joinClause;
 
-         if (rf.Direction == ForeignFilterDirection.BaseToReference)
-         {
-             joinClause =
-                 $"{joinType} [{rf.RefSchema}].[{rf.RefTable}] {refAlias} " +
-                 $"ON {baseAlias}.[{physicalBaseColumn}] = {refAlias}.[{rf.RefColumn}]";
-         }
-         else
-         {
-             joinClause =
-                 $"{joinType} [{rf.RefSchema}].[{rf.RefTable}] {refAlias} " +
-                 $"ON {refAlias}.[{rf.RefColumn}] = {baseAlias}.[{physicalBaseColumn}]";
-         }
+                if (rf.Direction == ForeignFilterDirection.BaseToReference)
+                {
+                    joinClause =
+                        $"{joinType} {FormatTableName(rf.RefSchema, rf.RefTable, SqlType)} {refAlias} " +
+                        $"ON {baseAlias}.{QSafe(physicalBaseColumn)} = {refAlias}.{QSafe(rf.RefColumn)}";
+                }
+                else
+                {
+                    joinClause =
+                        $"{joinType} {FormatTableName(rf.RefSchema, rf.RefTable, SqlType)} {refAlias} " +
+                        $"ON {refAlias}.{QSafe(rf.RefColumn)} = {baseAlias}.{QSafe(physicalBaseColumn)}";
+                }
 
-         joinClauses.Add(joinClause);
+                joinClauses.Add(joinClause);
 
-         var validValues = (rf.Values ?? new List<object?>())
-             .Where(v => v != null && v != DBNull.Value && !string.IsNullOrWhiteSpace(Convert.ToString(v)))
-             .ToList();
+                var validValues = (rf.Values ?? new List<object?>())
+                    .Where(v => v != null && v != DBNull.Value && !string.IsNullOrWhiteSpace(Convert.ToString(v)))
+                    .ToList();
 
-         if (validValues.Count > 0)
-         {
+                if (validValues.Count > 0)
+                {
+                    var inParams = new List<string>();
 
+                    foreach (var val in validValues)
+                    {
+                        string pName = "@rf" + paramIndex++;
+                        inParams.Add(pName);
+                        sqlParams.Add((pName, val ?? DBNull.Value));
+                    }
 
-             var inParams = new List<string>();
+                    whereClauses.Add($"{refAlias}.{QSafe(rf.FilterColumn)} IN ({string.Join(", ", inParams)})");
+                }
+            }
 
-             foreach (var val in validValues)
-             {
-                 string pName = "@rf" + paramIndex++;
-                 inParams.Add(pName);
-                 sqlParams.Add(new SqlParameter(pName, val ?? DBNull.Value));
-             }
+            if (!string.IsNullOrWhiteSpace(whereSql))
+                whereClauses.Add("(" + ResolveSqlNamePlaceholders(whereSql) + ")");
 
-             whereClauses.Add($"{refAlias}.[{rf.FilterColumn}] IN ({string.Join(", ", inParams)})");
-         }
-     }
+            string topClause = "";
+            string limitClause = "";
+            if (top.HasValue)
+            {
+                if (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+                    limitClause = $" LIMIT {top.Value}";
+                else
+                    topClause = $"TOP {top.Value} ";
+            }
 
-     if (!string.IsNullOrWhiteSpace(whereSql))
-         whereClauses.Add("(" + ResolveSqlNamePlaceholders(whereSql) + ")");
+            string sql =
+                $"SELECT {topClause}DISTINCT {baseAlias}.* " +
+                $"FROM {FormatTableName()} {baseAlias} " +
+                (joinClauses.Count > 0 ? string.Join(" ", joinClauses) + " " : "") +
+                (whereClauses.Count > 0 ? "WHERE " + string.Join(" AND ", whereClauses) + " " : "") +
+                (!string.IsNullOrWhiteSpace(orderBy) ? "ORDER BY " + ResolveSqlNamePlaceholders(orderBy) + " " : "") +
+                limitClause;
 
-     string sql =
-         $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}DISTINCT {baseAlias}.* " +
-         $"FROM [{Schema}].[{physicalTable}] {baseAlias} " +
-         (joinClauses.Count > 0 ? string.Join(" ", joinClauses) + " " : "") +
-         (whereClauses.Count > 0 ? "WHERE " + string.Join(" AND ", whereClauses) + " " : "") +
-         (!string.IsNullOrWhiteSpace(orderBy) ? "ORDER BY " + ResolveSqlNamePlaceholders(orderBy) : "");
+            using var cn = Open();
+            using var cmd = CreateCommand(cn, sql);
 
-     using var cn = Open();
-     using var da = new SqlDataAdapter(sql, cn);
+            foreach (var (pName, pVal) in sqlParams)
+            {
+                AddCommandParameter(cmd, pName, pVal);
+            }
 
-     da.SelectCommand!.Parameters.Clear();
+            if (parameters != null)
+            {
+                foreach (var kv in parameters)
+                {
+                    var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
+                    if (!cmd.Parameters.Contains(name))
+                        AddCommandParameter(cmd, name, kv.Value);
+                }
+            }
 
-     foreach (var p in sqlParams)
-         da.SelectCommand.Parameters.Add(p);
+            AddCommonExtras(extras,
+                ("sql", sql),
+                ("relationFilterCount", relationFilters.Count),
+                ("joinCount", joinClauses.Count),
+                ("where", whereSql ?? ""));
 
-     if (parameters != null)
-     {
-         foreach (var kv in parameters)
-         {
-             var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-             if (!da.SelectCommand.Parameters.Contains(name))
-                 da.SelectCommand.Parameters.AddWithValue(name, kv.Value ?? DBNull.Value);
-         }
-     }
+            var dt = ExecuteDataTable(cmd);
 
-     AddCommonExtras(extras,
-         ("sql", sql),
-         ("relationFilterCount", relationFilters.Count),
-         ("joinCount", joinClauses.Count),
-         ("where", whereSql ?? ""));
+            dt = ReorderColumnsByMetadataOrder(dt);
 
-     var dt = new DataTable();
-     da.Fill(dt);
+            if (displayName)
+                dt = ApplyDisplayNames(dt);
 
-     dt = ReorderColumnsByMetadataOrder(dt);
-
-     if (displayName)
-         dt = ApplyDisplayNames(dt);
-
-     return dt;
- });
-
-
+            return dt;
+        });
 
     }
 }
