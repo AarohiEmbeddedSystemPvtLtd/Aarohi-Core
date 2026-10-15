@@ -1304,7 +1304,7 @@ namespace Aarohi.UserManagment
 
                 dc.Values[pmap.Columns.Name] = permissionName;
 
-                dc.Insert(); //  THIS REPLACES YOUR SQL
+                dc.Insert(); 
 
                 MessageBox.Show("Permission added successfully",
                     "Success", MessageBoxButtons.OK, MessageBoxIcon.Information
