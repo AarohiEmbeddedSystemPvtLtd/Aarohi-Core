@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net9.0-windows</TargetFramework>
@@ -30,6 +30,7 @@
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
     <PackageReference Include="ncalc" Version="1.3.8" />
@@ -47,6 +48,19 @@
 	</ItemGroup>
 
 	<ItemGroup>
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
+	  <ProjectReference Include="..\..\..\..\Projects\Aarohi.ExtendedUI\Aarohi.ExtendedUI\Aarohi.ExtendedUI.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+<<<<<<< HEAD
+=======
+>>>>>>> 2eed83b537f4cbceadd7e9a0701bc1c597bf8f20
+=======
+>>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
 	  <Compile Update="Classes\DynamicCrudForm.cs" />
 	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
