@@ -1,9 +1,10 @@
 using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -84,17 +85,19 @@ namespace Aarohi.Classes
             return string.Equals(Convert.ToString(a), Convert.ToString(b), StringComparison.Ordinal);
         }
 
-        private DataRow? GetRowByKey(SqlConnection cn, object? keyVal)
+        private DataRow? GetRowByKey(DbConnection cn, object? keyVal)
         {
             var physicalTable = ResolveTableName(cn);
             var columns = GetColumns() ?? new List<ColumnInfo>();
             var physicalKeyColumn = ResolveKeyColumnName(columns);
 
-            var sql = $"SELECT TOP (1) * FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)} = @k";
-            using var da = new SqlDataAdapter(sql, cn);
-            da.SelectCommand!.Parameters.AddWithValue("@k", keyVal ?? DBNull.Value);
-            var dt = new DataTable();
-            da.Fill(dt);
+            var sql = (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+                ? $"SELECT * FROM {FormatTableName()} WHERE {QSafe(physicalKeyColumn)} = @k LIMIT 1"
+                : $"SELECT TOP (1) * FROM [{Schema}].[{physicalTable}] WHERE {QSafe(physicalKeyColumn)} = @k";
+
+            using var cmd = CreateCommand(cn, sql);
+            AddCommandParameter(cmd, "@k", keyVal ?? DBNull.Value);
+            var dt = ExecuteDataTable(cmd);
             return dt.Rows.Count > 0 ? dt.Rows[0] : null;
         }
 
@@ -118,7 +121,7 @@ namespace Aarohi.Classes
                 {
                     string oldS = oldVal == DBNull.Value ? "NULL" : Convert.ToString(oldVal) ?? "";
                     string newS = newVal == DBNull.Value ? "NULL" : Convert.ToString(newVal) ?? "";
-                    lines.Add($"{col}: {oldS}  ?  {newS}");
+                    lines.Add($"{col}: {oldS}  ->  {newS}");
                 }
             }
 
@@ -128,7 +131,7 @@ namespace Aarohi.Classes
             if (lines.Count > maxLines)
             {
                 var head = lines.Take(maxLines).ToList();
-                head.Add($"� (+{lines.Count - maxLines} more)");
+                head.Add($"… (+{lines.Count - maxLines} more)");
                 return string.Join(Environment.NewLine, head);
             }
             return string.Join(Environment.NewLine, lines);
@@ -151,7 +154,7 @@ namespace Aarohi.Classes
 
         public sealed class ColumnInfo
         {
-            public string ParentTable { get; set; }
+            public string ParentTable { get; set; } = "";
             public bool IsPrimaryKey { get; set; }
             public string Name { get; set; } = ""; // Want
             public string DataType { get; set; } = ""; // want
@@ -184,6 +187,8 @@ namespace Aarohi.Classes
             public string? ShowUnit { get; set; }
             public string? ReportUnit { get; set; }
             public bool? DatagridShow { get; set; }
+            public bool? ShowInOnePhase { get; set; }
+            public bool? ShowInThreePhase { get; set; }
             public bool? HideInCrudForm { get; set; }
             public string? Format { get; set; }
             public string? Parameter { get; set; }
@@ -197,7 +202,7 @@ namespace Aarohi.Classes
         }
 
         public bool SetCustomColumnProperty(string column, string propertyName, object? value)
-    => UpsertExtendedProperty(propertyName, value, column);
+            => UpsertExtendedProperty(propertyName, value, column);
 
         public object? GetCustomColumnProperty(string column, string propertyName)
             => ReadExtendedProperty(propertyName, column);
@@ -270,7 +275,7 @@ namespace Aarohi.Classes
         // ---------- Async infrastructure ----------
         public delegate Task<bool> ConfirmUpdateAsync(string changeSummary, CancellationToken ct);
 
-        private async Task<SqlConnection> OpenAsync(CancellationToken ct = default)
+        private async Task<DbConnection> OpenAsync(CancellationToken ct = default)
         {
             var cn = ResolveFactory().Invoke();
             if (cn.State != ConnectionState.Open)
@@ -310,10 +315,10 @@ namespace Aarohi.Classes
             }
         }
 
-
         private Dictionary<string, object> NewExtras(string op) => new(StringComparer.OrdinalIgnoreCase)
         {
             ["operation"] = op,
+            ["sqlType"] = SqlType.ToString(),
             ["schema"] = Schema,
             ["table"] = Table,
             ["keyColumn"] = KeyColumn,
@@ -325,7 +330,7 @@ namespace Aarohi.Classes
             foreach (var (k, v) in pairs) extras[k] = v ?? "";
         }
 
-        private SqlConnection Open()
+        private DbConnection Open()
         {
             var cn = ResolveFactory().Invoke();
 
@@ -335,57 +340,330 @@ namespace Aarohi.Classes
             return cn;
         }
 
-        private static readonly Regex ValidIdent = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+        private static readonly Regex ValidIdent = new(@"^[A-Za-z0-9][A-Za-z0-9_]*$", RegexOptions.Compiled);
+
         private static void EnsureIdent(string name)
         {
             if (string.IsNullOrWhiteSpace(name) || !ValidIdent.IsMatch(name))
                 throw new ArgumentException($"Invalid identifier: {name}");
         }
-        private static string Q(string ident) { EnsureIdent(ident); return $"[{ident}]"; }
 
-        private static bool TableExists(SqlConnection cn, SqlTransaction tx, string schema, string table)
+        public static string QuoteIdent(string ident, SqlType sqlType)
         {
-            using var cmd = new SqlCommand(
-                "SELECT CASE WHEN EXISTS(SELECT 1 FROM sys.tables t JOIN sys.schemas s ON t.schema_id=s.schema_id WHERE t.name=@t AND s.name=@s) THEN 1 ELSE 0 END",
-                cn, tx);
-            cmd.Parameters.AddWithValue("@t", table);
-            cmd.Parameters.AddWithValue("@s", schema);
-            return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+            EnsureIdent(ident);
+            return sqlType switch
+            {
+                SqlType.Sqlite => $"\"{ident}\"",
+                SqlType.MySql => $"`{ident}`",
+                SqlType.PostgreSql => $"\"{ident}\"",
+                _ => $"[{ident}]"
+            };
         }
 
-        private static void CreateTableInternal(SqlConnection cn, SqlTransaction tx, string schema, string table, Dictionary<string, ColumnDef> spec, string pkName)
+        public string QSafe(string ident) => QuoteIdent(ident, SqlType);
+
+        private string Q(string ident) => QSafe(ident);
+
+        public string FormatTableName() => FormatTableName(Schema, ResolveTableName(), SqlType);
+
+        public static string ResolveSchema(string? schema, SqlType sqlType)
+        {
+            if (sqlType == SqlType.PostgreSql)
+            {
+                if (string.IsNullOrWhiteSpace(schema) || schema.Equals("dbo", StringComparison.OrdinalIgnoreCase) || schema.Equals("main", StringComparison.OrdinalIgnoreCase))
+                    return "public";
+                return schema;
+            }
+            if (sqlType == SqlType.Sqlite)
+            {
+                return "main";
+            }
+            return string.IsNullOrWhiteSpace(schema) ? "dbo" : schema;
+        }
+
+        public static string FormatTableName(string schema, string table, SqlType sqlType)
+        {
+            EnsureIdent(table);
+            var s = ResolveSchema(schema, sqlType);
+            return sqlType switch
+            {
+                SqlType.Sqlite => $"\"{table}\"",
+                SqlType.MySql => string.IsNullOrWhiteSpace(schema) ? $"`{table}`" : $"`{s}`.`{table}`",
+                SqlType.PostgreSql => $"\"{s}\".\"{table}\"",
+                _ => $"[{s}].[{table}]"
+            };
+        }
+
+        // Generic ADO.NET Helpers
+        private static DbCommand CreateCommand(DbConnection cn, string sql, DbTransaction? tx = null)
+        {
+            var cmd = cn.CreateCommand();
+            cmd.CommandText = sql;
+            if (tx != null)
+                cmd.Transaction = tx;
+            return cmd;
+        }
+
+        private static DbParameter AddCommandParameter(DbCommand cmd, string name, object? value, DbType? dbType = null)
+        {
+            var p = cmd.CreateParameter();
+            p.ParameterName = name.StartsWith("@") ? name : "@" + name;
+            p.Value = value ?? DBNull.Value;
+
+            if (dbType.HasValue)
+            {
+                p.DbType = dbType.Value;
+            }
+            else if (value != null && value != DBNull.Value)
+            {
+                if (value is int) p.DbType = DbType.Int32;
+                else if (value is long) p.DbType = DbType.Int64;
+                else if (value is short) p.DbType = DbType.Int16;
+                else if (value is byte) p.DbType = DbType.Byte;
+                else if (value is decimal) p.DbType = DbType.Decimal;
+                else if (value is double) p.DbType = DbType.Double;
+                else if (value is float) p.DbType = DbType.Single;
+                else if (value is bool) p.DbType = DbType.Boolean;
+                else if (value is DateTime) p.DbType = DbType.DateTime2;
+                else if (value is byte[]) p.DbType = DbType.Binary;
+                else if (value is Guid) p.DbType = DbType.Guid;
+                else p.DbType = DbType.String;
+            }
+
+            cmd.Parameters.Add(p);
+            return p;
+        }
+
+        private static DbType TypeToDbType(Type t)
+        {
+            var underlying = Nullable.GetUnderlyingType(t) ?? t;
+            if (underlying == typeof(int)) return DbType.Int32;
+            if (underlying == typeof(long)) return DbType.Int64;
+            if (underlying == typeof(short)) return DbType.Int16;
+            if (underlying == typeof(byte)) return DbType.Byte;
+            if (underlying == typeof(decimal)) return DbType.Decimal;
+            if (underlying == typeof(double)) return DbType.Double;
+            if (underlying == typeof(float)) return DbType.Single;
+            if (underlying == typeof(bool)) return DbType.Boolean;
+            if (underlying == typeof(DateTime)) return DbType.DateTime2;
+            if (underlying == typeof(byte[])) return DbType.Binary;
+            if (underlying == typeof(Guid)) return DbType.Guid;
+            return DbType.String;
+        }
+
+        private static DataTable ExecuteDataTable(DbCommand cmd)
+        {
+            using var reader = cmd.ExecuteReader();
+            var dt = new DataTable();
+            dt.Load(reader);
+            return dt;
+        }
+
+        private static async Task<DataTable> ExecuteDataTableAsync(DbCommand cmd, CancellationToken ct = default)
+        {
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            var dt = new DataTable();
+            dt.Load(reader);
+            return dt;
+        }
+
+        private static bool TableExists(DbConnection cn, DbTransaction? tx, string schema, string table, SqlType sqlType)
+        {
+            if (sqlType == SqlType.Sqlite)
+            {
+                using var cmd = CreateCommand(cn, "SELECT CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=@t) THEN 1 ELSE 0 END", tx);
+                AddCommandParameter(cmd, "@t", table);
+                return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+            }
+            else if (sqlType == SqlType.PostgreSql)
+            {
+                var s = ResolveSchema(schema, sqlType);
+                using var cmd = CreateCommand(cn,
+                    "SELECT CASE WHEN EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema=@s AND table_name=@t) THEN 1 ELSE 0 END",
+                    tx);
+                AddCommandParameter(cmd, "@s", s);
+                AddCommandParameter(cmd, "@t", table);
+                return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+            }
+            else
+            {
+                using var cmd = CreateCommand(cn,
+                    "SELECT CASE WHEN EXISTS(SELECT 1 FROM sys.tables t JOIN sys.schemas s ON t.schema_id=s.schema_id WHERE t.name=@t AND s.name=@s) THEN 1 ELSE 0 END",
+                    tx);
+                AddCommandParameter(cmd, "@t", table);
+                AddCommandParameter(cmd, "@s", schema);
+                return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+            }
+        }
+
+        private static void CreateTableInternal(DbConnection cn, DbTransaction? tx, string schema, string table, Dictionary<string, ColumnDef> spec, string pkName, SqlType sqlType)
         {
             foreach (var kv in spec) kv.Value.Validate();
 
-            var defs = spec.Values.Select(c =>
-                $"[{c.Name}] {c.SqlType}{(c.Identity ? " IDENTITY(1,1)" : "")} {(c.Nullable ? "NULL" : "NOT NULL")}");
-            var pk = spec.Values.FirstOrDefault(x => x.PrimaryKey)
-                     ?? (spec.TryGetValue(pkName, out var d) ? d : null);
-            var pkSql = pk is null ? "" : $", CONSTRAINT PK_{table} PRIMARY KEY ([{pk.Name}])";
+            if (sqlType == SqlType.Sqlite)
+            {
+                var pk = spec.Values.FirstOrDefault(x => x.PrimaryKey)
+                         ?? (spec.TryGetValue(pkName, out var d) ? d : null);
 
-            var sql = $"CREATE TABLE [{schema}].[{table}] (\n  {string.Join(",\n  ", defs)}{pkSql}\n);";
-            using var cmd = new SqlCommand(sql, cn, tx);
-            cmd.ExecuteNonQuery();
+                var defs = spec.Values.Select(c =>
+                {
+                    if (c == pk && (c.Identity || c.SqlType.IndexOf("int", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        return $"\"{c.Name}\" INTEGER PRIMARY KEY AUTOINCREMENT";
+                    }
+                    var isPk = c == pk ? " PRIMARY KEY" : "";
+                    return $"\"{c.Name}\" {MapSqlTypeToSqlite(c.SqlType)}{isPk} {(c.Nullable ? "NULL" : "NOT NULL")}";
+                });
+
+                var sql = $"CREATE TABLE \"{table}\" (\n  {string.Join(",\n  ", defs)}\n);";
+                using var cmd = CreateCommand(cn, sql, tx);
+                cmd.ExecuteNonQuery();
+            }
+            else if (sqlType == SqlType.PostgreSql)
+            {
+                var s = ResolveSchema(schema, sqlType);
+                var pk = spec.Values.FirstOrDefault(x => x.PrimaryKey)
+                         ?? (spec.TryGetValue(pkName, out var d) ? d : null);
+
+                var defs = spec.Values.Select(c =>
+                {
+                    if (c == pk && (c.Identity || c.SqlType.IndexOf("int", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        return $"\"{c.Name}\" BIGSERIAL PRIMARY KEY";
+                    }
+                    var isPk = c == pk ? " PRIMARY KEY" : "";
+                    return $"\"{c.Name}\" {MapSqlTypeToPostgreSql(c.SqlType)}{isPk} {(c.Nullable ? "NULL" : "NOT NULL")}";
+                });
+
+                var sql = $"CREATE TABLE \"{s}\".\"{table}\" (\n  {string.Join(",\n  ", defs)}\n);";
+                using var cmd = CreateCommand(cn, sql, tx);
+                cmd.ExecuteNonQuery();
+            }
+            else
+            {
+                var defs = spec.Values.Select(c =>
+                    $"[{c.Name}] {c.SqlType}{(c.Identity ? " IDENTITY(1,1)" : "")} {(c.Nullable ? "NULL" : "NOT NULL")}");
+                var pk = spec.Values.FirstOrDefault(x => x.PrimaryKey)
+                         ?? (spec.TryGetValue(pkName, out var d) ? d : null);
+                var pkSql = pk is null ? "" : $", CONSTRAINT PK_{table} PRIMARY KEY ([{pk.Name}])";
+
+                var sql = $"CREATE TABLE [{schema}].[{table}] (\n  {string.Join(",\n  ", defs)}{pkSql}\n);";
+                using var cmd = CreateCommand(cn, sql, tx);
+                cmd.ExecuteNonQuery();
+            }
         }
 
-        private static void EnsureColumnsInternal(SqlConnection cn, SqlTransaction tx, string schema, string table, Dictionary<string, ColumnDef> spec)
+        private static string MapSqlTypeToSqlite(string sqlType)
+        {
+            if (string.IsNullOrWhiteSpace(sqlType)) return "TEXT";
+            var lower = sqlType.ToLowerInvariant();
+            if (lower.Contains("int")) return "INTEGER";
+            if (lower.Contains("char") || lower.Contains("text") || lower.Contains("uniqueidentifier") || lower.Contains("date") || lower.Contains("time")) return "TEXT";
+            if (lower.Contains("blob") || lower.Contains("binary") || lower.Contains("image")) return "BLOB";
+            if (lower.Contains("decimal") || lower.Contains("numeric") || lower.Contains("float") || lower.Contains("real") || lower.Contains("money")) return "NUMERIC";
+            if (lower.Contains("bit") || lower.Contains("bool")) return "INTEGER";
+            return "TEXT";
+        }
+
+        private static string MapSqlTypeToPostgreSql(string sqlType)
+        {
+            if (string.IsNullOrWhiteSpace(sqlType)) return "text";
+            var lower = sqlType.Trim().ToLowerInvariant();
+            if (lower.StartsWith("int") || lower == "integer") return "integer";
+            if (lower.StartsWith("bigint")) return "bigint";
+            if (lower.StartsWith("smallint") || lower.StartsWith("tinyint")) return "smallint";
+            if (lower.StartsWith("bit") || lower.StartsWith("bool")) return "boolean";
+            if (lower.StartsWith("decimal") || lower.StartsWith("numeric") || lower.StartsWith("money"))
+            {
+                if (lower.Contains("(")) return lower.Replace("decimal", "numeric");
+                return "numeric";
+            }
+            if (lower.StartsWith("float") || lower.StartsWith("real")) return "double precision";
+            if (lower.StartsWith("datetime2") || lower.StartsWith("datetime") || lower.StartsWith("timestamp")) return "timestamp without time zone";
+            if (lower.StartsWith("date")) return "date";
+            if (lower.StartsWith("time")) return "time without time zone";
+            if (lower.StartsWith("uniqueidentifier") || lower.StartsWith("uuid")) return "uuid";
+            if (lower.StartsWith("varbinary") || lower.StartsWith("binary") || lower.StartsWith("image") || lower.StartsWith("blob")) return "bytea";
+            if (lower.StartsWith("varchar") || lower.StartsWith("nvarchar"))
+            {
+                if (lower.Contains("max")) return "text";
+                if (lower.Contains("(")) return lower.Replace("nvarchar", "varchar");
+                return "varchar(255)";
+            }
+            if (lower.StartsWith("char") || lower.StartsWith("nchar"))
+            {
+                if (lower.Contains("(")) return lower.Replace("nchar", "char");
+                return "char(1)";
+            }
+            if (lower.StartsWith("text") || lower.StartsWith("ntext")) return "text";
+            return sqlType;
+        }
+
+        private static void EnsureColumnsInternal(DbConnection cn, DbTransaction? tx, string schema, string table, Dictionary<string, ColumnDef> spec, SqlType sqlType)
         {
             foreach (var kv in spec)
             {
                 var c = kv.Value; c.Validate();
 
-                using var check = new SqlCommand("SELECT 1 WHERE COL_LENGTH(@f,@c) IS NOT NULL", cn, tx);
-                check.Parameters.AddWithValue("@f", $"{schema}.{table}");
-                check.Parameters.AddWithValue("@c", c.Name);
-                var exists = false;
-                using (var rd = check.ExecuteReader()) { exists = rd.Read(); }
-
-                if (!exists)
+                if (sqlType == SqlType.Sqlite)
                 {
-                    using var add = new SqlCommand(
-                        $"ALTER TABLE [{schema}].[{table}] ADD [{c.Name}] {c.SqlType}{(c.Identity ? " IDENTITY(1,1)" : "")} {(c.Nullable ? "NULL" : "NOT NULL")};",
-                        cn, tx);
-                    add.ExecuteNonQuery();
+                    bool exists = false;
+                    using (var pragmaCmd = CreateCommand(cn, $"PRAGMA table_info(\"{table}\");", tx))
+                    using (var rd = pragmaCmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            var colName = rd["name"]?.ToString();
+                            if (string.Equals(colName, c.Name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!exists)
+                    {
+                        var addSql = $"ALTER TABLE \"{table}\" ADD COLUMN \"{c.Name}\" {MapSqlTypeToSqlite(c.SqlType)} NULL;";
+                        using var add = CreateCommand(cn, addSql, tx);
+                        add.ExecuteNonQuery();
+                    }
+                }
+                else if (sqlType == SqlType.PostgreSql)
+                {
+                    var s = ResolveSchema(schema, sqlType);
+                    bool exists = false;
+                    using (var chk = CreateCommand(cn, "SELECT 1 FROM information_schema.columns WHERE table_schema=@s AND table_name=@t AND column_name=@c", tx))
+                    {
+                        AddCommandParameter(chk, "@s", s);
+                        AddCommandParameter(chk, "@t", table);
+                        AddCommandParameter(chk, "@c", c.Name);
+                        using var rd = chk.ExecuteReader();
+                        exists = rd.Read();
+                    }
+
+                    if (!exists)
+                    {
+                        var addSql = $"ALTER TABLE \"{s}\".\"{table}\" ADD COLUMN \"{c.Name}\" {MapSqlTypeToPostgreSql(c.SqlType)} NULL;";
+                        using var add = CreateCommand(cn, addSql, tx);
+                        add.ExecuteNonQuery();
+                    }
+                }
+                else
+                {
+                    using var check = CreateCommand(cn, "SELECT 1 WHERE COL_LENGTH(@f,@c) IS NOT NULL", tx);
+                    AddCommandParameter(check, "@f", $"{schema}.{table}");
+                    AddCommandParameter(check, "@c", c.Name);
+                    var exists = false;
+                    using (var rd = check.ExecuteReader()) { exists = rd.Read(); }
+
+                    if (!exists)
+                    {
+                        using var add = CreateCommand(cn,
+                            $"ALTER TABLE [{schema}].[{table}] ADD [{c.Name}] {c.SqlType}{(c.Identity ? " IDENTITY(1,1)" : "")} {(c.Nullable ? "NULL" : "NOT NULL")};",
+                            tx);
+                        add.ExecuteNonQuery();
+                    }
                 }
             }
         }
@@ -441,6 +719,7 @@ namespace Aarohi.Classes
                 "float" => typeof(double),
                 "image" => typeof(byte[]),
                 "int" => typeof(int),
+                "integer" => typeof(long),
                 "money" => typeof(decimal),
                 "nchar" => typeof(string),
                 "ntext" => typeof(string),
@@ -489,6 +768,7 @@ namespace Aarohi.Classes
                 "float" => "double",
                 "image" => "byte[]",
                 "int" => "int",
+                "integer" => "long",
                 "money" => "decimal",
                 "nchar" => "string",
                 "ntext" => "string",

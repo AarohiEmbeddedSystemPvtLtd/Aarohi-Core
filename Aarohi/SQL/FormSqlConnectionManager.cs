@@ -1,5 +1,6 @@
 using Aarohi.Classes.Healper;
 using Aarohi.ExtendedUI;
+using DocumentFormat.OpenXml.Math;
 using Microsoft.Data.Sql;
 using Microsoft.Data.SqlClient;
 using System;
@@ -421,6 +422,7 @@ namespace Aarohi.SQL
             }
         }
 
+
         private Task<List<string>> GetDatabaseListAsync(string server,
                                                         bool useWindowsAuth,
                                                         string userName,
@@ -435,7 +437,7 @@ namespace Aarohi.SQL
                     DataSource = server,
                     InitialCatalog = "master",
                     TrustServerCertificate = true,
-                    ConnectTimeout = 3
+                    ConnectTimeout = 30
                 };
 
                 if (useWindowsAuth)
@@ -449,6 +451,7 @@ namespace Aarohi.SQL
                     csBuilder.Password = password;
                 }
 
+                //using (var conn = new SqlConnection("Server=61.0.160.172;Database=master;User Id=panel;Password=Aespl@2037;"))
                 using (var conn = new SqlConnection(csBuilder.ConnectionString))
                 {
                     try
@@ -509,7 +512,7 @@ namespace Aarohi.SQL
             {
                 DataSource = server,
                 TrustServerCertificate = true,
-                ConnectTimeout = 3
+                ConnectTimeout = 30
             };
 
             csBuilder.InitialCatalog = useMasterDb ? "master" : (string.IsNullOrWhiteSpace(database) ? "master" : database);
@@ -591,7 +594,7 @@ namespace Aarohi.SQL
             ButtonSave.Enabled = false;
 
             string connString;
-            string DBName = comboBoxAuth.Text.Trim();
+            string DBName = ComboboxDatabaseName.Text.Trim();
             if (!string.IsNullOrWhiteSpace(DBName))
             {
                 try

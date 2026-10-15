@@ -1,11 +1,12 @@
-﻿using Aarohi.Core.Logger;
+using Aarohi.Core.Logger;
 using Aarohi.Globals;
-using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -25,38 +26,68 @@ namespace Aarohi.Classes
         public static bool LogTrace { get; set; } = false;
         public static int BulkCopyTimeoutSeconds { get; set; } = 600;
 
+        /// <summary>
+        /// Gets or sets the default database engine type for DynamicClass. Defaults to <see cref="SqlType.SqlServer"/>.
+        /// </summary>
+        public static SqlType DefaultSqlType { get; set; } = SqlType.SqlServer;
+
+        /// <summary>
+        /// Gets or sets the database engine type for this DynamicClass instance. Defaults to <see cref="DefaultSqlType"/>.
+        /// </summary>
+        public SqlType SqlType { get; set; } = DefaultSqlType;
+
         // ---------- Core properties ----------
         public string Schema { get; set; } = "dbo";
         public string Table { get; set; } = "";
         public string KeyColumn { get; set; } = "";
         public string LogSource { get; set; } = "DynamicClass";
 
-        private Func<SqlConnection>? _instanceFactory;
+        private Func<DbConnection>? _instanceFactory;
 
-        public Func<SqlConnection>? InstanceConnectionFactory
+        public Func<DbConnection>? InstanceConnectionFactory
         {
             get => Volatile.Read(ref _instanceFactory);
             set
             {
                 if (value is null) throw new ArgumentNullException(nameof(InstanceConnectionFactory));
-                if (Interlocked.CompareExchange(ref _instanceFactory, value, null) != null)
-                    throw new InvalidOperationException("InstanceConnectionFactory already set for this instance.");
+                Volatile.Write(ref _instanceFactory, value);
             }
         }
 
-        private static Func<SqlConnection>? _factory;
-        public static Func<SqlConnection>? ConnectionFactory
+        private static Func<DbConnection>? _factory;
+        public static Func<DbConnection>? ConnectionFactory
         {
             get =>  Volatile.Read(ref _factory) ?? throw new InvalidOperationException("DefaultConnectionFactory is not set.");
             set
             {
                 if (value is null) throw new ArgumentNullException(nameof(ConnectionFactory));
-                if (Interlocked.CompareExchange(ref _factory, value, null) != null)
-                    throw new InvalidOperationException("InstanceConnectionFactory already set for this instance.");
+                Volatile.Write(ref _factory, value);
             }
         }
 
-        private Func<SqlConnection> ResolveFactory()
+        /// <summary>
+        /// Configures the global default database engine and connection factory.
+        /// </summary>
+        /// <param name="sqlType">The SQL database engine to use (e.g. SqlServer, Sqlite).</param>
+        /// <param name="factory">Delegate returning a newly created, unmanaged connection.</param>
+        public static void ConfigureDefault(SqlType sqlType, Func<DbConnection> factory)
+        {
+            DefaultSqlType = sqlType;
+            ConnectionFactory = factory;
+        }
+
+        /// <summary>
+        /// Configures the instance-specific database engine and connection factory.
+        /// </summary>
+        /// <param name="sqlType">The SQL database engine to use for this instance.</param>
+        /// <param name="factory">Delegate returning a newly created connection.</param>
+        public void ConfigureInstance(SqlType sqlType, Func<DbConnection> factory)
+        {
+            SqlType = sqlType;
+            InstanceConnectionFactory = factory;
+        }
+
+        private Func<DbConnection> ResolveFactory()
         {
             return _instanceFactory
                 ?? ConnectionFactory
@@ -81,7 +112,10 @@ namespace Aarohi.Classes
         /// <summary>
         /// Initializes a new <see cref="DynamicClass"/> with default settings.
         /// </summary>
-        public DynamicClass() { }
+        public DynamicClass()
+        {
+            SqlType = DefaultSqlType;
+        }
 
         /// <summary>
         /// Initializes a new <see cref="DynamicClass"/> targeting a specific table.
@@ -91,8 +125,10 @@ namespace Aarohi.Classes
         /// <param name="schema">Database schema name (e.g., "dbo").</param>
         /// <param name="table">Database table name.</param>
         /// <param name="keyColumn">Optional key column name.</param>
-        public DynamicClass(string schema, string table, string? keyColumn = null)
+        /// <param name="sqlType">Optional database engine type override.</param>
+        public DynamicClass(string schema, string table, string? keyColumn = null, SqlType? sqlType = null)
         {
+            SqlType = sqlType ?? DefaultSqlType;
             Schema = schema;
             Table = table;
             KeyColumn = keyColumn?.Trim() ?? "";
@@ -106,12 +142,14 @@ namespace Aarohi.Classes
         public DynamicClass(
                     string schema,
                     string table,
-                    Func<SqlConnection> connectionFactory,
-                    string? keyColumn = null)
+                    Func<DbConnection> connectionFactory,
+                    string? keyColumn = null,
+                    SqlType? sqlType = null)
         {
             if (connectionFactory == null)
                 throw new ArgumentNullException(nameof(connectionFactory));
 
+            SqlType = sqlType ?? DefaultSqlType;
             Schema = schema;
             Table = table;
             KeyColumn = keyColumn?.Trim() ?? "";
@@ -141,27 +179,19 @@ namespace Aarohi.Classes
             GC.SuppressFinalize(this);
         }
 
-        //private string GetColumnMetadataCacheKey()
-        //{
-        //    EnsureIdent(Schema);
-        //    EnsureIdent(Table);
-        //    return $"{Schema}.{Table}";
-        //}
         private string GetColumnMetadataCacheKey()
         {
             EnsureIdent(Schema);
             EnsureIdent(Table);
 
-            Func<SqlConnection> factory = ResolveFactory();
+            Func<DbConnection> factory = ResolveFactory();
 
-            using SqlConnection con = factory();
+            using DbConnection con = factory();
 
-            SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(con.ConnectionString);
+            string server = con.DataSource?.Trim() ?? "";
+            string database = con.Database?.Trim() ?? "";
 
-            string server = builder.DataSource?.Trim() ?? "";
-            string database = builder.InitialCatalog?.Trim() ?? "";
-
-            return $"{server}|{database}|{Schema}.{Table}";
+            return $"{SqlType}|{server}|{database}|{Schema}.{Table}";
         }
 
         private void InvalidateColumnMetadataCache()

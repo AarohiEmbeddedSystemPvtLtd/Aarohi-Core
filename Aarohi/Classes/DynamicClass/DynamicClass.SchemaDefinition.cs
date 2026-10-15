@@ -1,9 +1,8 @@
-﻿using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Data.SqlClient;
+using Aarohi.Core.Logger;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -18,7 +17,7 @@ namespace Aarohi.Classes
     public sealed partial class DynamicClass
     {
 
-        #region DDL (TABLE/COLUMN CRUD)
+        #region DDL (TABLE/COLUMN CRUD) 
 
         #region Table Manager
 
@@ -39,19 +38,7 @@ namespace Aarohi.Classes
             using var tx = cn.BeginTransaction();
             try
             {
-                foreach (var kv in SchemaSpec) kv.Value.Validate();
-
-                var defs = SchemaSpec.Values.Select(c =>
-                    $"[{c.Name}] {c.SqlType}{(c.Identity ? " IDENTITY(1,1)" : "")} {(c.Nullable ? "NULL" : "NOT NULL")}");
-                var pk = SchemaSpec.Values.FirstOrDefault(x => x.PrimaryKey)
-                         ?? (pkName != null && SchemaSpec.TryGetValue(pkName, out var d) ? d : null);
-                var pkSql = pk is null ? "" : $", CONSTRAINT PK_{Table} PRIMARY KEY ([{pk.Name}])";
-
-                var sql = $"CREATE TABLE [{Schema}].[{Table}] (\n  {string.Join(",\n  ", defs)}{pkSql}\n);";
-                extras["sql"] = "CREATE TABLE ...";
-                using var cmd = new SqlCommand(sql, cn, tx);
-                cmd.ExecuteNonQuery();
-
+                CreateTableInternal(cn, tx, Schema, Table, SchemaSpec, pkName ?? KeyColumn, SqlType);
                 tx.Commit();
                 InvalidateColumnMetadataCache();
                 return true;
@@ -68,11 +55,37 @@ namespace Aarohi.Classes
         {
             EnsureIdent(Schema); EnsureIdent(Table);
             using var cn = Open();
-            using var cmd = new SqlCommand(
-                $"IF OBJECT_ID(@full,'U') IS NOT NULL DROP TABLE [{Schema}].[{Table}];", cn);
-            cmd.Parameters.AddWithValue("@full", $"{Schema}.{Table}");
-            extras["sql"] = "DROP TABLE IF EXISTS";
-            cmd.ExecuteNonQuery();
+            if (SqlType == SqlType.Sqlite)
+            {
+                using var cmd = CreateCommand(cn, $"DROP TABLE IF EXISTS \"{Table}\";");
+                extras["sql"] = "DROP TABLE IF EXISTS";
+                cmd.ExecuteNonQuery();
+
+                EnsureMetadataTableExists(cn);
+                using var metaCmd = CreateCommand(cn, "DELETE FROM [__Aarohi_Metadata] WHERE TableName = @t;");
+                AddCommandParameter(metaCmd, "@t", Table);
+                metaCmd.ExecuteNonQuery();
+            }
+            else if (SqlType == SqlType.PostgreSql)
+            {
+                var s = ResolveSchema(Schema, SqlType);
+                using var cmd = CreateCommand(cn, $"DROP TABLE IF EXISTS \"{s}\".\"{Table}\" CASCADE;");
+                extras["sql"] = "DROP TABLE IF EXISTS (postgres)";
+                cmd.ExecuteNonQuery();
+
+                EnsureMetadataTableExists(cn, sqlType: SqlType, schema: Schema);
+                using var metaCmd = CreateCommand(cn, $"DELETE FROM \"{s}\".\"__Aarohi_Metadata\" WHERE \"TableName\" = @t;");
+                AddCommandParameter(metaCmd, "@t", Table);
+                metaCmd.ExecuteNonQuery();
+            }
+            else
+            {
+                using var cmd = CreateCommand(cn,
+                    $"IF OBJECT_ID(@full,'U') IS NOT NULL DROP TABLE [{Schema}].[{Table}];");
+                AddCommandParameter(cmd, "@full", $"{Schema}.{Table}");
+                extras["sql"] = "DROP TABLE IF EXISTS";
+                cmd.ExecuteNonQuery();
+            }
             InvalidateColumnMetadataCache();
             return true;
         });
@@ -91,18 +104,18 @@ namespace Aarohi.Classes
             using var tx = cn.BeginTransaction();
             try
             {
-                var exists = TableExists(cn, tx, Schema, Table);
+                var exists = TableExists(cn, tx, Schema, Table, SqlType);
                 extras["existsBefore"] = exists;
 
                 if (!exists)
                 {
                     if (SchemaSpec.Count == 0)
                         throw new InvalidOperationException("SchemaSpec empty. Provide definitions to create table.");
-                    CreateTableInternal(cn, tx, Schema, Table, SchemaSpec, pkName ?? KeyColumn);
+                    CreateTableInternal(cn, tx, Schema, Table, SchemaSpec, pkName ?? KeyColumn, SqlType);
                 }
                 else if (SchemaSpec.Count > 0)
                 {
-                    EnsureColumnsInternal(cn, tx, Schema, Table, SchemaSpec);
+                    EnsureColumnsInternal(cn, tx, Schema, Table, SchemaSpec, SqlType);
                 }
 
                 tx.Commit();
@@ -200,21 +213,106 @@ ELSE
 
                 using var cn = Open();
 
-                // If the column already exists => do nothing
-                using var cmd = new SqlCommand(
-                    $"IF COL_LENGTH(@f,@c) IS NULL BEGIN {BuildAddColumnSql(opt, cn, extras)} END",
-                    cn);
+                if (SqlType == SqlType.Sqlite)
+                {
+                    bool exists = false;
+                    using (var pragmaCmd = CreateCommand(cn, $"PRAGMA table_info(\"{Table}\");"))
+                    using (var rd = pragmaCmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            if (string.Equals(rd["name"]?.ToString(), opt.Name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+                    }
 
-                cmd.Parameters.AddWithValue("@f", $"{Schema}.{Table}");
-                cmd.Parameters.AddWithValue("@c", opt.Name);
+                    if (!exists)
+                    {
+                        string sqliteType = MapSqlTypeToSqlite(opt.Type);
+                        string defaultClause = !string.IsNullOrWhiteSpace(opt.DefaultSql) ? $" DEFAULT ({opt.DefaultSql})" : "";
+                        string nullClause = (!opt.Nullable && !string.IsNullOrWhiteSpace(opt.DefaultSql)) ? " NOT NULL" : " NULL";
 
-                extras["sql"] = "ALTER TABLE ADD COLUMN (rich)";
-                cmd.ExecuteNonQuery();
+                        string colSql;
+                        if (!string.IsNullOrWhiteSpace(opt.ComputedExpressionSql))
+                        {
+                            var storage = opt.Persisted ? "STORED" : "VIRTUAL";
+                            colSql = $"ALTER TABLE \"{Table}\" ADD COLUMN \"{opt.Name}\" AS ({opt.ComputedExpressionSql}) {storage};";
+                        }
+                        else
+                        {
+                            colSql = $"ALTER TABLE \"{Table}\" ADD COLUMN \"{opt.Name}\" {sqliteType}{defaultClause}{nullClause};";
+                        }
+
+                        using var cmd = CreateCommand(cn, colSql);
+                        extras["sql"] = "ALTER TABLE ADD COLUMN (sqlite)";
+                        cmd.ExecuteNonQuery();
+
+                        if (!string.IsNullOrEmpty(EpValue_AddedFromSoftware))
+                        {
+                            UpsertExtendedProperty(EpName_AddedFromSoftware, EpValue_AddedFromSoftware, opt.Name);
+                        }
+                    }
+                }
+                else if (SqlType == SqlType.PostgreSql)
+                {
+                    var s = ResolveSchema(Schema, SqlType);
+                    bool exists = false;
+                    using (var chkCmd = CreateCommand(cn, "SELECT 1 FROM information_schema.columns WHERE table_schema = @s AND table_name = @t AND column_name = @c;"))
+                    {
+                        AddCommandParameter(chkCmd, "@s", s);
+                        AddCommandParameter(chkCmd, "@t", Table);
+                        AddCommandParameter(chkCmd, "@c", opt.Name);
+                        exists = chkCmd.ExecuteScalar() != null;
+                    }
+
+                    if (!exists)
+                    {
+                        string rawType = ComposeTypeSql(opt);
+                        string pgType = opt.Identity ? "BIGSERIAL" : MapSqlTypeToPostgreSql(rawType);
+                        string defaultClause = !string.IsNullOrWhiteSpace(opt.DefaultSql) ? $" DEFAULT ({opt.DefaultSql})" : "";
+                        string nullClause = opt.Nullable ? " NULL" : " NOT NULL";
+
+                        string colSql;
+                        if (!string.IsNullOrWhiteSpace(opt.ComputedExpressionSql))
+                        {
+                            colSql = $"ALTER TABLE \"{s}\".\"{Table}\" ADD COLUMN \"{opt.Name}\" {pgType} GENERATED ALWAYS AS ({opt.ComputedExpressionSql}) STORED;";
+                        }
+                        else
+                        {
+                            colSql = $"ALTER TABLE \"{s}\".\"{Table}\" ADD COLUMN \"{opt.Name}\" {pgType}{defaultClause}{nullClause};";
+                        }
+
+                        using var cmd = CreateCommand(cn, colSql);
+                        extras["sql"] = "ALTER TABLE ADD COLUMN (postgres)";
+                        cmd.ExecuteNonQuery();
+
+                        if (!string.IsNullOrEmpty(EpValue_AddedFromSoftware))
+                        {
+                            UpsertExtendedProperty(EpName_AddedFromSoftware, EpValue_AddedFromSoftware, opt.Name);
+                        }
+                    }
+                }
+                else
+                {
+                    // If the column already exists => do nothing
+                    using var cmd = CreateCommand(cn,
+                        $"IF COL_LENGTH(@f,@c) IS NULL BEGIN {BuildAddColumnSql(opt, cn, extras)} END");
+
+                    AddCommandParameter(cmd, "@f", $"{Schema}.{Table}");
+                    AddCommandParameter(cmd, "@c", opt.Name);
+
+                    extras["sql"] = "ALTER TABLE ADD COLUMN (rich)";
+                    cmd.ExecuteNonQuery();
+                }
+
                 InvalidateColumnMetadataCache();
                 return true;
             });
 
-        private string BuildAddColumnSql(ColumnAddOptions opt, SqlConnection cn, IDictionary<string, object> extras)
+        private string BuildAddColumnSql(ColumnAddOptions opt, DbConnection cn, IDictionary<string, object> extras)
         {
             // Computed column rules
             bool isComputed = !string.IsNullOrWhiteSpace(opt.ComputedExpressionSql);
@@ -232,7 +330,7 @@ ELSE
 
             if (!isComputed && !opt.Nullable && string.IsNullOrWhiteSpace(opt.DefaultSql))
             {
-                using var check = new SqlCommand($"SELECT TOP(1) 1 FROM [{Schema}].[{Table}];", cn);
+                using var check = CreateCommand(cn, $"SELECT TOP(1) 1 FROM [{Schema}].[{Table}];");
                 var hasRows = check.ExecuteScalar() != null;
                 if (hasRows)
                     throw new InvalidOperationException(
@@ -373,30 +471,57 @@ ELSE
 
                 using var cn = Open();
 
-                // Build the type string the same way you do in AddColumn
-                var sqlType = ComposeTypeSql(new ColumnAddOptions
+                if (SqlType == SqlType.Sqlite)
                 {
-                    Name = opt.Name,
-                    Type = opt.Type,
-                    Length = opt.Length,
-                    Precision = opt.Precision,
-                    Scale = opt.Scale,
-                    Nullable = opt.Nullable
-                });
+                    // SQLite does not support ALTER TABLE ALTER COLUMN directly due to its dynamic type affinity system.
+                    extras["sql"] = "-- SQLite: ALTER COLUMN not natively supported (dynamic typing); skipped";
+                }
+                else if (SqlType == SqlType.PostgreSql)
+                {
+                    var s = ResolveSchema(Schema, SqlType);
+                    var rawType = ComposeTypeSql(new ColumnAddOptions
+                    {
+                        Name = opt.Name,
+                        Type = opt.Type,
+                        Length = opt.Length,
+                        Precision = opt.Precision,
+                        Scale = opt.Scale,
+                        Nullable = opt.Nullable
+                    });
+                    var pgType = MapSqlTypeToPostgreSql(rawType);
+                    var nullAction = opt.Nullable ? "DROP NOT NULL" : "SET NOT NULL";
+                    var sql = $"ALTER TABLE \"{s}\".\"{Table}\" ALTER COLUMN \"{opt.Name}\" TYPE {pgType}, ALTER COLUMN \"{opt.Name}\" {nullAction};";
 
-                using var cmd = new SqlCommand(
-                    $"ALTER TABLE [{Schema}].[{Table}] ALTER COLUMN [{opt.Name}] {sqlType} {(opt.Nullable ? "NULL" : "NOT NULL")};",
-                    cn);
+                    using var cmd = CreateCommand(cn, sql);
+                    extras["sql"] = "ALTER TABLE ALTER COLUMN (postgres)";
+                    cmd.ExecuteNonQuery();
+                }
+                else
+                {
+                    // Build the type string the same way you do in AddColumn
+                    var sqlType = ComposeTypeSql(new ColumnAddOptions
+                    {
+                        Name = opt.Name,
+                        Type = opt.Type,
+                        Length = opt.Length,
+                        Precision = opt.Precision,
+                        Scale = opt.Scale,
+                        Nullable = opt.Nullable
+                    });
 
-                extras["sql"] = "ALTER TABLE ALTER COLUMN (rich)";
-                cmd.ExecuteNonQuery();
+                    using var cmd = CreateCommand(cn,
+                        $"ALTER TABLE [{Schema}].[{Table}] ALTER COLUMN [{opt.Name}] {sqlType} {(opt.Nullable ? "NULL" : "NOT NULL")};");
+
+                    extras["sql"] = "ALTER TABLE ALTER COLUMN (rich)";
+                    cmd.ExecuteNonQuery();
+                }
                 InvalidateColumnMetadataCache();
                 return true;
             });
 
         // Method: RenameColumn
         /// <summary>
-        /// Renames a column using <c>sp_rename</c>.
+        /// Renames a column using <c>sp_rename</c> (SQL Server) or <c>ALTER TABLE RENAME COLUMN</c> (SQLite).
         /// </summary>
         /// <param name="oldName">Existing column name.</param>
         /// <param name="newName">New column name.</param>
@@ -406,11 +531,42 @@ ELSE
             {
                 EnsureIdent(Schema); EnsureIdent(Table); EnsureIdent(oldName); EnsureIdent(newName);
                 using var cn = Open();
-                using var cmd = new SqlCommand("EXEC sp_rename @full, @new, 'COLUMN';", cn);
-                cmd.Parameters.AddWithValue("@full", $"{Schema}.{Table}.{oldName}");
-                cmd.Parameters.AddWithValue("@new", newName);
-                extras["sql"] = "sp_rename COLUMN";
-                cmd.ExecuteNonQuery();
+
+                if (SqlType == SqlType.Sqlite)
+                {
+                    using var cmd = CreateCommand(cn, $"ALTER TABLE \"{Table}\" RENAME COLUMN \"{oldName}\" TO \"{newName}\";");
+                    extras["sql"] = "ALTER TABLE RENAME COLUMN";
+                    cmd.ExecuteNonQuery();
+
+                    EnsureMetadataTableExists(cn);
+                    using var metaCmd = CreateCommand(cn, "UPDATE [__Aarohi_Metadata] SET ColumnName = @newName WHERE TableName = @t AND ColumnName = @oldName;");
+                    AddCommandParameter(metaCmd, "@newName", newName);
+                    AddCommandParameter(metaCmd, "@t", Table);
+                    AddCommandParameter(metaCmd, "@oldName", oldName);
+                    metaCmd.ExecuteNonQuery();
+                }
+                else if (SqlType == SqlType.PostgreSql)
+                {
+                    var s = ResolveSchema(Schema, SqlType);
+                    using var cmd = CreateCommand(cn, $"ALTER TABLE \"{s}\".\"{Table}\" RENAME COLUMN \"{oldName}\" TO \"{newName}\";");
+                    extras["sql"] = "ALTER TABLE RENAME COLUMN (postgres)";
+                    cmd.ExecuteNonQuery();
+
+                    EnsureMetadataTableExists(cn, sqlType: SqlType, schema: Schema);
+                    using var metaCmd = CreateCommand(cn, $"UPDATE \"{s}\".\"__Aarohi_Metadata\" SET \"ColumnName\" = @newName WHERE \"TableName\" = @t AND \"ColumnName\" = @oldName;");
+                    AddCommandParameter(metaCmd, "@newName", newName);
+                    AddCommandParameter(metaCmd, "@t", Table);
+                    AddCommandParameter(metaCmd, "@oldName", oldName);
+                    metaCmd.ExecuteNonQuery();
+                }
+                else
+                {
+                    using var cmd = CreateCommand(cn, "EXEC sp_rename @full, @new, 'COLUMN';");
+                    AddCommandParameter(cmd, "@full", $"{Schema}.{Table}.{oldName}");
+                    AddCommandParameter(cmd, "@new", newName);
+                    extras["sql"] = "sp_rename COLUMN";
+                    cmd.ExecuteNonQuery();
+                }
                 InvalidateColumnMetadataCache();
                 return true;
             });
@@ -426,12 +582,58 @@ ELSE
             {
                 EnsureIdent(Schema); EnsureIdent(Table); EnsureIdent(column);
                 using var cn = Open();
-                using var cmd = new SqlCommand(
-                    $"IF COL_LENGTH(@f,@c) IS NOT NULL ALTER TABLE [{Schema}].[{Table}] DROP COLUMN [{column}];", cn);
-                cmd.Parameters.AddWithValue("@f", $"{Schema}.{Table}");
-                cmd.Parameters.AddWithValue("@c", column);
-                extras["sql"] = "ALTER TABLE DROP COLUMN";
-                cmd.ExecuteNonQuery();
+
+                if (SqlType == SqlType.Sqlite)
+                {
+                    bool exists = false;
+                    using (var pragmaCmd = CreateCommand(cn, $"PRAGMA table_info(\"{Table}\");"))
+                    using (var rd = pragmaCmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            if (string.Equals(rd["name"]?.ToString(), column, StringComparison.OrdinalIgnoreCase))
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (exists)
+                    {
+                        using var cmd = CreateCommand(cn, $"ALTER TABLE \"{Table}\" DROP COLUMN \"{column}\";");
+                        extras["sql"] = "ALTER TABLE DROP COLUMN";
+                        cmd.ExecuteNonQuery();
+
+                        EnsureMetadataTableExists(cn);
+                        using var metaCmd = CreateCommand(cn, "DELETE FROM [__Aarohi_Metadata] WHERE TableName = @t AND ColumnName = @c;");
+                        AddCommandParameter(metaCmd, "@t", Table);
+                        AddCommandParameter(metaCmd, "@c", column);
+                        metaCmd.ExecuteNonQuery();
+                    }
+                }
+                else if (SqlType == SqlType.PostgreSql)
+                {
+                    var s = ResolveSchema(Schema, SqlType);
+                    using var cmd = CreateCommand(cn, $"ALTER TABLE \"{s}\".\"{Table}\" DROP COLUMN IF EXISTS \"{column}\" CASCADE;");
+                    extras["sql"] = "ALTER TABLE DROP COLUMN (postgres)";
+                    cmd.ExecuteNonQuery();
+
+                    EnsureMetadataTableExists(cn, sqlType: SqlType, schema: Schema);
+                    using var metaCmd = CreateCommand(cn, $"DELETE FROM \"{s}\".\"__Aarohi_Metadata\" WHERE \"TableName\" = @t AND \"ColumnName\" = @c;");
+                    AddCommandParameter(metaCmd, "@t", Table);
+                    AddCommandParameter(metaCmd, "@c", column);
+                    metaCmd.ExecuteNonQuery();
+                }
+                else
+                {
+                    using var cmd = CreateCommand(cn,
+                        $"IF COL_LENGTH(@f,@c) IS NOT NULL ALTER TABLE [{Schema}].[{Table}] DROP COLUMN [{column}];");
+                    AddCommandParameter(cmd, "@f", $"{Schema}.{Table}");
+                    AddCommandParameter(cmd, "@c", column);
+                    extras["sql"] = "ALTER TABLE DROP COLUMN";
+                    cmd.ExecuteNonQuery();
+                }
                 InvalidateColumnMetadataCache();
                 return true;
             });
@@ -455,6 +657,33 @@ ELSE
                    .ToArray();
         }
 
+        // Method: GetOptionsExtended
+        /// <summary>
+        /// Returns the current set of options from the column's Options extended property.
+        /// </summary>
+        /// <param name="column">Column name.</param>
+        /// <returns>Array of options; empty if none detected.</returns>
+        public string[] GetOptionsExtended(string column)
+        {
+            EnsureIdent(Schema);
+            EnsureIdent(Table);
+
+            if (string.IsNullOrWhiteSpace(column))
+                return Array.Empty<string>();
+
+            var value = ReadExtendedProperty("Options", column)?.ToString();
+
+            if (string.IsNullOrWhiteSpace(value))
+                return Array.Empty<string>();
+
+            return value
+                .Split(',')
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         // Method: AddOption
         /// <summary>
         /// Adds a single option to a column's Options extended property.
@@ -468,7 +697,7 @@ ELSE
             if (string.IsNullOrWhiteSpace(option))
                 throw new ArgumentException("Option cannot be empty.", nameof(option));
 
-            var current = GetOptions(column).ToList();
+            var current = GetOptionsExtended(column).ToList();
             if (!current.Contains(option, StringComparer.OrdinalIgnoreCase))
                 current.Add(option);
 
@@ -484,7 +713,7 @@ ELSE
         /// <returns><c>true</c> on success.</returns>
         public bool RemoveOption(string column, string option)
         {
-            var list = GetOptions(column).ToList();
+            var list = GetOptionsExtended(column).ToList();
             var removed = list.RemoveAll(s => s.Equals(option, StringComparison.OrdinalIgnoreCase));
             if (removed == 0) return true; // nothing to do
 
@@ -556,14 +785,7 @@ ELSE
                    t.StartsWith("smallmoney");
         }
 
-        private static string QSafe(string ident)
-        {
-            if (string.IsNullOrWhiteSpace(ident))
-                throw new ArgumentException("Identifier cannot be null/empty.");
 
-            var safe = ident.Replace("]", "]]");
-            return "[" + safe + "]";
-        }
 
         #endregion
 

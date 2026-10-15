@@ -24,7 +24,7 @@ namespace Aarohi.Classes
             return Table;
         }
 
-        private string ResolveTableName(SqlConnection cn)
+        private string ResolveTableName(System.Data.Common.DbConnection cn)
         {
             EnsureIdent(Schema);
             EnsureIdent(Table);
@@ -71,14 +71,32 @@ namespace Aarohi.Classes
 
         private string? ResolveSqlNamePlaceholders(string? sqlFragment)
         {
-            if (string.IsNullOrWhiteSpace(sqlFragment) || !sqlFragment.Contains("{"))
+            if (string.IsNullOrWhiteSpace(sqlFragment))
                 return sqlFragment;
 
-            return Regex.Replace(sqlFragment, @"\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\}", match =>
+            if (sqlFragment.Contains("{"))
             {
-                var requestedName = match.Groups["name"].Value;
-                return QSafe(ResolveColumnName(requestedName));
-            });
+                sqlFragment = Regex.Replace(sqlFragment, @"\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\}", match =>
+                {
+                    var requestedName = match.Groups["name"].Value;
+                    return QSafe(ResolveColumnName(requestedName));
+                });
+            }
+
+            if (SqlType == SqlType.PostgreSql)
+            {
+                var cols = GetColumns();
+                if (cols != null && cols.Count > 0)
+                {
+                    foreach (var c in cols)
+                    {
+                        var pattern = $@"(?<![""'\w@:]){Regex.Escape(c.Name)}(?![""'\w])";
+                        sqlFragment = Regex.Replace(sqlFragment, pattern, $"\"{c.Name}\"");
+                    }
+                }
+            }
+
+            return sqlFragment;
         }
     }
 }

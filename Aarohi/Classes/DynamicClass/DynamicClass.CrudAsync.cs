@@ -1,9 +1,10 @@
-﻿using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
+using Aarohi.Core.Logger;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -17,8 +18,8 @@ namespace Aarohi.Classes
 {
     public sealed partial class DynamicClass
     {
-
         #region Async DML (ROW CRUD)
+
         // Method: InsertAsync
         /// <summary>
         /// Asynchronously inserts a new row using <see cref="Values"/>; returns identity/provided key or <c>null</c>.
@@ -41,34 +42,58 @@ namespace Aarohi.Classes
                 var parNames = cols.Select((_, i) => $"@p{i}").ToArray();
                 var physicalKeyColumn = ResolveKeyColumnName(columns);
 
-                var identitySql = string.IsNullOrWhiteSpace(physicalKeyColumn)
-            ? ""
-            : $"IF COLUMNPROPERTY(object_id('{Schema}.{physicalTable}'), '{physicalKeyColumn}', 'IsIdentity')=1 SELECT SCOPE_IDENTITY();";
+                string identitySql;
+                if (SqlType == SqlType.Sqlite)
+                {
+                    identitySql = "; SELECT last_insert_rowid();";
+                }
+                else if (SqlType == SqlType.PostgreSql)
+                {
+                    identitySql = !string.IsNullOrWhiteSpace(physicalKeyColumn)
+                        ? $" RETURNING {QSafe(physicalKeyColumn)};"
+                        : "";
+                }
+                else if (!string.IsNullOrWhiteSpace(physicalKeyColumn))
+                {
+                    identitySql = $"; IF COLUMNPROPERTY(object_id('{Schema}.{physicalTable}'), '{physicalKeyColumn}', 'IsIdentity')=1 SELECT SCOPE_IDENTITY();";
+                }
+                else
+                {
+                    identitySql = "";
+                }
 
-                var sql = $"INSERT INTO [{Schema}].[{physicalTable}] ({string.Join(",", qCols)}) " +
-                  $"VALUES ({string.Join(",", parNames)}); {identitySql}";
+                var sql = $"INSERT INTO {FormatTableName()} ({string.Join(",", qCols)}) VALUES ({string.Join(",", parNames)}){identitySql}";
 
                 using var cn = await OpenAsync(ct).ConfigureAwait(false);
-                using var cmd = new SqlCommand(sql, cn);
+                using var cmd = CreateCommand(cn, sql);
 
                 for (int i = 0; i < cols.Length; i++)
                 {
-                    var val = physicalValues[cols[i]] ?? DBNull.Value;
-                    cmd.Parameters.AddWithValue(parNames[i], val);
+                    string colName = cols[i];
+                    var val = physicalValues[colName];
+
+                    ColumnInfo? info = columns.FirstOrDefault(x => x.Name.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                    if (info == null)
+                        throw new Exception($"Column metadata not found for {colName}");
+
+                    if (val is string s && string.IsNullOrWhiteSpace(s) && info.Nullable)
+                        val = DBNull.Value;
+
+                    AddCommandParameter(cmd, parNames[i], val ?? DBNull.Value);
                 }
 
                 AddCommonExtras(extras,
-            ("sql", sql),
-            ("columns", string.Join(",", cols)),
-            ("valuesCount", cols.Length));
+                    ("sql", sql),
+                    ("columns", string.Join(",", cols)),
+                    ("valuesCount", cols.Length));
 
                 if (string.IsNullOrWhiteSpace(identitySql))
                 {
                     await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
                     if (!string.IsNullOrWhiteSpace(physicalKeyColumn) &&
-                TryGetValueForColumn(physicalKeyColumn, columns, out var providedKey) &&
-                !IsEmptyKey(providedKey))
+                        TryGetValueForColumn(physicalKeyColumn, columns, out var providedKey) &&
+                        !IsEmptyKey(providedKey))
                     {
                         return providedKey;
                     }
@@ -123,15 +148,15 @@ namespace Aarohi.Classes
             if (changedCols.Count == 0)
                 return 0;
 
-            var sets = string.Join(",", changedCols.Select(c => $"{Q(c)}=@{c}"));
-            var sql = $"UPDATE [{Schema}].[{physicalTable}] SET {sets} WHERE {Q(physicalKeyColumn)}=@__key";
+            var sets = string.Join(",", changedCols.Select(c => $"{QSafe(c)}=@{c}"));
+            var sql = $"UPDATE {FormatTableName()} SET {sets} WHERE {QSafe(physicalKeyColumn)}=@__key";
 
-            using var cmd = new SqlCommand(sql, cn);
+            using var cmd = CreateCommand(cn, sql);
 
             foreach (var c in changedCols)
-                cmd.Parameters.AddWithValue("@" + c, physicalValues[c] ?? DBNull.Value);
+                AddCommandParameter(cmd, "@" + c, physicalValues[c] ?? DBNull.Value);
 
-            cmd.Parameters.AddWithValue("@__key", keyVal ?? DBNull.Value);
+            AddCommandParameter(cmd, "@__key", keyVal ?? DBNull.Value);
 
             var affected = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             return affected;
@@ -167,34 +192,7 @@ namespace Aarohi.Classes
                     dt.Rows.Add(dr);
                 }
 
-                extras["rowCount"] = dt.Rows.Count;
-                extras["colCount"] = dt.Columns.Count;
-
-                using var cn = await OpenAsync(ct);
-                SqlTransaction? tx = null;
-                if (useTransaction) tx = cn.BeginTransaction();
-
-                try
-                {
-                    var options = keepIdentity ? SqlBulkCopyOptions.KeepIdentity : SqlBulkCopyOptions.Default;
-                    using var bcp = new SqlBulkCopy(cn, options, tx)
-                    {
-                        DestinationTableName = $"[{Schema}].[{physicalTable}]",
-                        BatchSize = batchSize,
-                        BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
-                    };
-                    foreach (DataColumn dc in dt.Columns)
-                        bcp.ColumnMappings.Add(dc.ColumnName, dc.ColumnName);
-
-                    await bcp.WriteToServerAsync(dt, ct);
-                    tx?.Commit();
-                    return dt.Rows.Count;
-                }
-                catch
-                {
-                    tx?.Rollback();
-                    throw;
-                }
+                return await BulkInsertAsync(dt, batchSize, keepIdentity, useTransaction, true, bulkCopyTimeoutSeconds, ct).ConfigureAwait(false);
             });
         }
 
@@ -236,27 +234,57 @@ namespace Aarohi.Classes
                 extras["rowCount"] = dt.Rows.Count;
                 extras["colCount"] = writeCols.Count;
 
-                using var cn = await OpenAsync(ct);
-                SqlTransaction? tx = null;
+                using var cn = await OpenAsync(ct).ConfigureAwait(false);
+                DbTransaction? tx = null;
                 if (useTransaction) tx = cn.BeginTransaction();
 
                 try
                 {
-                    var options = keepIdentity ? SqlBulkCopyOptions.KeepIdentity : SqlBulkCopyOptions.Default;
-                    using var bcp = new SqlBulkCopy(cn, options, tx)
+                    if (SqlType == SqlType.SqlServer && cn is SqlConnection sqlCn)
                     {
-                        DestinationTableName = $"[{Schema}].[{physicalTable}]",
-                        BatchSize = batchSize,
-                        BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
-                    };
+                        var options = keepIdentity ? SqlBulkCopyOptions.KeepIdentity : SqlBulkCopyOptions.Default;
+                        using var bcp = new SqlBulkCopy(sqlCn, options, (SqlTransaction?)tx)
+                        {
+                            DestinationTableName = $"[{Schema}].[{physicalTable}]",
+                            BatchSize = batchSize,
+                            BulkCopyTimeout = ResolveBulkCopyTimeoutSeconds(bulkCopyTimeoutSeconds)
+                        };
 
-                    foreach (var name in writeCols)
-                        bcp.ColumnMappings.Add(name, name);
+                        foreach (var name in writeCols)
+                            bcp.ColumnMappings.Add(name, name);
 
-                    await bcp.WriteToServerAsync(dt, ct);
+                        await bcp.WriteToServerAsync(dt, ct).ConfigureAwait(false);
+                        tx?.Commit();
+                        return dt.Rows.Count;
+                    }
+                    else
+                    {
+                        var qCols = writeCols.Select(QSafe).ToList();
+                        var paramNames = writeCols.Select((_, i) => $"@p{i}").ToList();
+                        var insertSql = $"INSERT INTO {FormatTableName()} ({string.Join(", ", qCols)}) VALUES ({string.Join(", ", paramNames)});";
 
-                    tx?.Commit();
-                    return dt.Rows.Count;
+                        using var cmd = CreateCommand(cn, insertSql, tx);
+                        for (int i = 0; i < writeCols.Count; i++)
+                        {
+                            var colName = writeCols[i];
+                            var colType = dt.Columns.Contains(colName) ? dt.Columns[colName].DataType : typeof(string);
+                            AddCommandParameter(cmd, paramNames[i], null, TypeToDbType(colType));
+                        }
+
+                        int count = 0;
+                        foreach (DataRow row in dt.Rows)
+                        {
+                            for (int i = 0; i < writeCols.Count; i++)
+                            {
+                                cmd.Parameters[i].Value = row[writeCols[i]] ?? DBNull.Value;
+                            }
+                            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                            count++;
+                        }
+
+                        tx?.Commit();
+                        return count;
+                    }
                 }
                 catch
                 {
@@ -271,10 +299,6 @@ namespace Aarohi.Classes
         /// Asynchronous upsert for <see cref="Values"/>.
         /// Uses <paramref name="confirmAsync"/> to request user confirmation before updating when <paramref name="askBeforeOverwrite"/> is true.
         /// </summary>
-        /// <param name="askBeforeOverwrite">If true, invokes <paramref name="confirmAsync"/> with a change summary.</param>
-        /// <param name="confirmAsync">Async delegate to confirm update; return false to cancel.</param>
-        /// <param name="ct">Cancellation token.</param>
-        /// <returns>Key/identity value, or <c>null</c> if cancelled.</returns>
         public async Task<object?> SaveAsync(
             bool askBeforeOverwrite = true,
             ConfirmUpdateAsync? confirmAsync = null,
@@ -285,7 +309,6 @@ namespace Aarohi.Classes
             var physicalTable = ResolveTableName();
             var physicalKeyColumn = ResolveKeyColumnName(columns);
 
-            // Try infer missing key
             if (!string.IsNullOrWhiteSpace(physicalKeyColumn) &&
                 (!TryGetValueForColumn(physicalKeyColumn, columns, out var keyCandidate) || IsEmptyKey(keyCandidate)))
             {
@@ -311,9 +334,9 @@ namespace Aarohi.Classes
 
             bool exists;
             using (var cn = await OpenAsync(ct).ConfigureAwait(false))
-            using (var cmd = new SqlCommand($"SELECT COUNT(*) FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)} = @key", cn))
+            using (var cmd = CreateCommand(cn, $"SELECT COUNT(*) FROM {FormatTableName()} WHERE {QSafe(physicalKeyColumn)} = @key"))
             {
-                cmd.Parameters.AddWithValue("@key", keyVal ?? DBNull.Value);
+                AddCommandParameter(cmd, "@key", keyVal ?? DBNull.Value);
                 exists = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false)) > 0;
             }
 
@@ -346,15 +369,6 @@ namespace Aarohi.Classes
         }).ConfigureAwait(false);
 
         // Method: DeleteByKeyAsync
-        /// <summary>
-        /// Asynchronously deletes a row by key.
-        /// </summary>
-        /// <param name="keyValue">Key value to delete.</param>
-        /// <param name="ct">Cancellation token.</param>
-        /// <returns>Number of rows deleted.</returns>
-        /// <exception cref="ForeignKeyDeleteBlockedException">
-        /// Thrown when deletion is blocked by an FK constraint.
-        /// </exception>
         public async Task<int> DeleteByKeyAsync(object keyValue, CancellationToken ct = default) =>
             await SafeExecuteAsync("DELETE_ASYNC", async extras =>
             {
@@ -364,11 +378,11 @@ namespace Aarohi.Classes
                 var physicalKeyColumn = ResolveKeyColumnName(columns);
                 EnsureIdent(physicalKeyColumn);
 
-                var sql = $"DELETE FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)}=@k";
+                var sql = $"DELETE FROM {FormatTableName()} WHERE {QSafe(physicalKeyColumn)}=@k";
 
                 using var cn = await OpenAsync(ct).ConfigureAwait(false);
-                using var cmd = new SqlCommand(sql, cn);
-                cmd.Parameters.AddWithValue("@k", keyValue ?? DBNull.Value);
+                using var cmd = CreateCommand(cn, sql);
+                AddCommandParameter(cmd, "@k", keyValue ?? DBNull.Value);
 
                 AddCommonExtras(extras, ("sql", "DELETE ... WHERE key"), ("key", keyValue));
 
@@ -376,51 +390,23 @@ namespace Aarohi.Classes
                 {
                     return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 }
-                catch (SqlException ex) when (ex.Number == 547) // FK violation
+                catch (Exception ex) when (IsForeignKeyViolation(ex, out var constraint, out var childTable, out var childColumn))
                 {
-                    string? constraint = null, childTable = null, childColumn = null;
-                    try
-                    {
-                        var m1 = Regex.Match(ex.Message, "constraint \"(?<c>.+?)\"", RegexOptions.IgnoreCase);
-                        if (m1.Success) constraint = m1.Groups["c"].Value;
-
-                        var m2 = Regex.Match(ex.Message, "table \"(?<t>.+?)\"", RegexOptions.IgnoreCase);
-                        if (m2.Success) childTable = m2.Groups["t"].Value;
-
-                        var m3 = Regex.Match(ex.Message, "column '(?<col>.+?)'", RegexOptions.IgnoreCase);
-                        if (m3.Success) childColumn = m3.Groups["col"].Value;
-                    }
-                    catch { /* ignore */ }
-
                     AddCommonExtras(extras,
-                ("error", "FK violation on delete"),
-                ("sqlerr", ex.Message),
-                ("constraint", constraint ?? ""),
-                ("refTable", childTable ?? ""),
-                ("refColumn", childColumn ?? "")
-            );
+                        ("error", "FK violation on delete"),
+                        ("sqlerr", ex.Message),
+                        ("constraint", constraint ?? ""),
+                        ("refTable", childTable ?? ""),
+                        ("refColumn", childColumn ?? "")
+                    );
 
                     throw new ForeignKeyDeleteBlockedException(
-                "Delete blocked by a foreign key reference.",
-                constraint, childTable, childColumn);
+                        "Delete blocked by a foreign key reference.",
+                        constraint, childTable, childColumn);
                 }
             }).ConfigureAwait(false);
 
         // Method: SelectAsync
-        /// <summary>
-        /// Asynchronously executes a <c>SELECT *</c> on the target table with optional WHERE/TOP/ORDER BY/chunk limit.
-        /// </summary>
-        /// <param name="whereSql">Optional WHERE clause (without the keyword).</param>
-        /// <param name="parameters">Optional parameters (name → value).</param>
-        /// <param name="top">Optional TOP N.</param>
-        /// <param name="orderBy">Optional ORDER BY (without the keyword).</param>
-        /// <param name="ct">Cancellation token.</param>
-        /// <param name="pageNumber">Optional 1-based page number kept for compatibility. Prefer <paramref name="chunkNumber"/>.</param>
-        /// <param name="pageSize">Optional chunk size kept for compatibility. Prefer <paramref name="chunkSize"/>.</param>
-        /// <param name="chunkNumber">Optional 1-based chunk number. If omitted with <paramref name="chunkSize"/>, the first chunk is returned.</param>
-        /// <param name="chunkSize">Optional chunk size. When supplied alone, only the first chunk is returned.</param>
-        /// <param name="chunkOffset">Optional zero-based row offset for variable-size chunk loading. Use with <paramref name="chunkSize"/>.</param>
-        /// <returns>A populated <see cref="DataTable"/>.</returns>
         public async Task<DataTable?> SelectAsync(
             string? whereSql = null,
             IDictionary<string, object?>? parameters = null,
@@ -463,28 +449,44 @@ namespace Aarohi.Classes
                 orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasChunkWindow);
             }
 
-            var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{physicalTable}]"
+            string sql;
+            if (SqlType == SqlType.SqlServer)
+            {
+                var topClause = (top.HasValue && !hasChunkWindow) ? $"TOP {top.Value} " : "";
+                sql = $"SELECT {topClause}* FROM [{Schema}].[{physicalTable}]"
                     + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
                     + orderClause
                     + (hasChunkWindow ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_chunk_size ROWS ONLY" : "");
+            }
+            else
+            {
+                var limitOffset = "";
+                if (hasChunkWindow)
+                    limitOffset = " LIMIT @__dc_chunk_size OFFSET @__dc_offset";
+                else if (top.HasValue)
+                    limitOffset = $" LIMIT {top.Value}";
+
+                sql = $"SELECT * FROM {FormatTableName()}"
+                    + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
+                    + orderClause
+                    + limitOffset;
+            }
 
             using var cn = await OpenAsync(ct).ConfigureAwait(false);
-            using var cmd = new SqlCommand(sql, cn);
+            using var cmd = CreateCommand(cn, sql);
 
             if (parameters != null)
             {
                 foreach (var kv in parameters)
                 {
-                    var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-                    var p = cmd.Parameters.Add(name, SqlDbType.NVarChar);
-                    p.Value = kv.Value ?? DBNull.Value;
+                    AddCommandParameter(cmd, kv.Key, kv.Value);
                 }
             }
 
             if (hasChunkWindow)
             {
-                cmd.Parameters.Add("@__dc_offset", SqlDbType.Int).Value = offsetRows;
-                cmd.Parameters.Add("@__dc_chunk_size", SqlDbType.Int).Value = fetchRows;
+                AddCommandParameter(cmd, "@__dc_offset", offsetRows);
+                AddCommandParameter(cmd, "@__dc_chunk_size", fetchRows);
             }
 
             AddCommonExtras(extras,
@@ -519,15 +521,18 @@ namespace Aarohi.Classes
             return dt;
         }).ConfigureAwait(false);
 
-        private async Task<DataRow?> GetRowByKeyAsync(SqlConnection cn, object? keyVal, CancellationToken ct)
+        private async Task<DataRow?> GetRowByKeyAsync(DbConnection cn, object? keyVal, CancellationToken ct)
         {
             var physicalTable = ResolveTableName(cn);
             var columns = GetColumns() ?? new List<ColumnInfo>();
             var physicalKeyColumn = ResolveKeyColumnName(columns);
 
-            var sql = $"SELECT TOP (1) * FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)} = @k";
-            using var cmd = new SqlCommand(sql, cn);
-            cmd.Parameters.AddWithValue("@k", keyVal ?? DBNull.Value);
+            var sql = (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+                ? $"SELECT * FROM {FormatTableName()} WHERE {QSafe(physicalKeyColumn)} = @k LIMIT 1"
+                : $"SELECT TOP (1) * FROM [{Schema}].[{physicalTable}] WHERE {Q(physicalKeyColumn)} = @k";
+
+            using var cmd = CreateCommand(cn, sql);
+            AddCommandParameter(cmd, "@k", keyVal ?? DBNull.Value);
             using var rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 
             var dt = new DataTable();
@@ -552,22 +557,22 @@ namespace Aarohi.Classes
             if (cols.Count == 0) return null;
 
             var whereParts = new List<string>();
-            var ps = new List<SqlParameter>();
-            int i = 0;
-
-            foreach (var c in cols)
+            for (int i = 0; i < cols.Count; i++)
             {
-                whereParts.Add($"{Q(c)}=@p{i}");
-                ps.Add(new SqlParameter("@p" + i, physicalValues[c]!));
-                i++;
+                whereParts.Add($"{QSafe(cols[i])}=@p{i}");
             }
 
             var where = string.Join(" AND ", whereParts);
-            var sql = $"SELECT TOP (2) {Q(physicalKeyColumn)} FROM [{Schema}].[{physicalTable}] WHERE {where};";
+            var sql = (SqlType == SqlType.Sqlite || SqlType == SqlType.PostgreSql)
+                ? $"SELECT {QSafe(physicalKeyColumn)} FROM {FormatTableName()} WHERE {where} LIMIT 2;"
+                : $"SELECT TOP (2) {Q(physicalKeyColumn)} FROM [{Schema}].[{physicalTable}] WHERE {where};";
 
             using var cn = await OpenAsync(ct).ConfigureAwait(false);
-            using var cmd = new SqlCommand(sql, cn);
-            cmd.Parameters.AddRange(ps.ToArray());
+            using var cmd = CreateCommand(cn, sql);
+            for (int i = 0; i < cols.Count; i++)
+            {
+                AddCommandParameter(cmd, "@p" + i, physicalValues[cols[i]]!);
+            }
 
             using var rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 
@@ -583,6 +588,5 @@ namespace Aarohi.Classes
         }
 
         #endregion
-
     }
 }

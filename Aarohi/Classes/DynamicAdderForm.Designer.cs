@@ -74,7 +74,7 @@ namespace Aarohi.Classes
             PanelHeader.Location = new Point(20, 20);
             PanelHeader.Name = "PanelHeader";
             PanelHeader.Padding = new Padding(20);
-            PanelHeader.Size = new Size(1506, 100);
+            PanelHeader.Size = new Size(1044, 100);
             PanelHeader.TabIndex = 0;
             // 
             // LabelHeading
@@ -84,7 +84,7 @@ namespace Aarohi.Classes
             LabelHeading.Font = new Font("Gadugi", 18F, FontStyle.Bold, GraphicsUnit.Point, 0);
             LabelHeading.Location = new Point(23, 20);
             LabelHeading.Name = "LabelHeading";
-            LabelHeading.Size = new Size(1466, 60);
+            LabelHeading.Size = new Size(1004, 60);
             LabelHeading.TabIndex = 0;
             LabelHeading.TextAlign = ContentAlignment.MiddleLeft;
             // 
@@ -107,7 +107,7 @@ namespace Aarohi.Classes
             PanelFooter.Location = new Point(20, 755);
             PanelFooter.Name = "PanelFooter";
             PanelFooter.Padding = new Padding(10);
-            PanelFooter.Size = new Size(1506, 91);
+            PanelFooter.Size = new Size(1044, 91);
             PanelFooter.TabIndex = 1;
             // 
             // extendedPanel1
@@ -129,7 +129,7 @@ namespace Aarohi.Classes
             extendedPanel1.GridAutoRowHeight = false;
             extendedPanel1.GridColumnCount = 2;
             extendedPanel1.GridColumnGap = 10;
-            extendedPanel1.Location = new Point(1100, 10);
+            extendedPanel1.Location = new Point(638, 10);
             extendedPanel1.Name = "extendedPanel1";
             extendedPanel1.Padding = new Padding(10);
             extendedPanel1.Size = new Size(396, 71);
@@ -246,7 +246,7 @@ namespace Aarohi.Classes
             PanelSelection.Location = new Point(20, 120);
             PanelSelection.Name = "PanelSelection";
             PanelSelection.Padding = new Padding(20, 6, 6, 6);
-            PanelSelection.Size = new Size(1506, 66);
+            PanelSelection.Size = new Size(1044, 66);
             PanelSelection.TabIndex = 2;
             // 
             // LabelSelection
@@ -292,7 +292,7 @@ namespace Aarohi.Classes
             extendedPanel2.Location = new Point(20, 186);
             extendedPanel2.Name = "extendedPanel2";
             extendedPanel2.Padding = new Padding(6);
-            extendedPanel2.Size = new Size(1506, 5);
+            extendedPanel2.Size = new Size(1044, 5);
             extendedPanel2.TabIndex = 3;
             // 
             // PanelHolder
@@ -324,7 +324,7 @@ namespace Aarohi.Classes
             PanelHolder.Location = new Point(20, 191);
             PanelHolder.Name = "PanelHolder";
             PanelHolder.Padding = new Padding(6);
-            PanelHolder.Size = new Size(1506, 564);
+            PanelHolder.Size = new Size(1044, 564);
             PanelHolder.TabIndex = 5;
             // 
             // DynamicAdderForm
@@ -332,7 +332,7 @@ namespace Aarohi.Classes
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.White;
-            ClientSize = new Size(1546, 866);
+            ClientSize = new Size(1084, 866);
             Controls.Add(PanelHolder);
             Controls.Add(extendedPanel2);
             Controls.Add(PanelSelection);
