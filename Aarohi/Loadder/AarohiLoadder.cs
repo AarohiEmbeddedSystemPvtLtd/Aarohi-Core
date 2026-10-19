@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -52,10 +52,7 @@ namespace Aarohi.Loadder
         private double strokeAlphaFactor = 1.0;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public bool Show
-            
-            
-            ideLines { get; set; } = false;
+        public bool ShowGuideLines { get; set; } = false;
 
         private bool guideFadeStarted;
         private double guideFadeStartTime;
