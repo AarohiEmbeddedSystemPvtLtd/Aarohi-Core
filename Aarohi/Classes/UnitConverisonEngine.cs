@@ -1,4 +1,4 @@
-﻿using NCalc;
+using NCalc;
 using NCalc.Domain;
 using System;
 using System.Collections.Generic;
@@ -328,16 +328,11 @@ namespace Aarohi.Classes
             }
 
             if (rule.FastFormula != null)
-                return (rule.FastFormula(value), rule.ToUnit, rule.Format);
+                return (rule.FastFormula(value), rule.ToUnit, selectedFormat);
 
             object? result = EvaluateFormula(rule.ParsedExpression, value);
-<<<<<<< Updated upstream
-            double convertedValue = ToDouble(result!);
 
-            return (convertedValue, rule.ToUnit, rule.Format);
-=======
             return (ToDouble(result!), rule.ToUnit, selectedFormat);
->>>>>>> Stashed changes
         }
 
         public static string GetUnitFromParameter(string parameter)

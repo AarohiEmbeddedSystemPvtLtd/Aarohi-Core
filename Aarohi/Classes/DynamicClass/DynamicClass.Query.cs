@@ -1,9 +1,10 @@
-﻿using Aarohi.Core.Logger;
-using DocumentFormat.OpenXml.Wordprocessing;
+using Aarohi.Core.Logger;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -74,29 +75,44 @@ namespace Aarohi.Classes
                 orderClause = " ORDER BY " + ResolveOrderByForSelect(resolvedOrderBy, columns, hasChunkWindow);
             }
 
-            var sql = $"SELECT {(top.HasValue ? "TOP " + top.Value + " " : "")}* FROM [{Schema}].[{physicalTable}]"
+            string sql;
+            if (SqlType == SqlType.SqlServer)
+            {
+                var topClause = (top.HasValue && !hasChunkWindow) ? $"TOP {top.Value} " : "";
+                sql = $"SELECT {topClause}* FROM [{Schema}].[{physicalTable}]"
                     + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
                     + orderClause
                     + (hasChunkWindow ? " OFFSET @__dc_offset ROWS FETCH NEXT @__dc_chunk_size ROWS ONLY" : "");
+            }
+            else
+            {
+                var limitOffset = "";
+                if (hasChunkWindow)
+                    limitOffset = " LIMIT @__dc_chunk_size OFFSET @__dc_offset";
+                else if (top.HasValue)
+                    limitOffset = $" LIMIT {top.Value}";
+
+                sql = $"SELECT * FROM {FormatTableName()}"
+                    + (string.IsNullOrWhiteSpace(resolvedWhereSql) ? "" : " WHERE " + resolvedWhereSql)
+                    + orderClause
+                    + limitOffset;
+            }
 
             using var cn = Open();
-            using var da = new SqlDataAdapter(sql, cn);
+            using var cmd = CreateCommand(cn, sql);
 
             if (parameters != null)
             {
-                da.SelectCommand!.Parameters.Clear();
-
                 foreach (var kv in parameters)
                 {
-                    var name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-                    da.SelectCommand.Parameters.AddWithValue(name, kv.Value ?? DBNull.Value);
+                    AddCommandParameter(cmd, kv.Key, kv.Value);
                 }
             }
 
             if (hasChunkWindow)
             {
-                da.SelectCommand!.Parameters.Add("@__dc_offset", SqlDbType.Int).Value = offsetRows;
-                da.SelectCommand.Parameters.Add("@__dc_chunk_size", SqlDbType.Int).Value = fetchRows;
+                AddCommandParameter(cmd, "@__dc_offset", offsetRows);
+                AddCommandParameter(cmd, "@__dc_chunk_size", fetchRows);
             }
 
             AddCommonExtras(extras,
@@ -113,8 +129,7 @@ namespace Aarohi.Classes
                 ("offset", hasChunkWindow ? offsetRows : null),
                 ("params", parameters ?? new Dictionary<string, object?>()));
 
-            var dt = new DataTable();
-            da.Fill(dt);
+            var dt = ExecuteDataTable(cmd);
 
             dt = ReorderColumnsByMetadataOrder(dt);
 

@@ -55,7 +55,7 @@ namespace Aarohi.Core.DeviceManager
         }
     }
 
-    
+
     public sealed class CommunicationServiceRegisterBatchResult
     {
         public Guid DeviceId { get; init; }
@@ -512,51 +512,7 @@ namespace Aarohi.Core.DeviceManager
 
             try
             {
-<<<<<<< Updated upstream
                 var envelope = new PipeEnvelope
-=======
-                PipeEnvelope envelope =
-                    new()
-                    {
-                        Type = commandType,
-                        CorrelationId = correlationId,
-
-                        Payload =
-                            JsonSerializer.SerializeToElement(
-                                new
-                                {
-                                    DeviceId = deviceId,
-
-                                    Writes =
-                                        writesList.Select(x => new
-                                        {
-                                            x.RegisterName,
-                                            x.Address,
-                                            Value = ToWriteString(x.Value),                                        
-                                            x.WriteAckRequired
-
-                                        }).ToList()
-                                },
-                                _jsonOptions)
-                    };
-
-                await SendAsync(
-                        envelope,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                using CancellationTokenSource timeout =
-                    CancellationTokenSource
-                        .CreateLinkedTokenSource(
-                            cancellationToken);
-
-                timeout.CancelAfter(
-                    TimeSpan.FromSeconds(10));
-
-                using (
-                    timeout.Token.Register(
-                        () => tcs.TrySetCanceled()))
->>>>>>> Stashed changes
                 {
                     Type = "WriteRegisters",
                     CorrelationId = correlationId,
@@ -568,7 +524,8 @@ namespace Aarohi.Core.DeviceManager
                             {
                                 x.RegisterName,
                                 x.Address,
-                                Value = ToWriteString(x.Value)
+                                Value = ToWriteString(x.Value),
+                                x.WriteAckRequired
                             }).ToList()
                         },
                         _jsonOptions)
