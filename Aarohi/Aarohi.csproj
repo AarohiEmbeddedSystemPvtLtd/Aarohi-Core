@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net9.0-windows</TargetFramework>
@@ -10,7 +10,7 @@
 		<!-- Suppresses warning for public members without XML comments -->
 		<NoWarn>$(NoWarn);1591</NoWarn>
 		<PackageId>Aarohi</PackageId>
-		<Version>1.0.14.65</Version>
+		<Version>1.0.14.66</Version>
 		<Authors>Aarohi Embedded Systems</Authors>
 		<Company>Aarohi Embedded Systems Pvt. Ltd.</Company>
 		<Description>Aarohi Core.</Description>
@@ -24,16 +24,10 @@
 	</ItemGroup>
 
   <ItemGroup>
-<<<<<<< Updated upstream
-    <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />
-=======
-    <!--<PackageReference Include="Aarohi.ExtendedUI" Version="1.0.1" />-->
     <PackageReference Include="Aarohi.ExtendedUI" Version="1.0.3" />
->>>>>>> Stashed changes
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="EasyModbusTCP.NETCore" Version="1.0.0" />
-    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.2" />
@@ -52,20 +46,8 @@
 		<None Include="snap7.dll" Pack="true" PackagePath="runtimes/win-x86/native" />
 	</ItemGroup>
 
-	<ItemGroup>
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
-	  <ProjectReference Include="..\..\..\..\Projects\Aarohi.ExtendedUI\Aarohi.ExtendedUI\Aarohi.ExtendedUI.csproj" />
-	</ItemGroup>
 
 	<ItemGroup>
-<<<<<<< HEAD
-=======
->>>>>>> 2eed83b537f4cbceadd7e9a0701bc1c597bf8f20
-=======
->>>>>>> 4fae1995a31ca5df02e036ec880abc5c6af1da80
 	  <Compile Update="Classes\DynamicCrudForm.cs" />
 	  <Compile Update="Classes\ExtendedDropDownList.cs" />
 	  <Compile Update="Classes\ExtendedTextBox.cs" />
@@ -73,5 +55,4 @@
 	  <Compile Update="SQL\FormDbSplash.cs" />
 	  <Compile Update="SQL\FormDatabaseCloner.cs" />
 	</ItemGroup>
-	
 </Project>

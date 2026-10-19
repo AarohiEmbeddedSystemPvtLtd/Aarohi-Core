@@ -55,7 +55,7 @@ namespace Aarohi.Core.DeviceManager
         }
     }
 
-    
+
     public sealed class CommunicationServiceRegisterBatchResult
     {
         public Guid DeviceId { get; init; }
@@ -524,7 +524,8 @@ namespace Aarohi.Core.DeviceManager
                             {
                                 x.RegisterName,
                                 x.Address,
-                                Value = ToWriteString(x.Value)
+                                Value = ToWriteString(x.Value),
+                                x.WriteAckRequired
                             }).ToList()
                         },
                         _jsonOptions)

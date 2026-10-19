@@ -328,12 +328,11 @@ namespace Aarohi.Classes
             }
 
             if (rule.FastFormula != null)
-                return (rule.FastFormula(value), rule.ToUnit, rule.Format);
+                return (rule.FastFormula(value), rule.ToUnit, selectedFormat);
 
             object? result = EvaluateFormula(rule.ParsedExpression, value);
-            double convertedValue = ToDouble(result!);
 
-            return (convertedValue, rule.ToUnit, rule.Format);
+            return (ToDouble(result!), rule.ToUnit, selectedFormat);
         }
 
         public static string GetUnitFromParameter(string parameter)
