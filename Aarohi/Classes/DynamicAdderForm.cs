@@ -382,7 +382,7 @@ namespace Aarohi.Classes
                 _dynamicRequired.Add(targetKey);
             else
                 _dynamicRequired.Remove(targetKey);
-
+                
             if (_inputsByKey.TryGetValue(targetKey, out var di))
             {
                 if (makeRequired)
@@ -870,7 +870,24 @@ namespace Aarohi.Classes
                                     type = SqlHealper.GetDropDownType(dyn.Table, baseName, Column_Permissions);
                                 }
 
-                                if (c.IsForeignKey)
+                                string? mappedDefaultValue = null;
+
+                                if (_mapOfCombobox != null &&
+                                    _mapOfCombobox.TryGetValue(baseName, out var mappedValues))
+                                {
+                                    string[] validMappedValues = mappedValues
+                                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                                        .ToArray();
+
+                                    items_dd.AddRange(validMappedValues);
+
+                                    if (validMappedValues.Length == 1)
+                                    {
+                                        mappedDefaultValue = validMappedValues[0];
+                                    }
+                                }
+                                else if (c.IsForeignKey)
                                 {
                                     var childKey = KeyOf(dyn.Table, baseName);
                                     var (where, parms) = GetFkFilter(childKey);
@@ -921,12 +938,14 @@ namespace Aarohi.Classes
                                         items_dd.AddRange(SqlHealper.Evalute_Coloum_Names(dyn.Table, baseName, Column_Permissions));
                                     }
                                 }
-                                else if (_mapOfCombobox != null && _mapOfCombobox.TryGetValue(baseName, out var mappedValues))
-                                {
-                                    items_dd.AddRange(mappedValues);
-                                }
 
-                                di = new DataInput(baseName, items_dd.ToArray(), initialValue: c.DefaultValue?.ToString(), c.DisplayName);
+
+                                string? initialValue = c.DefaultValue?.ToString();
+
+                                if (string.IsNullOrWhiteSpace(initialValue))
+                                    initialValue = mappedDefaultValue;
+
+                                di = new DataInput(baseName, items_dd.ToArray(), initialValue: initialValue, c.DisplayName);
                                 _isDrop = true;
                             }
                             else
