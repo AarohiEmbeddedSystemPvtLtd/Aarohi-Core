@@ -8,7 +8,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 
-//Dhavalbhai's Code
 namespace Aarohi.Classes
 {
     public static class UnitConverisonEngine
@@ -229,7 +228,8 @@ namespace Aarohi.Classes
             string parameter,
             object inputValue,
             string fromUnit,
-            string toUnit)
+            string toUnit,
+            string fallbackFormat = "0.00")
         {
             CacheSnapshot cache = GetRulesCache();
 
@@ -246,6 +246,9 @@ namespace Aarohi.Classes
                 cache.RulesByKey.TryGetValue(GetRuleKey(parameter, fromUnit, toUnit), out CachedRule? rule))
             {
                 string format = ResolveFormat(cache, parameter, fromUnit, toUnit);
+
+                if(string.IsNullOrEmpty(format))
+                    format = fallbackFormat;
 
                 if (rule.TemplateParts.Length > 0 && Regex.IsMatch(format, @"\{[^{}]+\}"))
                 {
@@ -277,9 +280,10 @@ namespace Aarohi.Classes
             string quantity,
             object inputValue,
             string fromUnit,
-            string toUnit)
+            string toUnit,
+            string fallbackFormat = "0.00")
         {
-            return convertFormatted(quantity, inputValue, fromUnit, toUnit).value;
+            return convertFormatted(quantity, inputValue, fromUnit, toUnit, fallbackFormat).value;
         }
 
         public static string GetNumberFormat(
