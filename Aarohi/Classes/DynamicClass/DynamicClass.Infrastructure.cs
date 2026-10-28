@@ -1,4 +1,4 @@
-using Aarohi.Core.Logger;
+﻿using Aarohi.Core.Logger;
 using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 using System;
@@ -425,6 +425,7 @@ namespace Aarohi.Classes
                 else if (value is float) p.DbType = DbType.Single;
                 else if (value is bool) p.DbType = DbType.Boolean;
                 else if (value is DateTime) p.DbType = DbType.DateTime2;
+                else if (value is TimeSpan) p.DbType = DbType.Time;
                 else if (value is byte[]) p.DbType = DbType.Binary;
                 else if (value is Guid) p.DbType = DbType.Guid;
                 else p.DbType = DbType.String;
@@ -446,6 +447,7 @@ namespace Aarohi.Classes
             if (underlying == typeof(float)) return DbType.Single;
             if (underlying == typeof(bool)) return DbType.Boolean;
             if (underlying == typeof(DateTime)) return DbType.DateTime2;
+            if (underlying == typeof(TimeSpan)) return DbType.Time;
             if (underlying == typeof(byte[])) return DbType.Binary;
             if (underlying == typeof(Guid)) return DbType.Guid;
             return DbType.String;
@@ -695,6 +697,7 @@ namespace Aarohi.Classes
             else if (value is double or float) p.SqlDbType = SqlDbType.Float;
             else if (value is bool) p.SqlDbType = SqlDbType.Bit;
             else if (value is DateTime) p.SqlDbType = SqlDbType.DateTime2;
+            else if (value is TimeSpan) p.SqlDbType = SqlDbType.Time;
             else p.SqlDbType = SqlDbType.NVarChar;
         }
 
