@@ -18,6 +18,21 @@ public static class UnitConverisonEngine
 
         public string FormulaText { get; init; } = string.Empty;
 
+            public DataTable? RulesTable { get; init; }
+            public DataTable? ParameterMappingTable { get; init; }
+            public DataTable? UnitFormatRulesTable { get; init; }
+            public bool RulesReady { get; init; }
+            public bool ParameterMappingReady { get; init; }
+            public bool UnitFormatRulesReady { get; init; }
+            public bool HasFormatColumn { get; init; }
+            public Dictionary<string, CachedRule> RulesByKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> FormatsByToKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> FormatsByFromKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> UnitFormatsByKey { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> FromUnits { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string[]> UnitsByParameter { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+            public string[] Parameters { get; init; } = Array.Empty<string>();
+        }
         public string NumericFormulaText { get; init; } = string.Empty;
 
         public string Format { get; init; } = string.Empty;
@@ -26,6 +41,19 @@ public static class UnitConverisonEngine
 
         public LogicalExpression? ParsedExpression { get; init; }
 
+        private static string sParameterCol = "Perameter";
+        private static string sUnitsCol = "Units";
+        private static string sUnitFormatUnitCol = "Unit";
+
+        public static DataTable? ConversionRules
+        {
+            get => Volatile.Read(ref _cache).RulesTable;
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(value, current.ParameterMappingTable, current.UnitFormatRulesTable);
+            }
+        }
         public (string Name, LogicalExpression Expression, Dictionary<string, string> Parameters)[] TemplateParts { get; init; } = Array.Empty<(string, LogicalExpression, Dictionary<string, string>)>();
 
         public string? NumericFormulaError { get; init; }
@@ -74,6 +102,22 @@ public static class UnitConverisonEngine
 
         public FastFormulaParser(string text)
         {
+            get => Volatile.Read(ref _cache).ParameterMappingTable;
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(current.RulesTable, value, current.UnitFormatRulesTable);
+            }
+        }
+
+        public static DataTable? UnitFormatRules
+        {
+            get => Volatile.Read(ref _cache).UnitFormatRulesTable;
+            set
+            {
+                CacheSnapshot current = Volatile.Read(ref _cache);
+                Load(current.RulesTable, current.ParameterMappingTable, value);
+            }
             _text = text;
         }
 
@@ -187,6 +231,24 @@ public static class UnitConverisonEngine
             return (double _) => number;
         }
 
+        public static string UnitFormatUnitColumnName
+        {
+            get => sUnitFormatUnitCol;
+            set
+            {
+                sUnitFormatUnitCol = string.IsNullOrWhiteSpace(value) ? "Unit" : value.Trim();
+                RebuildCurrentCache();
+            }
+        }
+
+        public static void Load(DataTable? conversionRules, DataTable? parameterUnitMapping)
+        {
+            Load(conversionRules, parameterUnitMapping, Volatile.Read(ref _cache).UnitFormatRulesTable);
+        }
+
+        public static void Load(DataTable? conversionRules, DataTable? parameterUnitMapping, DataTable? unitFormatRules)
+        {
+            CacheSnapshot replacement = BuildCache(conversionRules, parameterUnitMapping, unitFormatRules);
         private double ParseNumber()
         {
             SkipWhiteSpace();
@@ -201,6 +263,10 @@ public static class UnitConverisonEngine
                 throw new FormatException();
             }
 
+        private static void RebuildCurrentCache()
+        {
+            CacheSnapshot current = Volatile.Read(ref _cache);
+            Load(current.RulesTable, current.ParameterMappingTable, current.UnitFormatRulesTable);
             string text = _text;
             int num = pos;
             return double.Parse(text.Substring(num, _pos - num), NumberStyles.Float, CultureInfo.InvariantCulture);
@@ -780,6 +846,13 @@ public static class UnitConverisonEngine
             return null;
         }
 
+        private static CacheSnapshot BuildCache(DataTable? rules, DataTable? parameterMapping, DataTable? unitFormatRules)
+        {
+            var rulesByKey = new Dictionary<string, CachedRule>(StringComparer.OrdinalIgnoreCase);
+            var formatsByToKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var formatsByFromKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var unitFormatsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var fromUnits = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!new FastFormulaParser(formula).TryParse(out Func<double, double> compiled))
         {
             return null;
@@ -905,6 +978,25 @@ public static class UnitConverisonEngine
                     }
                 }
 
+            if (HasUnitFormatColumns(unitFormatRules))
+            {
+                foreach (DataRow row in unitFormatRules!.Rows)
+                {
+                    string quantity = ReadCell(row, sQuantity);
+                    string unit = ReadCell(row, sUnitFormatUnitCol);
+
+                    if (string.IsNullOrWhiteSpace(quantity) || string.IsNullOrWhiteSpace(unit))
+                        continue;
+
+                    string format = ReadCell(row, sFormat);
+                    unitFormatsByKey.TryAdd(
+                        GetPairKey(quantity, unit),
+                        string.IsNullOrWhiteSpace(format) ? sDefaultFormat : format);
+                }
+            }
+
+            var unitsByParameter = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            var parameterDisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 CachedRule value = new CachedRule
                 {
                     ToUnit = text3,
@@ -938,6 +1030,37 @@ public static class UnitConverisonEngine
             }
         }
 
+            return new CacheSnapshot
+            {
+                RulesTable = rules,
+                ParameterMappingTable = parameterMapping,
+                UnitFormatRulesTable = unitFormatRules,
+                RulesReady = HasRuleColumns(rules),
+                ParameterMappingReady = HasParameterMappingColumns(parameterMapping),
+                UnitFormatRulesReady = HasUnitFormatColumns(unitFormatRules),
+                HasFormatColumn = rules?.Columns.Contains(sFormat) == true,
+                RulesByKey = rulesByKey,
+                FormatsByToKey = formatsByToKey,
+                FormatsByFromKey = formatsByFromKey,
+                UnitFormatsByKey = unitFormatsByKey,
+                FromUnits = fromUnits,
+                UnitsByParameter = unitsByParameter,
+                Parameters = parameterDisplayNames.Values
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+        }
+
+        private static string ResolveFormat(CacheSnapshot cache, string parameter, string fromUnit, string toUnit)
+        {
+            if (cache.UnitFormatsByKey.TryGetValue(GetPairKey(parameter, toUnit), out string? unitFormat))
+                return unitFormat;
+
+            if (!cache.HasFormatColumn)
+                return sDefaultFormat;
+
+            if (!string.IsNullOrWhiteSpace(fromUnit) &&
+                cache.RulesByKey.TryGetValue(GetRuleKey(parameter, fromUnit, toUnit), out CachedRule? exactRule))
         Dictionary<string, string[]> dictionary5 = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string> dictionary6 = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (HasParameterMappingColumns(parameterMapping))
@@ -989,6 +1112,18 @@ public static class UnitConverisonEngine
         };
     }
 
+            return cache.FormatsByFromKey.TryGetValue(GetPairKey(parameter, fromUnit), out string? fromFormat)
+                ? fromFormat
+                : sDefaultFormat;
+        }
+
+        private static bool HasUnitFormatColumns(DataTable? table)
+        {
+            return table != null && table.Columns.Contains(sQuantity) && table.Columns.Contains(sUnitFormatUnitCol) &&
+                   table.Columns.Contains(sFormat);
+        }
+
+        private static bool HasRuleColumns(DataTable? table)
     private static string ResolveFormat(CacheSnapshot cache, string parameter, string fromUnit, string toUnit)
     {
         if (cache.UnitFormatsByKey.TryGetValue(GetPairKey(parameter, toUnit), out var value))
