@@ -17,6 +17,16 @@ Aarohi Core Library Version History
 	  - Implemented GO-batch separator splitting for executing complex SQL scripts.
 	  - Added tracking table dbo.AarohiSchemaVersions to register and track executed migrations.
 	  - Integrated transaction safety with rollback on script failure.
+1.0.14.71 - Enhanced DynamicCrudForm & DynamicAdderForm customization & layout control.
+	  - Exposed direct Grid and DynamicClass properties on DynamicCrudForm to eliminate reflection/control-tree crawling.
+	  - Exposed Add, Edit, Delete, and title controls for caller-defined styling and visibility.
+	  - Added AutoEnforceWorkingAreaBounds toggle to honor caller-specified form dimensions and positions.
+	  - Added AdderFormSize, AdderFormStartPosition, and ShowAdderAsDialog properties to control child Add/Edit forms.
+	  - Added ConfigureAdderForm hook callback and RecordSaved/RecordDeleted lifecycle events.
+	  - Integrated Aarohi.ExtendedUI.ExtendedMessageBox with a standard WinForms fallback (UseExtendedMessageBox).
+	  - Added ShowSaveSuccessMessage toggle for silent saves with custom application toaster/banner support.
+1.0.14.75 - Added CanDeleteRecord delegate hook on DynamicCrudForm.
+	  - Enables external callers to validate, intercept, or block record deletion with custom domain messages while preserving 100% backward compatibility.
 ================================================================================
 
  1.0.14.54
@@ -24,5 +34,4 @@ Aarohi Core Library Version History
 Add username debounce autocomplete and eye button
 
  Introduce a 250ms debounce autocomplete for the username ComboBox: cache all usernames in _allUserNames, handle TextUpdate to filter items, and show the dropdown with  matched results. Replace the password toggle text button with a custom painted eye icon (with slash when visible) that toggles textBox2.UseSystemPasswordChar and  repaints. Wire up events and clear the password when a username is selected. Miscellaneous UI/event wiring and small formatting cleanups.
-
 
