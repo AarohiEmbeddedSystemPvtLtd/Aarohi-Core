@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Aarohi.ExtendedUI;
 using static Aarohi.Core.Exceptions;
 
 namespace Aarohi.Classes
@@ -24,6 +25,120 @@ namespace Aarohi.Classes
         Dictionary<string, string[]> _mapOfCombobox;
 
         private bool _applyingResponsiveLayout;
+
+        #region Public Properties & Customization Hooks
+
+        /// <summary>
+        /// Direct access to the internal data grid (avoids manual control tree scanning).
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ExtendedDataGridView Grid => _edgv;
+
+        /// <summary>
+        /// Direct access to the underlying DynamicClass metadata &amp; schema definition.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public DynamicClass DynamicClass => _dc;
+
+        /// <summary>
+        /// Direct access to the action buttons for custom styling, icons, or visibility toggles.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ExtendedUI.ExtendedButton AddButton => ButtonAdd;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ExtendedUI.ExtendedButton EditButton => ButtonEdit;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ExtendedUI.ExtendedButton DeleteButton => ButtonDelete;
+
+        /// <summary>
+        /// Direct access to the header title label.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Label TitleLabel => LabelHeading;
+
+        /// <summary>
+        /// If true, automatically snaps to screen working area bounds in portrait screens.
+        /// Set to false if the caller application defines its own Bounds or Size. Default is true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool AutoEnforceWorkingAreaBounds { get; set; } = true;
+
+        /// <summary>
+        /// If true, uses styled ExtendedMessageBox; if false, falls back to standard WinForms MessageBox.
+        /// Defaults to true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool UseExtendedMessageBox { get; set; } = true;
+
+        /// <summary>
+        /// If true, displays a success message box after saving a record in the child Adder form.
+        /// Set to false if the caller application handles notifications independently. Defaults to true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ShowSaveSuccessMessage { get; set; } = true;
+
+        /// <summary>
+        /// Optional explicit size for the child DynamicAdderForm popup. If null, uses Adder form's default size.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Size? AdderFormSize { get; set; }
+
+        /// <summary>
+        /// Startup position for the child DynamicAdderForm. Defaults to CenterParent.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public FormStartPosition AdderFormStartPosition { get; set; } = FormStartPosition.CenterParent;
+
+        /// <summary>
+        /// If true, opens DynamicAdderForm as a modal dialog (ShowDialog(this)).
+        /// If false, opens it modelessly with this form as owner (Show(this)).
+        /// Defaults to false for backward compatibility.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ShowAdderAsDialog { get; set; } = false;
+
+        /// <summary>
+        /// Hook invoked right after DynamicAdderForm is instantiated and before it is shown.
+        /// Parameters: (DynamicAdderForm adderForm, bool isEditMode).
+        /// Allows any calling application to configure validation, dependencies, sizes, or rules.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Action<DynamicAdderForm, bool>? ConfigureAdderForm { get; set; }
+
+        /// <summary>
+        /// Optional predicate to validate whether a record can be deleted.
+        /// Return null to allow deletion, or a non-null string containing the reason deletion is blocked.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Func<IDictionary<string, object?>, string?>? CanDeleteRecord { get; set; }
+
+        /// <summary>
+        /// Fires when a record is successfully saved in the Adder form.
+        /// </summary>
+        public event EventHandler? RecordSaved;
+
+        /// <summary>
+        /// Fires when a record is successfully deleted.
+        /// </summary>
+        public event EventHandler? RecordDeleted;
+
+        #endregion
 
         public DynamicCrudForm(string schema, string table, string suffix, Dictionary<string, string[]> mapOfCombobox = null)
         {
@@ -61,6 +176,9 @@ namespace Aarohi.Classes
 
         private void ApplyWorkingAreaBounds()
         {
+            if (!AutoEnforceWorkingAreaBounds)
+                return;
+
             Screen screen = Screen.FromControl(this);
             Rectangle workingArea = screen.WorkingArea;
 
@@ -237,12 +355,74 @@ namespace Aarohi.Classes
             }
         }
 
+        private void ShowAdderForm(bool isEditMode, Dictionary<string, object?>? initVal = null)
+        {
+            string title = isEditMode ? $"Edit {_suffix}" : $"Add {_suffix}";
+
+            _adder = new DynamicAdderForm(
+                title,
+                new DynamicClass[] { _dc },
+                MapOfCombobox: _mapOfCombobox,
+                InitVal: initVal);
+
+            _adder.UseExtendedMessageBox = UseExtendedMessageBox;
+            _adder.ShowSaveSuccessMessage = ShowSaveSuccessMessage;
+
+            if (AdderFormSize.HasValue)
+            {
+                _adder.AutoEnforceWorkingAreaBounds = false;
+                _adder.WindowState = FormWindowState.Normal;
+                _adder.Size = AdderFormSize.Value;
+            }
+            _adder.StartPosition = AdderFormStartPosition;
+
+            ConfigureAdderForm?.Invoke(_adder, isEditMode);
+
+            _adder.Save_Success += (_, __) =>
+            {
+                refresh();
+                RecordSaved?.Invoke(this, EventArgs.Empty);
+            };
+
+            if (ShowAdderAsDialog)
+            {
+                _adder.ShowDialog(this);
+            }
+            else
+            {
+                _adder.Show(this);
+            }
+        }
+
+        private DialogResult ShowUserMessage(string message, string title, MessageType type, MessageButtons buttons = MessageButtons.OK)
+        {
+            if (UseExtendedMessageBox)
+            {
+                return ExtendedMessageBox.Show(this, message, title, type, buttons);
+            }
+            else
+            {
+                MessageBoxIcon icon = type switch
+                {
+                    MessageType.Error => MessageBoxIcon.Error,
+                    MessageType.Warning => MessageBoxIcon.Warning,
+                    _ => MessageBoxIcon.Information
+                };
+                MessageBoxButtons winButtons = buttons switch
+                {
+                    MessageButtons.YesNo => MessageBoxButtons.YesNo,
+                    MessageButtons.OKCancel => MessageBoxButtons.OKCancel,
+                    MessageButtons.YesNoCancel => MessageBoxButtons.YesNoCancel,
+                    MessageButtons.RetryCancel => MessageBoxButtons.RetryCancel,
+                    _ => MessageBoxButtons.OK
+                };
+                return MessageBox.Show(this, message, title, winButtons, icon);
+            }
+        }
+
         private void ButtonAdd_Click(object sender, EventArgs e)
         {
-            if (_adder.IsDisposed)
-                _adder = new DynamicAdderForm($"Add {_suffix}", new DynamicClass[] { _dc }, MapOfCombobox: _mapOfCombobox);
-            _adder.Save_Success += (_, __) => refresh();
-            _adder.Show();
+            ShowAdderForm(isEditMode: false);
         }
 
         private void DynamicCrudForm_Load(object sender, EventArgs e)
@@ -261,9 +441,7 @@ namespace Aarohi.Classes
         {
             _edgv.TryGetSelectedRowData(out IDictionary<string, object?> rowData);
             if (rowData == null) return;
-            _adder = new DynamicAdderForm($"Edit {_suffix}", new DynamicClass[] { _dc },MapOfCombobox:_mapOfCombobox, InitVal: (Dictionary<string, object?>?)rowData);
-            _adder.Save_Success += (_, __) => refresh();
-            _adder.Show();
+            ShowAdderForm(isEditMode: true, initVal: (Dictionary<string, object?>?)rowData);
         }
 
         private void ButtonDelete_Click(object sender, EventArgs e)
@@ -272,7 +450,22 @@ namespace Aarohi.Classes
             {
                 _edgv.TryGetSelectedRowData(out IDictionary<string, object?> rowData);
                 if (rowData == null) return;
-                var result = MessageBox.Show($"Are you sure you want to delete {_suffix} '{rowData[_dc.GetPrimaryKeyColumns().FirstOrDefault()]}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (CanDeleteRecord != null)
+                {
+                    string? blockReason = CanDeleteRecord(rowData);
+                    if (!string.IsNullOrWhiteSpace(blockReason))
+                    {
+                        ShowUserMessage(blockReason, "Delete Blocked", MessageType.Warning, MessageButtons.OK);
+                        return;
+                    }
+                }
+
+                var result = ShowUserMessage(
+                    $"Are you sure you want to delete {_suffix} '{rowData[_dc.GetPrimaryKeyColumns().FirstOrDefault()]}'?",
+                    "Confirm Delete",
+                    MessageType.Warning,
+                    MessageButtons.YesNo);
                 if (result == DialogResult.Yes)
                 {
                     object? GrpPrimaryKey = _dc.GetPrimaryKeyColumns().FirstOrDefault();
@@ -281,16 +474,17 @@ namespace Aarohi.Classes
                     {
                         _dc.DeleteByKey(val);
                         refresh();
+                        RecordDeleted?.Invoke(this, EventArgs.Empty);
                     }
                 }
             }
             catch (ForeignKeyDeleteBlockedException Fkex)
             {
-                MessageBox.Show(Fkex.Message, "Delete Blocked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowUserMessage(Fkex.Message, "Delete Blocked", MessageType.Warning, MessageButtons.OK);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Delete Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowUserMessage(ex.Message, "Delete Failed", MessageType.Error, MessageButtons.OK);
             }
         }
 

@@ -119,6 +119,30 @@ namespace Aarohi.Classes
         /// </summary>
         public EventHandler<EventArgs> Save_Success;
 
+        /// <summary>
+        /// If true, automatically snaps to screen working area bounds in portrait screens.
+        /// Set to false if the caller application defines its own Bounds or Size. Defaults to true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool AutoEnforceWorkingAreaBounds { get; set; } = true;
+
+        /// <summary>
+        /// If true, uses styled ExtendedMessageBox; if false, falls back to standard WinForms MessageBox.
+        /// Defaults to true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool UseExtendedMessageBox { get; set; } = true;
+
+        /// <summary>
+        /// If true, displays a success message box after saving a record.
+        /// Set to false if the caller application handles notifications independently. Defaults to true.
+        /// </summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ShowSaveSuccessMessage { get; set; } = true;
+
         // Shared dynamic classes used for UI configuration data.
         DynamicClass ComboBoxValues = new DynamicClass("dbo", "ComboBoxValues");
         DynamicClass Column_Permissions = new DynamicClass("dbo", "Column_Permissions");
@@ -148,7 +172,7 @@ namespace Aarohi.Classes
 
             if (entities == null || entities.Length == 0)
             {
-                MessageBox.Show("No items to show!");
+                ShowUserMessage("No items to show!", "Warning", MessageType.Warning, MessageButtons.OK);
                 Close();
                 return;
             }
@@ -183,7 +207,7 @@ namespace Aarohi.Classes
 
             if (selectionMap == null || selectionMap.Count == 0)
             {
-                MessageBox.Show("No items to show!");
+                ShowUserMessage("No items to show!", "Warning", MessageType.Warning, MessageButtons.OK);
                 Close();
                 return;
             }
@@ -259,6 +283,9 @@ namespace Aarohi.Classes
 
         private void ApplyWorkingAreaBounds()
         {
+            if (!AutoEnforceWorkingAreaBounds)
+                return;
+
             Screen screen = Screen.FromControl(this);
             Rectangle workingArea = screen.WorkingArea;
 
@@ -1191,6 +1218,32 @@ namespace Aarohi.Classes
         /// Validates all entities, gathers values, and persists them via <see cref="DynamicClass.Save"/>.
         /// Shows a summary of validation errors if any and closes on success.
         /// </summary>
+                private DialogResult ShowUserMessage(string message, string title, MessageType type, MessageButtons buttons = MessageButtons.OK)
+        {
+            if (UseExtendedMessageBox)
+            {
+                return ExtendedMessageBox.Show(this, message, title, type, buttons);
+            }
+            else
+            {
+                MessageBoxIcon icon = type switch
+                {
+                    MessageType.Error => MessageBoxIcon.Error,
+                    MessageType.Warning => MessageBoxIcon.Warning,
+                    _ => MessageBoxIcon.Information
+                };
+                MessageBoxButtons winButtons = buttons switch
+                {
+                    MessageButtons.YesNo => MessageBoxButtons.YesNo,
+                    MessageButtons.OKCancel => MessageBoxButtons.OKCancel,
+                    MessageButtons.YesNoCancel => MessageBoxButtons.YesNoCancel,
+                    MessageButtons.RetryCancel => MessageBoxButtons.RetryCancel,
+                    _ => MessageBoxButtons.OK
+                };
+                return MessageBox.Show(this, message, title, winButtons, icon);
+            }
+        }
+
         private void ButtonSave_Click(object sender, EventArgs e)
         {
             ButtonSave.Enabled = false;
@@ -1313,7 +1366,7 @@ namespace Aarohi.Classes
                 if (allErrors.Count > 0)
                 {
                     var msg = "Please fix the following:\n• " + string.Join("\n• ", allErrors);
-                    MessageBox.Show(this, msg, "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    ShowUserMessage(msg, "Validation", MessageType.Warning, MessageButtons.OK);
                     return;
                 }
 
@@ -1331,8 +1384,10 @@ namespace Aarohi.Classes
                     saved++;
                 }
 
-                MessageBox.Show(this, $"Saved record(s) successfully.", "Success",
-                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (ShowSaveSuccessMessage)
+                {
+                    ShowUserMessage("Saved record(s) successfully.", "Success", MessageType.Information, MessageButtons.OK);
+                }
 
                 Save_Success?.Invoke(sender, e);
                 this.Close();
@@ -1340,8 +1395,7 @@ namespace Aarohi.Classes
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Save failed: " + ex.Message, "Error",
-                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ShowUserMessage("Save failed: " + ex.Message, "Error", MessageType.Error, MessageButtons.OK);
             }
             finally
             {
