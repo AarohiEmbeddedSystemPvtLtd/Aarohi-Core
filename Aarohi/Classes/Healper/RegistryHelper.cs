@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Cryptography;
 using System.Text;
 using Aarohi.Globals;
@@ -25,10 +25,11 @@ namespace Aarohi.Classes.Healper
             Miscellaneous,
             Company,
             root,
-            Paths
+            Paths,
+            DeveloperSettings
         }
 
-        private static string GetRegistryPath(storeLocs location)
+        public static string GetRegistryPath(storeLocs location)
         {
             switch (location)
             {
@@ -46,6 +47,9 @@ namespace Aarohi.Classes.Healper
                 
                 case storeLocs.Paths:
                     return $@"{RootRegistryPath}\Paths";
+
+                case storeLocs.DeveloperSettings:
+                    return $@"{RootRegistryPath}\DeveloperSettingsManager";
 
                 case storeLocs.root:
                 default:
