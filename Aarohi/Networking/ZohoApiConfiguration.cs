@@ -1,24 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Aarohi.Classes.Healper;
+using System;
 
 namespace Aarohi.Networking
 {
     /// <summary>
-    /// One-time developer configuration for Zoho OAuth.
-    ///
-    /// IMPORTANT:
-    /// 1. Generate NEW credentials before production because the old
-    ///    credentials were exposed during testing.
-    /// 2. The USER does not need to do anything at runtime.
-    /// 3. Access tokens are generated automatically from RefreshToken.
+    /// Configuration provider for Zoho OAuth and Mail API.
+    /// Loads client credentials dynamically at runtime from Windows DPAPI storage.
+    /// Credentials are never stored as plaintext in source code or compiled binaries.
     /// </summary>
     public static class ZohoApiConfiguration
     {
-        public const string SenderEmail =
-            "panel@aarohies.in";
+        public static string SenderEmail =>
+            RegistryHelper.LoadString(RegistryHelper.storeLocs.Credentials, "ZohoSenderEmail", "panel@aarohies.in");
 
         // India data center
         public const string OAuthTokenUrl =
@@ -28,38 +21,42 @@ namespace Aarohi.Networking
             "https://mail.zoho.in/api";
 
         // ------------------------------------------------------------
-        // REPLACE THESE 3 VALUES ONCE WITH YOUR NEW PRODUCTION VALUES
+        // Dynamic DPAPI-backed OAuth Credentials (SEC-C-002)
         // ------------------------------------------------------------
 
-        public const string ClientId =
-            "1000.NZHQBZCKG6KZPD2Q7CZ0JP26GL5ZRN";
+        public static string ClientId =>
+            RegistryHelper.LoadString(RegistryHelper.storeLocs.Credentials, "ZohoClientId", string.Empty);
 
-        public const string ClientSecret =
-            "13163d55672c09679342f3a4a92a15dc82ee8278ee";
+        public static string ClientSecret =>
+            RegistryHelper.LoadEncrypted(RegistryHelper.storeLocs.Credentials, "ZohoClientSecret", string.Empty);
 
-        public const string RefreshToken =
-            "1000.e44020d9f9f8676f1604afa3472d4ae7.29dbbb93a93426f43bc77fe4c4def05c";
+        public static string RefreshToken =>
+            RegistryHelper.LoadEncrypted(RegistryHelper.storeLocs.Credentials, "ZohoRefreshToken", string.Empty);
+
+        public static bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(ClientId) &&
+            !string.IsNullOrWhiteSpace(ClientSecret) &&
+            !string.IsNullOrWhiteSpace(RefreshToken);
 
         // ------------------------------------------------------------
-        // Cleanup behavior
+        // Cleanup behavior (SEC-L-002: Runtime Configurable)
         // ------------------------------------------------------------
 
         // false = move matching IMTS sent copy to Trash.
         // true  = permanently delete matching IMTS sent copy.
-        //
-        // Keep false while testing.
-        public const bool ExpungePermanently =
-            false;
+        // Default is conservative: false (move to Trash)
+        public static bool ExpungePermanently
+        {
+            get => RegistryHelper.LoadBool(RegistryHelper.storeLocs.Settings, "ZohoExpungePermanently", false);
+            set => RegistryHelper.SaveBool(RegistryHelper.storeLocs.Settings, "ZohoExpungePermanently", value);
+        }
 
         // How many times to wait for Zoho to create the Sent copy.
-        public const int CleanupMaxAttempts =
-            6;
+        public const int CleanupMaxAttempts = 6;
 
-        public const int CleanupRetryDelayMilliseconds =
-            2000;
+        public const int CleanupRetryDelayMilliseconds = 2000;
 
         // Number of newest Sent messages inspected on each attempt.
-        public const int SentMessagesToInspect =
-            25;
+        public const int SentMessagesToInspect = 25;
     }
 }

@@ -396,6 +396,25 @@ namespace Aarohi.Classes
             return dict;
         }
 
+        /// <summary>
+        /// Executes a type-safe, parameterized SELECT * matching a specific column and value (prevents SQL injection).
+        /// </summary>
+        public DataTable? SelectByColumn(string columnName, object? value, int? top = null)
+        {
+            EnsureIdent(Schema);
+            var physicalColumn = ResolveColumnName(columnName);
+            return Select($"{Q(physicalColumn)} = @val", new Dictionary<string, object?> { ["@val"] = value }, top: top);
+        }
+
+        /// <summary>
+        /// Executes a type-safe, parameterized SELECT * matching the primary key column (prevents SQL injection).
+        /// </summary>
+        public DataTable? SelectById(object idValue)
+        {
+            var keyCol = ResolveKeyColumnName(GetColumns());
+            return Select($"{Q(keyCol)} = @id", new Dictionary<string, object?> { ["@id"] = idValue }, top: 1);
+        }
+
         #endregion
 
     }
