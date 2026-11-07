@@ -33,6 +33,64 @@ namespace Aarohi.Globals
         public static class Utils
         {
             public static string DevName = "Dev@Aarohi";
+            //       public static string DevName =
+            //GetDeveloperName();
+
+            //       private static string GetDeveloperName()
+            //       {
+            //           string envPath = Path.Combine(
+            //               AppContext.BaseDirectory,
+            //               ".env");
+
+            //           if (!File.Exists(envPath))
+            //           {
+            //               throw new FileNotFoundException(
+            //                   "Configuration file (.env) not found.",
+            //                   envPath);
+            //           }
+
+            //           foreach (string line in File.ReadLines(envPath))
+            //           {
+            //               string trimmed = line.Trim();
+
+            //               if (string.IsNullOrWhiteSpace(trimmed) ||
+            //                   trimmed.StartsWith("#"))
+            //               {
+            //                   continue;
+            //               }
+
+            //               int separatorIndex = trimmed.IndexOf('=');
+
+            //               if (separatorIndex <= 0)
+            //                   continue;
+
+            //               string key = trimmed
+            //                   .Substring(0, separatorIndex)
+            //                   .Trim();
+
+            //               if (!key.Equals(
+            //                       "DEVELOPER_USERNAME",
+            //                       StringComparison.OrdinalIgnoreCase))
+            //               {
+            //                   continue;
+            //               }
+
+            //               string value = trimmed
+            //                   .Substring(separatorIndex + 1)
+            //                   .Trim();
+
+            //               if (string.IsNullOrWhiteSpace(value))
+            //               {
+            //                   throw new InvalidOperationException(
+            //                       "DEVELOPER_USERNAME is empty in .env.");
+            //               }
+
+            //               return value;
+            //           }
+
+            //           throw new InvalidOperationException(
+            //               "DEVELOPER_USERNAME not found in .env.");
+            //       }
             private const string InstalledSqlPackage =@"C:\Program Files (x86)\Aarohi Embedded Systems Pvt. Ltd\sqlpackage\sqlpackage.exe";
 
             public static string SqlPackagePath => ResolveSqlPackagePath();

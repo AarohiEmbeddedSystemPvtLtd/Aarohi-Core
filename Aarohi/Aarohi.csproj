@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net9.0-windows7.0</TargetFramework>
@@ -55,4 +55,7 @@
 	  <Compile Update="SQL\FormDbSplash.cs" />
 	  <Compile Update="SQL\FormDatabaseCloner.cs" />
 	</ItemGroup>
+
+
+	
 </Project>

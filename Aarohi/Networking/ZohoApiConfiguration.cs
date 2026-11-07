@@ -1,5 +1,7 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,13 +9,9 @@ using System.Threading.Tasks;
 namespace Aarohi.Networking
 {
     /// <summary>
-    /// One-time developer configuration for Zoho OAuth.
-    ///
-    /// IMPORTANT:
-    /// 1. Generate NEW credentials before production because the old
-    ///    credentials were exposed during testing.
-    /// 2. The USER does not need to do anything at runtime.
-    /// 3. Access tokens are generated automatically from RefreshToken.
+    /// Zoho OAuth configuration.
+    /// Sensitive credentials are loaded from IMTS Routine .env.
+    /// All existing non-sensitive configuration remains unchanged.
     /// </summary>
     public static class ZohoApiConfiguration
     {
@@ -27,39 +25,89 @@ namespace Aarohi.Networking
         public const string MailApiBaseUrl =
             "https://mail.zoho.in/api";
 
-        // ------------------------------------------------------------
-        // REPLACE THESE 3 VALUES ONCE WITH YOUR NEW PRODUCTION VALUES
-        // ------------------------------------------------------------
 
-        public const string ClientId =
-            "1000.NZHQBZCKG6KZPD2Q7CZ0JP26GL5ZRN";
+        public static string ClientId =>
+            GetEnvValue("ZOHO_CLIENT_ID");
 
-        public const string ClientSecret =
-            "13163d55672c09679342f3a4a92a15dc82ee8278ee";
+        public static string ClientSecret =>
+            GetEnvValue("ZOHO_CLIENT_SECRET");
 
-        public const string RefreshToken =
-            "1000.e44020d9f9f8676f1604afa3472d4ae7.29dbbb93a93426f43bc77fe4c4def05c";
+        public static string RefreshToken =>
+            GetEnvValue("ZOHO_REFRESH_TOKEN");
 
-        // ------------------------------------------------------------
-        // Cleanup behavior
-        // ------------------------------------------------------------
+        // ============================================================
+        // EXISTING CONFIGURATION - UNCHANGED
+        // ============================================================
 
-        // false = move matching IMTS sent copy to Trash.
-        // true  = permanently delete matching IMTS sent copy.
-        //
-        // Keep false while testing.
         public const bool ExpungePermanently =
             false;
 
-        // How many times to wait for Zoho to create the Sent copy.
         public const int CleanupMaxAttempts =
             6;
 
         public const int CleanupRetryDelayMilliseconds =
             2000;
 
-        // Number of newest Sent messages inspected on each attempt.
+     
         public const int SentMessagesToInspect =
             25;
+
+     
+
+        private static string GetEnvValue(string key)
+        {
+            string envPath = Path.Combine(
+                AppContext.BaseDirectory,
+                ".env");
+
+            if (!File.Exists(envPath))
+            {
+                throw new FileNotFoundException(
+                    "Zoho configuration file (.env) not found.",
+                    envPath);
+            }
+
+            foreach (string line in File.ReadLines(envPath))
+            {
+                string trimmed = line.Trim();
+
+                if (string.IsNullOrWhiteSpace(trimmed) ||
+                    trimmed.StartsWith("#"))
+                {
+                    continue;
+                }
+
+                int separatorIndex = trimmed.IndexOf('=');
+
+                if (separatorIndex <= 0)
+                    continue;
+
+                string envKey = trimmed
+                    .Substring(0, separatorIndex)
+                    .Trim();
+
+                if (!envKey.Equals(
+                        key,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string value = trimmed
+                    .Substring(separatorIndex + 1)
+                    .Trim();
+
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    throw new InvalidOperationException(
+                        $"{key} is empty in .env.");
+                }
+
+                return value;
+            }
+
+            throw new InvalidOperationException(
+                $"{key} not found in .env.");
+        }
     }
 }

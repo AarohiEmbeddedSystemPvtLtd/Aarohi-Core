@@ -15,8 +15,64 @@ namespace Aarohi.Networking
         private const string SenderEmail =
             "panel@aarohies.in";
 
-        private const string AppPassword =
-            "mDfrnvMPXpaM";
+        private static string AppPassword
+        {
+            get
+            {
+                string envPath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    ".env");
+
+                if (!File.Exists(envPath))
+                {
+                    throw new FileNotFoundException(
+                        "SMTP configuration file (.env) not found.",
+                        envPath);
+                }
+
+                foreach (string line in File.ReadLines(envPath))
+                {
+                    string trimmed = line.Trim();
+
+                    if (string.IsNullOrWhiteSpace(trimmed) ||
+                        trimmed.StartsWith("#"))
+                    {
+                        continue;
+                    }
+
+                    int separatorIndex = trimmed.IndexOf('=');
+
+                    if (separatorIndex <= 0)
+                        continue;
+
+                    string key = trimmed
+                        .Substring(0, separatorIndex)
+                        .Trim();
+
+                    if (!key.Equals(
+                            "SMTP_PASSWORD",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string value = trimmed
+                        .Substring(separatorIndex + 1)
+                        .Trim();
+
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        throw new InvalidOperationException(
+                            "SMTP_PASSWORD is empty in .env.");
+                    }
+
+                    return value;
+                }
+
+                throw new InvalidOperationException(
+                    "SMTP_PASSWORD not found in .env.");
+            }
+        }
 
         private const string SmtpHost =
             "smtp.zoho.in";
@@ -76,11 +132,7 @@ namespace Aarohi.Networking
                 message);
         }
 
-        // ============================================================
-        // EXISTING SIGNATURE (single attachment)
-        // Routine app na junu calls break na thay etle rakhyu che.
-        // Have aa fakt navi list valu method ne call kare che.
-        // ============================================================
+        
         public static Task SendReportEmail(
             string toEmails,
             string? ccEmails,
