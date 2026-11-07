@@ -247,11 +247,14 @@ namespace Aarohi.SQL
 
             bool useWindowsAuth = authMode.Equals("Windows", StringComparison.OrdinalIgnoreCase);
 
+            bool trustCert = key.GetValue("TrustServerCertificate", "0") as string == "1";
+
             var csBuilder = new SqlConnectionStringBuilder
             {
                 DataSource = server,
                 InitialCatalog = database,
-                TrustServerCertificate = true,
+                Encrypt = true,
+                TrustServerCertificate = trustCert,
                 ConnectTimeout = 3
             };
 

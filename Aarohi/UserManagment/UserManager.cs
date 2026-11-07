@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes;
+using Aarohi.Classes;
 using Aarohi.Classes.Healper;
 using Aarohi.Configuration;
 using Aarohi.Globals;
@@ -42,8 +42,7 @@ namespace Aarohi.UserManagment
         private const string SecureUserNameKey = "AESPLXU";
         private const string SecurePasswordKey = "AESPLXP";
         private const string SecurePrefix = "DPAPI:";
-        private static string generatedOtp;
-        private static DateTime otpExpiry;
+        private static string _lastOtpEmail = string.Empty;
 
         public static void Configure(RootConfig config)
         {
@@ -120,32 +119,45 @@ namespace Aarohi.UserManagment
             return false;
         }
 
+        /// <summary>
+        /// Provisions an emergency offline developer password into the local machine DPAPI registry store.
+        /// Enables developer login without a database row (SEC-C-003 Option 2).
+        /// </summary>
+        /// <param name="password">Plaintext developer password to provision.</param>
+        public static void ProvisionEmergencyDevPassword(string password)
+        {
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Password cannot be empty.", nameof(password));
+
+            string pbkdf2Hash = PasswordSecurity.HashPassword(password);
+            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "EmergencyDevVerifier", pbkdf2Hash);
+        }
+
         public static string HashPassword(string password)
         {
-            using (SHA256 sha = SHA256.Create())
-            {
-                byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(password));
-                StringBuilder builder = new StringBuilder();
-
-                foreach (byte b in bytes)
-                    builder.Append(b.ToString("x2"));
-
-                return builder.ToString();
-            }
+            return PasswordSecurity.HashPassword(password);
         }
 
         public static bool TryAuthenticate(string userName, string password)
         {
             try
             {
-                if (userName == AGLobals.Utils.DevName)
+                // 1. Emergency Developer Offline Access (Option 2: Pre-Provisioned DPAPI Credential)
+                if (string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (password == DateTime.Now.ToString("ddMMyyyyHH"))
-                        return true;
+                    string localEmergencyHash = RegistryHelper.LoadEncrypted(
+                        RegistryHelper.storeLocs.Credentials,
+                        "EmergencyDevVerifier",
+                        string.Empty);
 
-                    MessageBox.Show("Incorrect password.", "Login Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return false;
+                    if (!string.IsNullOrWhiteSpace(localEmergencyHash))
+                    {
+                        var emergencyResult = PasswordSecurity.VerifyPassword(password, localEmergencyHash);
+                        if (emergencyResult == PasswordSecurity.VerificationResult.Success)
+                        {
+                            return true;
+                        }
+                    }
                 }
 
                 var values = _userClass.GetRowAsDictionary(_LoginDataColumnName, userName);
@@ -167,11 +179,25 @@ namespace Aarohi.UserManagment
                     return false;
                 }
 
-                if (!string.Equals(password, dbPassword, StringComparison.Ordinal))
+                var verification = PasswordSecurity.VerifyPassword(password, dbPassword);
+                if (verification == PasswordSecurity.VerificationResult.Failed ||
+                    verification == PasswordSecurity.VerificationResult.MalformedRecord)
                 {
                     MessageBox.Show("Incorrect password.", "Login Failed",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return false;
+                }
+
+                // Transparent auto-upgrade for legacy SHA-256 and plaintext records to PBKDF2
+                if (verification == PasswordSecurity.VerificationResult.SuccessRehashNeeded)
+                {
+                    try
+                    {
+                        string newPbkdf2Hash = PasswordSecurity.HashPassword(password);
+                        _userClass.Values[_PasswordDataColumnName] = newPbkdf2Hash;
+                        _userClass.Save(false, false);
+                    }
+                    catch { }
                 }
 
                 return true;
@@ -187,23 +213,18 @@ namespace Aarohi.UserManagment
             }
         }
 
-        [Obsolete("Use SaveSecureRememberMeSameKeys() for new applications. SetRegistryHashes() stores SHA256 hashes, which cannot be decrypted back to original values.", false)]
+        [Obsolete("Use SaveSecureRememberMeSameKeys() for new applications. SetRegistryHashes() is kept only for backward compatibility.", false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public static void SetRegistryHashes(string userName, string password)
         {
-            using (var sha = SHA256.Create())
+            if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
             {
-                byte[] userBytes = Encoding.UTF8.GetBytes(userName ?? string.Empty);
-                string userHash = BitConverter.ToString(sha.ComputeHash(userBytes)).Replace("-", "");
-
-
-                byte[] passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
-                string passwordHash = BitConverter.ToString(sha.ComputeHash(passwordBytes)).Replace("-", "");
-
-                //Added
-                RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXU", userHash);
-                RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXP", passwordHash);
+                ClearSecureRememberMeSameKeys();
+                return;
             }
+
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXU", EncryptRememberMeValue(userName));
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "AESPLXP", EncryptRememberMeValue(password));
         }
 
         [Obsolete("Use TryGetLastValuesFromSecureRememberMeSameKeys() for new applications. Old TryGetLastValues() is kept only for backward compatibility.", false)]
@@ -223,14 +244,7 @@ namespace Aarohi.UserManagment
                 if (string.IsNullOrWhiteSpace(realName) ||
                     string.IsNullOrWhiteSpace(realPassword))
                 {
-                    if(RegistryHelper.LoadBool(RegistryHelper.storeLocs.Credentials, "IsDevPC"))
-                    {
-                        userName = AGLobals.Utils.DevName;
-                        password = DateTime.Now.ToString("ddMMyyyyHH");
-                        return true; // For Directly use Of Developer Credentials without showing error message when the app is used in developer's PC and there are no credentials stored in registry
-                    }
-                    else 
-                        return false;
+                    return false;
                 }
 
                 UserName= realName;
@@ -396,42 +410,47 @@ namespace Aarohi.UserManagment
             if (pass != pass2)
                 throw new Exception("Passwords do not match.");
 
-            bool isDomainValid = await HasValidEmailDomain(mail.Trim());
-            if (!isDomainValid)
-                throw new Exception("Email domain does not exist or is not valid.");
+            var domainResult = await MailHelpers.ValidateEmailDomainAsync(mail.Trim());
+            if (domainResult == MailHelpers.EmailValidationResult.InvalidSyntax)
+                throw new Exception("Invalid email syntax.");
+            if (domainResult == MailHelpers.EmailValidationResult.DomainNotFound)
+                throw new Exception("Email domain does not exist or has no active mail exchange (MX) record.");
+            if (domainResult == MailHelpers.EmailValidationResult.LookupUnavailable && !isOtpEnabled)
+                throw new Exception("Unable to verify email domain at this time (DNS service unavailable). Please try again later.");
 
             //  OTP FLOW
             if (isOtpEnabled)
             {
                 OTPProcedureStart?.Invoke(null, EventArgs.Empty);
 
-                Random rnd = new Random();
-                generatedOtp = rnd.Next(100000, 999999).ToString();
-                otpExpiry = DateTime.Now.AddMinutes(5);
+                _lastOtpEmail = mail.Trim();
+                string otp = OtpService.GenerateOtp(_lastOtpEmail);
 
                 await SendOtpEmail( 
                     mail.Trim(),
                     "Aarohi Embedded Systems Pvt. Ltd.",    
                     "Email Verification Code",
-                    MailTemplates.OtpEmailBody(generatedOtp)
+                    MailTemplates.OtpEmailBody(otp)
                 );
 
                 OTPProcedureStop?.Invoke(null, EventArgs.Empty);
             }
         }
         // Verifies the input OTP against the generated one and checks for expiry.
-        public static bool VerifyOtp(string inputOtp)
+        public static bool VerifyOtp(string inputOtp, string email = "")
         {
-            if (DateTime.Now > otpExpiry)
+            string targetEmail = string.IsNullOrWhiteSpace(email) ? _lastOtpEmail : email;
+            if (string.IsNullOrWhiteSpace(targetEmail))
             {
-                throw new Exception("OTP has expired. Please request a new one.");
+                throw new InvalidOperationException("No active OTP verification session found.");
             }
-            if (inputOtp != generatedOtp)
-            {
-                throw new Exception("Invalid OTP. Please check the code sent to your email and try again.");
-            }
-            return true;
 
+            if (!OtpService.VerifyOtp(targetEmail, inputOtp))
+            {
+                throw new Exception("Invalid or expired OTP. Please check the code sent to your email and try again.");
+            }
+
+            return true;
         }
         // This method should be called after successful OTP verification to save the new user to the database.
         public static bool SaveUser(string username, string mail, string pass, string role, int? parentId)
@@ -477,7 +496,9 @@ namespace Aarohi.UserManagment
                     new DynamicClass(upmap.Schema, upmap.Table, upmap.Columns.UserId);
 
                 //   Check if user is root (ParentId == NULL)
-                DataTable selectedUser = dcUsers.Select($"{umap.Columns.Id} = {selectedUserID}");
+                DataTable selectedUser = dcUsers.Select(
+                    $"{umap.Columns.Id} = @SelectedUserId",
+                    new Dictionary<string, object?> { ["@SelectedUserId"] = selectedUserID });
 
                 if (selectedUser == null || selectedUser.Rows.Count == 0)
                     throw new Exception("User not found.");
@@ -490,15 +511,18 @@ namespace Aarohi.UserManagment
                 }
 
                 //  Get child users
-                DataTable dtUsers = dcUsers
-                    .Select($"{umap.Columns.ParentId} = {selectedUserID}") ?? new DataTable();
+                DataTable dtUsers = dcUsers.Select(
+                    $"{umap.Columns.ParentId} = @SelectedUserId",
+                    new Dictionary<string, object?> { ["@SelectedUserId"] = selectedUserID }) ?? new DataTable();
 
                 foreach (DataRow row in dtUsers.Rows)
                 {
                     var childId = row[umap.Columns.Id];
                     if (childId == DBNull.Value) continue;
 
-                    DataTable fullUser = dcUsers.Select($"{umap.Columns.Id} = {childId}");
+                    DataTable fullUser = dcUsers.Select(
+                        $"{umap.Columns.Id} = @ChildId",
+                        new Dictionary<string, object?> { ["@ChildId"] = childId });
                     if (fullUser == null || fullUser.Rows.Count == 0)
                         continue;
 
@@ -522,8 +546,9 @@ namespace Aarohi.UserManagment
                 }
 
                 //  Delete user permissions
-                DataTable dtPerms = dcUserPermissions
-                    .Select($"{upmap.Columns.UserId} = {selectedUserID}") ?? new DataTable();
+                DataTable dtPerms = dcUserPermissions.Select(
+                    $"{upmap.Columns.UserId} = @SelectedUserId",
+                    new Dictionary<string, object?> { ["@SelectedUserId"] = selectedUserID }) ?? new DataTable();
 
                 foreach (DataRow row in dtPerms.Rows)
                 {
@@ -554,7 +579,9 @@ namespace Aarohi.UserManagment
                 using DynamicClass dcUsers =
                     new DynamicClass(umap.Schema, umap.Table, umap.Columns.Id);
 
-                DataTable dt = dcUsers.Select($"{umap.Columns.Id} = {userId}");
+                DataTable dt = dcUsers.Select(
+                    $"{umap.Columns.Id} = @UserId",
+                    new Dictionary<string, object?> { ["@UserId"] = userId });
 
                 return dt;
             }
@@ -573,7 +600,9 @@ namespace Aarohi.UserManagment
                 new DynamicClass(umap.Schema, umap.Table, umap.Columns.Id);
 
             //  Duplicate email check (ignore same user)
-            var dt = dcUsers.Select($"{umap.Columns.Email} = '{mail}'");
+            var dt = dcUsers.Select(
+                $"{umap.Columns.Email} = @Email",
+                new Dictionary<string, object?> { ["@Email"] = mail.Trim() });
 
             if (dt != null && dt.Rows.Count > 0)
             {
@@ -607,10 +636,13 @@ namespace Aarohi.UserManagment
             if (pass != pass2)
                 throw new Exception("Passwords do not match");
 
-            bool isDomainValid = await HasValidEmailDomain(mail.Trim());
-
-            if (!isDomainValid)
-                throw new Exception("Invalid email domain");
+            var domainResult = await MailHelpers.ValidateEmailDomainAsync(mail.Trim());
+            if (domainResult == MailHelpers.EmailValidationResult.InvalidSyntax)
+                throw new Exception("Invalid email syntax.");
+            if (domainResult == MailHelpers.EmailValidationResult.DomainNotFound)
+                throw new Exception("Email domain does not exist or has no active mail exchange (MX) record.");
+            if (domainResult == MailHelpers.EmailValidationResult.LookupUnavailable)
+                throw new Exception("Unable to verify email domain at this time (DNS service unavailable). Please try again later.");
 
             //  OTP Flow
             //if (isOtpEnabled)
@@ -646,14 +678,14 @@ namespace Aarohi.UserManagment
                     if (string.IsNullOrWhiteSpace(mail))
                         throw new Exception("Email address is empty. Cannot send OTP.");
 
-                    generatedOtp = new Random().Next(100000, 999999).ToString();
-                    otpExpiry = DateTime.Now.AddMinutes(5.0);
+                    _lastOtpEmail = mail.Trim();
+                    string otp = OtpService.GenerateOtp(_lastOtpEmail);
 
                     await MailHelpers.SendOtpEmail(
                         mail.Trim(),
                         "Aarohi Embedded Systems Pvt. Ltd.",
                         "Email Verification Code",
-                        MailTemplates.OtpEmailBody(generatedOtp));
+                        MailTemplates.OtpEmailBody(otp));
 
                     // IMPORTANT:
                     // Call Stop only after OTP email successfully sent.
@@ -661,9 +693,11 @@ namespace Aarohi.UserManagment
                 }
                 catch
                 {
-                    // Do not open OTP form if email sending failed.
-                    generatedOtp = string.Empty;
-                    otpExpiry = DateTime.MinValue;
+                    // Invalidate active OTP if email sending failed
+                    if (!string.IsNullOrWhiteSpace(_lastOtpEmail))
+                    {
+                        OtpService.InvalidateOtp(_lastOtpEmail);
+                    }
 
                     throw;
                 }
@@ -801,15 +835,12 @@ namespace Aarohi.UserManagment
                     }
                 }
 
-                // If old SHA256 values are stored in AESPLXU/AESPLXP,
-                // original username/password cannot be recovered.
-                // So fallback to Dev PC only.
-                return TryGetDevPcLoginForSecureRememberMe(out userName, out password);
+                return false;
             }
             catch
             {
                 ClearSecureRememberMeSameKeys();
-                return TryGetDevPcLoginForSecureRememberMe(out userName, out password);
+                return false;
             }
         }
 
@@ -909,10 +940,22 @@ namespace Aarohi.UserManagment
         {
             try
             {
-                if (userName == AGLobals.Utils.DevName)
+                // 1. Emergency Developer Offline Access (Option 2: Pre-Provisioned DPAPI Credential)
+                if (string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (password == DateTime.Now.ToString("ddMMyyyyHH"))
-                        return true;
+                    string localEmergencyHash = RegistryHelper.LoadEncrypted(
+                        RegistryHelper.storeLocs.Credentials,
+                        "EmergencyDevVerifier",
+                        string.Empty);
+
+                    if (!string.IsNullOrWhiteSpace(localEmergencyHash))
+                    {
+                        var emergencyResult = PasswordSecurity.VerifyPassword(password, localEmergencyHash);
+                        if (emergencyResult == PasswordSecurity.VerificationResult.Success)
+                        {
+                            return true;
+                        }
+                    }
 
                     if (showMessage)
                     {
@@ -959,13 +1002,9 @@ namespace Aarohi.UserManagment
                     return false;
                 }
 
-                string enteredPasswordHash = HashPassword(password ?? string.Empty);
-
-                bool passwordOk =
-                    string.Equals(password, dbPassword, StringComparison.Ordinal) ||
-                    string.Equals(enteredPasswordHash, dbPassword, StringComparison.OrdinalIgnoreCase);
-
-                if (!passwordOk)
+                var verification = PasswordSecurity.VerifyPassword(password, dbPassword);
+                if (verification == PasswordSecurity.VerificationResult.Failed ||
+                    verification == PasswordSecurity.VerificationResult.MalformedRecord)
                 {
                     if (showMessage)
                     {
@@ -977,6 +1016,18 @@ namespace Aarohi.UserManagment
                     }
 
                     return false;
+                }
+
+                // Transparent auto-upgrade for legacy SHA-256 and plaintext records to PBKDF2
+                if (verification == PasswordSecurity.VerificationResult.SuccessRehashNeeded)
+                {
+                    try
+                    {
+                        string newPbkdf2Hash = PasswordSecurity.HashPassword(password);
+                        _userClass.Values[_PasswordDataColumnName] = newPbkdf2Hash;
+                        _userClass.Save(false, false);
+                    }
+                    catch { }
                 }
 
                 return true;
@@ -994,39 +1045,6 @@ namespace Aarohi.UserManagment
 
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Attempts to return developer credentials when the current machine is marked as a developer PC.
-        /// </summary>
-        /// <remarks>
-        /// This method checks the registry key IsDevPC.
-        /// 
-        /// If IsDevPC is true, it returns:
-        /// Username = AGLobals.Utils.DevName
-        /// Password = current date-hour password in ddMMyyyyHH format.
-        /// 
-        /// This is used only as a fallback when valid DPAPI Remember-Me credentials are not found.
-        /// </remarks>
-        /// <param name="userName">Returns developer username if IsDevPC is true.</param>
-        /// <param name="password">Returns developer time-based password if IsDevPC is true.</param>
-        /// <returns>True if developer fallback credentials are available; otherwise false.</returns>
-        private static bool TryGetDevPcLoginForSecureRememberMe(out string userName, out string password)
-        {
-            userName = string.Empty;
-            password = string.Empty;
-
-            bool isDevPc = RegistryHelper.LoadBool(
-                RegistryHelper.storeLocs.Credentials,
-                "IsDevPC");
-
-            if (!isDevPc)
-                return false;
-
-            userName = AGLobals.Utils.DevName;
-            password = DateTime.Now.ToString("ddMMyyyyHH");
-
-            return true;
         }
 
         /// <summary>
@@ -1324,8 +1342,9 @@ namespace Aarohi.UserManagment
             using DynamicClass dcUserPermissions = new DynamicClass(upmap.Schema,upmap.Table,upmap.Columns.Id);
 
             // 1. Load existing permissions
-            DataTable dbTable = dcUserPermissions
-                .Select($"{upmap.Columns.UserId} = {userId}") ?? new DataTable();
+            DataTable dbTable = dcUserPermissions.Select(
+                $"{upmap.Columns.UserId} = @UserId",
+                new Dictionary<string, object?> { ["@UserId"] = userId }) ?? new DataTable();
 
             Dictionary<int, int> dbMap = new Dictionary<int, int>();
 

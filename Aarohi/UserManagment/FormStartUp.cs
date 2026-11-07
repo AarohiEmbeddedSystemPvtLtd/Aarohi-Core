@@ -1,4 +1,4 @@
-﻿using Aarohi.Classes;
+using Aarohi.Classes;
 using Aarohi.Classes.Common;
 using Aarohi.Classes.Healper;
 using Aarohi.Globals;
@@ -785,22 +785,6 @@ namespace Aarohi.UserManagment
 
             comboBoxUsername.Items.AddRange(
                 users);
-
-            if (RegistryHelper.LoadBool(
-                RegistryHelper.storeLocs.Credentials,
-                "IsDevPC",
-                false))
-            {
-                comboBoxUsername.Items.Add(
-                    AGLobals.Utils.DevName);
-
-                comboBoxUsername.SelectedItem =
-                    AGLobals.Utils.DevName;
-
-                textBox2.Text =
-                    DateTime.Now.ToString(
-                        "ddMMyyyyHH");
-            }
 
             _ = TryAutoLoginAsync();
         }
@@ -1750,15 +1734,6 @@ namespace Aarohi.UserManagment
                 return;
             }
 
-            if (HashingEnabled &&
-                userName !=
-                AGLobals.Utils.DevName)
-            {
-                password =
-                    UserManager.HashPassword(
-                        password);
-            }
-
             if (!TryAuthenticate(
                 userName,
                 password))
@@ -1827,23 +1802,22 @@ namespace Aarohi.UserManagment
         {
             try
             {
-                if (userName ==
-                    AGLobals.Utils.DevName)
+                // 1. Emergency Developer Offline Access (Option 2: Pre-Provisioned DPAPI Credential)
+                if (string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (password ==
-                        DateTime.Now.ToString(
-                            "ddMMyyyyHH"))
+                    string localEmergencyHash = RegistryHelper.LoadEncrypted(
+                        RegistryHelper.storeLocs.Credentials,
+                        "EmergencyDevVerifier",
+                        string.Empty);
+
+                    if (!string.IsNullOrWhiteSpace(localEmergencyHash))
                     {
-                        return true;
+                        var emergencyResult = PasswordSecurity.VerifyPassword(password, localEmergencyHash);
+                        if (emergencyResult == PasswordSecurity.VerificationResult.Success)
+                        {
+                            return true;
+                        }
                     }
-
-                    MessageBox.Show(
-                        "Incorrect password.",
-                        "Login Failed",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-
-                    return false;
                 }
 
                 Dictionary<string, object>
@@ -1891,10 +1865,9 @@ namespace Aarohi.UserManagment
                     return false;
                 }
 
-                if (!string.Equals(
-                    password,
-                    dbPassword,
-                    StringComparison.Ordinal))
+                var verification = PasswordSecurity.VerifyPassword(password, dbPassword);
+                if (verification == PasswordSecurity.VerificationResult.Failed ||
+                    verification == PasswordSecurity.VerificationResult.MalformedRecord)
                 {
                     MessageBox.Show(
                         "Incorrect password.",
@@ -1903,6 +1876,21 @@ namespace Aarohi.UserManagment
                         MessageBoxIcon.Error);
 
                     return false;
+                }
+
+                // Transparent auto-upgrade for legacy SHA-256 and plaintext records to PBKDF2
+                if (verification == PasswordSecurity.VerificationResult.SuccessRehashNeeded)
+                {
+                    try
+                    {
+                        string newPbkdf2Hash = PasswordSecurity.HashPassword(password);
+                        _userClass.Values[_PasswordDataColumnName] = newPbkdf2Hash;
+                        _userClass.Save(false, false);
+                    }
+                    catch
+                    {
+                        // Do not block login if saving updated hash fails
+                    }
                 }
 
                 return true;
@@ -2044,48 +2032,29 @@ namespace Aarohi.UserManagment
             string userName,
             string password)
         {
-            using SHA256 sha =
-                SHA256.Create();
-
-            byte[] userBytes =
-                Encoding.UTF8.GetBytes(
-                    userName ??
+            if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+            {
+                RegistryHelper.SaveString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXU",
                     string.Empty);
 
-            string userHash =
-                BitConverter.ToString(
-                    sha.ComputeHash(
-                        userBytes))
-                .Replace(
-                    "-",
-                    "");
-
-            byte[] passwordBytes =
-                Encoding.UTF8.GetBytes(
-                    password ??
+                RegistryHelper.SaveString(
+                    RegistryHelper.storeLocs.Credentials,
+                    "AESPLXP",
                     string.Empty);
-
-            string passwordHash =
-                BitConverter.ToString(
-                    sha.ComputeHash(
-                        passwordBytes))
-                .Replace(
-                    "-",
-                    "");
+                return;
+            }
 
             RegistryHelper.SaveString(
-                RegistryHelper
-                    .storeLocs
-                    .Credentials,
+                RegistryHelper.storeLocs.Credentials,
                 "AESPLXU",
-                userHash);
+                RegistryHelper.Encrypt(userName));
 
             RegistryHelper.SaveString(
-                RegistryHelper
-                    .storeLocs
-                    .Credentials,
+                RegistryHelper.storeLocs.Credentials,
                 "AESPLXP",
-                passwordHash);
+                RegistryHelper.Encrypt(password));
         }
 
         public void ResetLoginTrigger()

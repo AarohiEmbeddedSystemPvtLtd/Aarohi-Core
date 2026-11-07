@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net.Http;
@@ -12,7 +12,10 @@ namespace Aarohi.Networking
     public static class ZohoOAuthService
     {
         private static readonly HttpClient _httpClient =
-            new HttpClient();
+            new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(20)
+            };
 
         private static readonly SemaphoreSlim _tokenLock =
             new SemaphoreSlim(1, 1);
