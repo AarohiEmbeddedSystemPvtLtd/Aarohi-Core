@@ -66,6 +66,10 @@ namespace Aarohi.Classes
             return columns.ToArray();
         }
 
+        /// <summary>
+        /// Compares two column values for equality to determine whether an UPDATE statement must include this column.
+        /// Fully backward compatible across all primitive types, numbers, dates, and binary (byte[] / SqlBinary) arrays.
+        /// </summary>
         private static bool ValueEquals(object? a, object? b)
         {
             if (a == null || a == DBNull.Value) a = null;
@@ -73,16 +77,58 @@ namespace Aarohi.Classes
             if (ReferenceEquals(a, b)) return true;
             if (a == null || b == null) return false;
 
-            // Normalize numbers & dates to strings for stable compare
+            // 1. Binary comparison (supports raw byte[] and SqlBinary seamlessly without boxing/casting exceptions)
+            byte[]? bytesA = TryExtractByteArray(a);
+            byte[]? bytesB = TryExtractByteArray(b);
+            if (bytesA != null || bytesB != null)
+            {
+                if (bytesA == null || bytesB == null) return false;
+                return BinaryEquals(bytesA, bytesB);
+            }
+
+            // 2. Numeric comparison (preserves decimal/integer normalization)
             var ta = a.GetType();
             var tb = b.GetType();
             if (IsNumericType(ta.Name) && IsNumericType(tb.Name))
                 return Convert.ToDecimal(a).Equals(Convert.ToDecimal(b));
 
+            // 3. DateTime ISO 8601 comparison
             if (a is DateTime da && b is DateTime db)
                 return da.ToString("O").Equals(db.ToString("O"), StringComparison.Ordinal);
 
+            // 4. Fallback string representation comparison for all remaining types
             return string.Equals(Convert.ToString(a), Convert.ToString(b), StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Safely extracts the underlying byte array from either byte[] or System.Data.SqlTypes.SqlBinary.
+        /// Returns null if the value is not a binary representation or if SqlBinary.IsNull is true.
+        /// </summary>
+        private static byte[]? TryExtractByteArray(object? value)
+        {
+            if (value is byte[] bytes)
+                return bytes;
+
+            if (value is System.Data.SqlTypes.SqlBinary sqlBinary)
+                return sqlBinary.IsNull ? null : sqlBinary.Value;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Performs an element-by-element byte array comparison with early length exit.
+        /// 100% backward compatible across all .NET runtime versions without external package requirements.
+        /// </summary>
+        private static bool BinaryEquals(byte[] a, byte[] b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a.Length != b.Length) return false;
+
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) return false;
+            }
+            return true;
         }
 
         private DataRow? GetRowByKey(DbConnection cn, object? keyVal)
@@ -119,8 +165,11 @@ namespace Aarohi.Classes
 
                 if (!ValueEquals(oldVal, newVal))
                 {
-                    string oldS = oldVal == DBNull.Value ? "NULL" : Convert.ToString(oldVal) ?? "";
-                    string newS = newVal == DBNull.Value ? "NULL" : Convert.ToString(newVal) ?? "";
+                    byte[]? oldB = TryExtractByteArray(oldVal);
+                    byte[]? newB = TryExtractByteArray(newVal);
+
+                    string oldS = oldVal == DBNull.Value ? "NULL" : (oldB != null ? $"<binary {oldB.Length} bytes>" : Convert.ToString(oldVal) ?? "");
+                    string newS = newVal == DBNull.Value ? "NULL" : (newB != null ? $"<binary {newB.Length} bytes>" : Convert.ToString(newVal) ?? "");
                     lines.Add($"{col}: {oldS}  ->  {newS}");
                 }
             }
