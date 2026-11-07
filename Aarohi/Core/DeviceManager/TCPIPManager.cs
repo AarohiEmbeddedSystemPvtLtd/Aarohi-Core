@@ -33,7 +33,7 @@ namespace Aarohi.Core.DeviceManager
 
         public event Action<string, Exception> CommunicationError;
 
-        public TCPIPManager(string ipAddress, int port = 502, int unitId = 1)
+        public TCPIPManager(string ipAddress, int port = 502, int unitId = 1, int connectionTimeout = 2000)
         {
             IpAddress = ipAddress ?? throw new ArgumentNullException(nameof(ipAddress));
             Port = port;
@@ -41,7 +41,8 @@ namespace Aarohi.Core.DeviceManager
 
             _client = new ModbusClient(IpAddress, Port)
             {
-                UnitIdentifier = (byte)UnitId
+                UnitIdentifier = (byte)UnitId,
+                ConnectionTimeout = connectionTimeout
             };
         }
 
