@@ -38,6 +38,17 @@ namespace Aarohi.Networking
             !string.IsNullOrWhiteSpace(ClientSecret) &&
             !string.IsNullOrWhiteSpace(RefreshToken);
 
+        /// <summary>
+        /// Saves Zoho OAuth API credentials encrypted using Windows DPAPI.
+        /// </summary>
+        public static void SaveCredentials(string clientId, string clientSecret, string refreshToken, string senderEmail = "panel@aarohies.in")
+        {
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "ZohoSenderEmail", senderEmail);
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "ZohoClientId", clientId);
+            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "ZohoClientSecret", clientSecret);
+            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "ZohoRefreshToken", refreshToken);
+        }
+
         // ------------------------------------------------------------
         // Cleanup behavior (SEC-L-002: Runtime Configurable)
         // ------------------------------------------------------------

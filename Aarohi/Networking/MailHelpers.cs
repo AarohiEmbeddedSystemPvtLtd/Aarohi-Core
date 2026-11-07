@@ -26,6 +26,17 @@ namespace Aarohi.Networking
         public static string AppPassword =>
             RegistryHelper.LoadEncrypted(RegistryHelper.storeLocs.Credentials, "SmtpAppPassword", string.Empty);
 
+        /// <summary>
+        /// Saves Zoho SMTP credentials with the application password encrypted using Windows DPAPI.
+        /// </summary>
+        public static void SaveSmtpCredentials(string appPassword, string senderEmail = "panel@aarohies.in", string host = "smtp.zoho.in", int port = 587)
+        {
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "SmtpSenderEmail", senderEmail);
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Settings, "SmtpHost", host);
+            RegistryHelper.SaveInt(RegistryHelper.storeLocs.Settings, "SmtpPort", port);
+            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "SmtpAppPassword", appPassword);
+        }
+
         private static readonly LookupClient _lookup = new LookupClient(
             new LookupClientOptions
             {
