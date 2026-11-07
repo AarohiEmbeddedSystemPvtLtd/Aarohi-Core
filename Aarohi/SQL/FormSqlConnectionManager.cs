@@ -442,10 +442,7 @@ namespace Aarohi.SQL
         }
 
 
-        private Task<List<string>> GetDatabaseListAsync(string server,
-                                                        bool useWindowsAuth,
-                                                        string userName,
-                                                        string password)
+        private Task<List<string>> GetDatabaseListAsync(string server, bool useWindowsAuth, string userName, string password)
         {
             return Task.Run(() =>
             {
