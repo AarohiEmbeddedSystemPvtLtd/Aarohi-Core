@@ -1,4 +1,5 @@
-﻿using DnsClient;
+using Aarohi.Classes.Healper;
+using DnsClient;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,37 +7,90 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Aarohi.Networking
 {
     public static class MailHelpers
     {
-        private const string SenderEmail =
-            "panel@aarohies.in";
+        public static string SenderEmail =>
+            RegistryHelper.LoadString(RegistryHelper.storeLocs.Credentials, "SmtpSenderEmail", "panel@aarohies.in");
 
-        private const string AppPassword =
-            "mDfrnvMPXpaM";
+        public static string SmtpHost =>
+            RegistryHelper.LoadString(RegistryHelper.storeLocs.Settings, "SmtpHost", "smtp.zoho.in");
 
-        private const string SmtpHost =
-            "smtp.zoho.in";
+        public static int SmtpPort =>
+            RegistryHelper.LoadInt(RegistryHelper.storeLocs.Settings, "SmtpPort", 587);
 
-        private const int SmtpPort =
-            587;
+        public static string AppPassword =>
+            RegistryHelper.LoadEncrypted(RegistryHelper.storeLocs.Credentials, "SmtpAppPassword", string.Empty);
+
+        /// <summary>
+        /// Saves Zoho SMTP credentials with the application password encrypted using Windows DPAPI.
+        /// </summary>
+        public static void SaveSmtpCredentials(string appPassword, string senderEmail = "panel@aarohies.in", string host = "smtp.zoho.in", int port = 587)
+        {
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Credentials, "SmtpSenderEmail", senderEmail);
+            RegistryHelper.SaveString(RegistryHelper.storeLocs.Settings, "SmtpHost", host);
+            RegistryHelper.SaveInt(RegistryHelper.storeLocs.Settings, "SmtpPort", port);
+            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "SmtpAppPassword", appPassword);
+        }
 
         private static readonly LookupClient _lookup = new LookupClient(
-            new LookupClientOptions(
-                IPAddress.Parse("8.8.8.8"),
-                IPAddress.Parse("1.1.1.1"))
+            new LookupClientOptions
             {
                 Timeout = TimeSpan.FromSeconds(3),
                 Retries = 1,
                 UseCache = true
             });
 
+        public enum EmailValidationResult
+        {
+            Valid,
+            InvalidSyntax,
+            DomainNotFound,
+            LookupUnavailable
+        }
+
+        public static async Task<EmailValidationResult> ValidateEmailDomainAsync(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return EmailValidationResult.InvalidSyntax;
+
+            string trimmed = email.Trim();
+            var regex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase);
+            if (!regex.IsMatch(trimmed))
+                return EmailValidationResult.InvalidSyntax;
+
+            string[] parts = trimmed.Split('@');
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[1]))
+                return EmailValidationResult.InvalidSyntax;
+
+            string domain = parts[1];
+            try
+            {
+                var result = await _lookup.QueryAsync(domain, QueryType.MX);
+                if (result != null && result.Answers.MxRecords().Any())
+                    return EmailValidationResult.Valid;
+
+                var aResult = await _lookup.QueryAsync(domain, QueryType.A);
+                if (aResult != null && aResult.Answers.ARecords().Any())
+                    return EmailValidationResult.Valid;
+
+                return EmailValidationResult.DomainNotFound;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MailHelpers] DNS verification failed: {ex.Message}");
+                return EmailValidationResult.LookupUnavailable;
+            }
+        }
+
         public static async Task<bool> HasValidEmailDomain(string email)
         {
-            return await Task.FromResult(true);
+            var status = await ValidateEmailDomainAsync(email);
+            return status == EmailValidationResult.Valid;
         }
 
         public static async Task SendOtpEmail(
@@ -233,6 +287,14 @@ namespace Aarohi.Networking
 
         private static SmtpClient CreateSmtpClient()
         {
+            string password = AppPassword;
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                throw new InvalidOperationException(
+                    "SMTP application password is not configured or cannot be decrypted. " +
+                    "Please configure SMTP credentials in Secure Settings.");
+            }
+
             return new SmtpClient
             {
                 Host =
@@ -253,10 +315,10 @@ namespace Aarohi.Networking
                 Credentials =
                     new NetworkCredential(
                         SenderEmail,
-                        AppPassword),
+                        password),
 
                 Timeout =
-                    30000
+                    20000
             };
         }
 

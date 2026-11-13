@@ -303,11 +303,17 @@ public sealed class Global_Sql
     // The registered connection string and normal runtime pooling remain unchanged.
     private static SqlConnection OpenStartupConnectionWithRetry(string connectionString)
     {
-        SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectionString)
+        bool trustCert = key.GetValue("TrustServerCertificate", "0") as string == "1";
+
+        var csBuilder = new SqlConnectionStringBuilder
         {
+            DataSource = server,
+            InitialCatalog = database,
+            Encrypt = true,
+            TrustServerCertificate = trustCert,
             ConnectTimeout = 4,
             ConnectRetryCount = 0,
-            Pooling = false
+          ` Pooling = false
         };
 
         for (int attempt = 1; attempt <= 3; attempt++)

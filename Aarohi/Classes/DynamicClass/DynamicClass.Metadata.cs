@@ -287,6 +287,19 @@ FROM sys.fn_listextendedproperty
         public bool RemoveTableDisplayName()
             => DropExtendedProperty("DisplayName", column: null);
 
+        /// <summary>
+        /// Sets a custom extended property for the table.
+        /// Works across all supported SqlTypes (SqlServer, Sqlite, PostgreSql, MySql).
+        /// </summary>
+        public bool SetTableProperty(string propertyName, object? value)
+            => UpsertExtendedProperty(propertyName, value ?? string.Empty, column: null);
+
+        /// <summary>
+        /// Reads a custom extended property for the table.
+        /// </summary>
+        public object? GetTableProperty(string propertyName)
+            => ReadExtendedProperty(propertyName, column: null);
+
         // COLUMN-LEVEL
 
         // Method: SetColumnDisplayName

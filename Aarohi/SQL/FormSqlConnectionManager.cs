@@ -69,7 +69,24 @@ namespace Aarohi.SQL
             database = key.GetValue("Database", "") as string ?? "";
             string authMode = key.GetValue("AuthMode", "Windows") as string ?? "Windows";
             userName = key.GetValue("UserName", "") as string ?? "";
-            password = key.GetValue("Password", "") as string ?? "";
+
+            string storedPassword = key.GetValue("Password", "") as string ?? "";
+            if (!string.IsNullOrEmpty(storedPassword))
+            {
+                try
+                {
+                    string decrypted = RegistryHelper.Decrypt(storedPassword);
+                    password = string.IsNullOrEmpty(decrypted) ? storedPassword : decrypted;
+                }
+                catch
+                {
+                    password = storedPassword;
+                }
+            }
+            else
+            {
+                password = "";
+            }
 
             useWindowsAuth = authMode.Equals("Windows", StringComparison.OrdinalIgnoreCase);
             return true;
@@ -84,7 +101,9 @@ namespace Aarohi.SQL
             key.SetValue("Database", database);
             key.SetValue("AuthMode", useWindowsAuth ? "Windows" : "SQL");
             key.SetValue("UserName", userName ?? "");
-            key.SetValue("Password", password ?? "");
+
+            string encryptedPassword = RegistryHelper.Encrypt(password ?? "");
+            key.SetValue("Password", encryptedPassword ?? "");
         }
 
 
@@ -423,20 +442,27 @@ namespace Aarohi.SQL
         }
 
 
-        private Task<List<string>> GetDatabaseListAsync(string server,
-                                                        bool useWindowsAuth,
-                                                        string userName,
-                                                        string password)
+        private Task<List<string>> GetDatabaseListAsync(string server, bool useWindowsAuth, string userName, string password)
         {
             return Task.Run(() =>
             {
                 var result = new List<string>();
 
+                bool trustCert = false;
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_regPath))
+                {
+                    if (k != null)
+                    {
+                        trustCert = k.GetValue("TrustServerCertificate", "0") as string == "1";
+                    }
+                }
+
                 var csBuilder = new SqlConnectionStringBuilder
                 {
                     DataSource = server,
                     InitialCatalog = "master",
-                    TrustServerCertificate = true,
+                    Encrypt = true,
+                    TrustServerCertificate = trustCert,
                     ConnectTimeout = 30
                 };
 
@@ -451,7 +477,6 @@ namespace Aarohi.SQL
                     csBuilder.Password = password;
                 }
 
-                //using (var conn = new SqlConnection("Server=61.0.160.172;Database=master;User Id=panel;Password=Aespl@2037;"))
                 using (var conn = new SqlConnection(csBuilder.ConnectionString))
                 {
                     try
@@ -508,10 +533,20 @@ namespace Aarohi.SQL
             if (string.IsNullOrWhiteSpace(server))
                 throw new Exception("SQL Server host is empty.");
 
+            bool trustCert = false;
+            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_regPath))
+            {
+                if (k != null)
+                {
+                    trustCert = k.GetValue("TrustServerCertificate", "0") as string == "1";
+                }
+            }
+
             var csBuilder = new SqlConnectionStringBuilder
             {
                 DataSource = server,
-                TrustServerCertificate = true,
+                Encrypt = true,
+                TrustServerCertificate = trustCert,
                 ConnectTimeout = 30
             };
 

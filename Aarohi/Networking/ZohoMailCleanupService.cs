@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
@@ -20,7 +20,10 @@ namespace Aarohi.Networking
     public static class ZohoMailCleanupService
     {
         private static readonly HttpClient _httpClient =
-            new HttpClient();
+            new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(20)
+            };
 
         private static readonly SemaphoreSlim _metadataLock =
             new SemaphoreSlim(1, 1);
