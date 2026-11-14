@@ -1,4 +1,4 @@
-using Aarohi.Classes;
+﻿using Aarohi.Classes;
 using Aarohi.Classes.Healper;
 using Aarohi.Configuration;
 using Aarohi.Globals;
@@ -130,7 +130,8 @@ namespace Aarohi.UserManagment
                 throw new ArgumentException("Password cannot be empty.", nameof(password));
 
             string pbkdf2Hash = PasswordSecurity.HashPassword(password);
-            RegistryHelper.SaveEncrypted(RegistryHelper.storeLocs.Credentials, "EmergencyDevVerifier", pbkdf2Hash);
+            // VAPT FIX (SEC-H-007): Save to HKLM so standard users cannot overwrite it
+            RegistryHelper.SaveMachineEncrypted("EmergencyDevVerifier", pbkdf2Hash);
         }
 
         public static string HashPassword(string password)
@@ -145,10 +146,8 @@ namespace Aarohi.UserManagment
                 // 1. Emergency Developer Offline Access (Option 2: Pre-Provisioned DPAPI Credential)
                 if (string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
                 {
-                    string localEmergencyHash = RegistryHelper.LoadEncrypted(
-                        RegistryHelper.storeLocs.Credentials,
-                        "EmergencyDevVerifier",
-                        string.Empty);
+                    // VAPT FIX (SEC-H-007): Read verified hash from machine store (tamper-proof for non-admins)
+                    string localEmergencyHash = RegistryHelper.LoadMachineEncrypted("EmergencyDevVerifier", string.Empty);
 
                     if (!string.IsNullOrWhiteSpace(localEmergencyHash))
                     {
@@ -457,6 +456,14 @@ namespace Aarohi.UserManagment
         {
             try
             {
+                // VAPT FIX (SEC-M-001): Reserve emergency developer identity
+                if (string.Equals(username?.Trim(), AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show($"The username '{AGLobals.Utils.DevName}' is reserved for emergency access and cannot be created.",
+                        "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+
                 using (DynamicClass userClass = new DynamicClass(UserMap.Schema,UserMap.Table,UserMap.Columns.Id))
                 {
                    string hashedPass = HashPassword(pass);
@@ -712,6 +719,14 @@ namespace Aarohi.UserManagment
         {
             try
             {
+                // VAPT FIX (SEC-M-001): Reserve emergency developer identity
+                if (string.Equals(username?.Trim(), AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show($"The username '{AGLobals.Utils.DevName}' is reserved for emergency access.",
+                        "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+
                 var umap = UserManager.UserMap;
 
                 using DynamicClass dcUsers =
@@ -943,10 +958,8 @@ namespace Aarohi.UserManagment
                 // 1. Emergency Developer Offline Access (Option 2: Pre-Provisioned DPAPI Credential)
                 if (string.Equals(userName, AGLobals.Utils.DevName, StringComparison.OrdinalIgnoreCase))
                 {
-                    string localEmergencyHash = RegistryHelper.LoadEncrypted(
-                        RegistryHelper.storeLocs.Credentials,
-                        "EmergencyDevVerifier",
-                        string.Empty);
+                    // VAPT FIX (SEC-H-007): Read verified hash from machine store (tamper-proof for non-admins)
+                    string localEmergencyHash = RegistryHelper.LoadMachineEncrypted("EmergencyDevVerifier", string.Empty);
 
                     if (!string.IsNullOrWhiteSpace(localEmergencyHash))
                     {
@@ -956,17 +969,6 @@ namespace Aarohi.UserManagment
                             return true;
                         }
                     }
-
-                    if (showMessage)
-                    {
-                        MessageBox.Show(
-                            "Incorrect password.",
-                            "Login Failed",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
-                    }
-
-                    return false;
                 }
 
                 var values = _userClass.GetRowAsDictionary(_LoginDataColumnName, userName);

@@ -1,4 +1,4 @@
-using Aarohi.Classes;
+﻿using Aarohi.Classes;
 using Aarohi.Classes.Common;
 using Aarohi.Classes.Healper;
 using Aarohi.Globals;
@@ -308,7 +308,7 @@ namespace Aarohi.UserManagment
                 Environment.GetFolderPath(
                     Environment.SpecialFolder.ApplicationData),
                 "Aarohi",
-                "IPTS_Git",
+                string.IsNullOrWhiteSpace(AGLobals.ValueHolders.currentApp) ? "Shared" : AGLobals.ValueHolders.currentApp,
                 "Login.info");
 
         public event EventHandler<LoginSuccessEventArgs>?

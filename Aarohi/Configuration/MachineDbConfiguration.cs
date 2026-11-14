@@ -3,19 +3,22 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Aarohi.Globals;
 
 namespace Aarohi.Configuration;
 
 public static class MachineDbConfiguration
 {
-    private static readonly string FolderPath =
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Aarohi.MachineDbConfiguration.Entropy.V1");
+
+    private static string FolderPath =>
         Path.Combine(
             Environment.GetFolderPath(
                 Environment.SpecialFolder.CommonApplicationData),
             "Aarohi Embedded Systems Pvt Ltd",
-            "IMTS_Routine");
+            string.IsNullOrWhiteSpace(AGLobals.ValueHolders.currentApp) ? "Shared" : AGLobals.ValueHolders.currentApp);
 
-    private static readonly string FilePath =
+    private static string FilePath =>
         Path.Combine(
             FolderPath,
             "dbsettings.dat");
@@ -62,7 +65,7 @@ public static class MachineDbConfiguration
         byte[] encrypted =
             ProtectedData.Protect(
                 raw,
-                null,
+                Entropy,
                 DataProtectionScope.LocalMachine);
 
         File.WriteAllBytes(
@@ -93,10 +96,10 @@ public static class MachineDbConfiguration
                     FilePath);
 
             byte[] raw =
-                ProtectedData.Unprotect(
-                    encrypted,
-                    null,
-                    DataProtectionScope.LocalMachine);
+                 ProtectedData.Unprotect(
+                     encrypted,
+                     Entropy,
+                     DataProtectionScope.LocalMachine);
 
             string json =
                 Encoding.UTF8.GetString(

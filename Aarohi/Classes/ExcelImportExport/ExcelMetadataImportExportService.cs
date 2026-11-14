@@ -1,4 +1,4 @@
-using Aarohi.Classes;
+﻿using Aarohi.Classes;
 using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Drawing;
 using Microsoft.Data.SqlClient;
@@ -1500,17 +1500,44 @@ namespace Aarohi.Classes.ExcelImportExport
             if (workbook == null)
                 return;
 
-            string password = _options.ProtectionPassword;
+            // 1. Resolve password: check caller options first, then DevConfig
+            string password = !string.IsNullOrWhiteSpace(_options.ProtectionPassword)
+                ? _options.ProtectionPassword
+                : Aarohi.Configuration.DeveloperSettings.DevConfig.GetString("ExcelProtectionPassword", string.Empty);
 
-            if (string.IsNullOrWhiteSpace(password))
-                password = "AarohiUnitLock";
-
+            // 2. Protect worksheets if enabled
             if (_options.ProtectWorksheet)
-                ProtectAllWorksheets(workbook, password);
+            {
+                if (string.IsNullOrWhiteSpace(password))
+                    ProtectAllWorksheetsWithoutPassword(workbook);
+                else
+                    ProtectAllWorksheets(workbook, password);
+            }
 
-            if (_options.ProtectWorkbookStructure)
+            // 3. Protect workbook structure only if a valid password is provided
+            if (_options.ProtectWorkbookStructure && !string.IsNullOrWhiteSpace(password))
+            {
                 ProtectWorkbookStructure(workbook, password);
+            }
         }
+
+        public static void ProtectAllWorksheetsWithoutPassword(XLWorkbook workbook)
+        {
+            foreach (IXLWorksheet ws in workbook.Worksheets)
+            {
+                ws.Style.Protection.Locked = true;
+
+                var usedRange = ws.RangeUsed();
+                if (usedRange != null)
+                    usedRange.Style.Protection.Locked = true;
+
+                // Protects sheet against accidental edits without requiring a hardcoded password
+                ws.Protect()
+                  .AllowElement(XLSheetProtectionElements.SelectLockedCells)
+                  .AllowElement(XLSheetProtectionElements.SelectUnlockedCells);
+            }
+        }
+
         public static void ProtectAllWorksheets(XLWorkbook workbook, string password)
         {
             foreach (IXLWorksheet ws in workbook.Worksheets)
@@ -1522,8 +1549,9 @@ namespace Aarohi.Classes.ExcelImportExport
                 if (usedRange != null)
                     usedRange.Style.Protection.Locked = true;
 
-                ws.Protect(password).AllowElement(XLSheetProtectionElements.SelectLockedCells)
-                    .AllowElement(XLSheetProtectionElements.SelectUnlockedCells);
+                ws.Protect(password)
+                  .AllowElement(XLSheetProtectionElements.SelectLockedCells)
+                  .AllowElement(XLSheetProtectionElements.SelectUnlockedCells);
             }
         }
 

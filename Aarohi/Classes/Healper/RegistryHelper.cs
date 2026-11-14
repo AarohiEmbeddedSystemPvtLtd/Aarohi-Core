@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Security.Cryptography;
 using System.Text;
 using Aarohi.Globals;
@@ -363,6 +363,48 @@ namespace Aarohi.Classes.Healper
                 key.DeleteValue(name, false);
             }
         }
+
+        #region Machine-Level Protected Storage (HKLM - Admin Write, All Users Read)
+
+        /// <summary>
+        /// Saves an encrypted credential in HKLM. Requires Windows Administrator privileges to write.
+        /// </summary>
+        public static void SaveMachineEncrypted(string name, string plainValue)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            string registryPath = $@"Software\Aarohi Embedded Systems Pvt Ltd\{AGLobals.ValueHolders.currentApp}\Credentials";
+
+            using (var key = Registry.LocalMachine.CreateSubKey(registryPath))
+            {
+                if (key == null)
+                    throw new UnauthorizedAccessException("Cannot create or write to machine registry key. Administrative privileges are required.");
+
+                key.SetValue(name, Encrypt(plainValue), RegistryValueKind.String);
+            }
+        }
+
+        /// <summary>
+        /// Reads an encrypted credential from HKLM. Can be read by any user, but cannot be tampered with by non-administrators.
+        /// </summary>
+        public static string LoadMachineEncrypted(string name, string defaultValue = "")
+        {
+            if (string.IsNullOrEmpty(name)) return defaultValue;
+            string registryPath = $@"Software\Aarohi Embedded Systems Pvt Ltd\{AGLobals.ValueHolders.currentApp}\Credentials";
+
+            using (var key = Registry.LocalMachine.OpenSubKey(registryPath, false))
+            {
+                if (key == null)
+                    return defaultValue;
+
+                string? cipher = key.GetValue(name, string.Empty) as string;
+                if (string.IsNullOrEmpty(cipher))
+                    return defaultValue;
+
+                return Decrypt(cipher);
+            }
+        }
+
+        #endregion
     }
 }
 

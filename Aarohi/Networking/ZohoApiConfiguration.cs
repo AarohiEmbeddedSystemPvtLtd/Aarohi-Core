@@ -1,4 +1,4 @@
-using Aarohi.Classes.Healper;
+﻿using Aarohi.Classes.Healper;
 using System;
 
 namespace Aarohi.Networking
@@ -59,7 +59,16 @@ namespace Aarohi.Networking
         public static bool ExpungePermanently
         {
             get => RegistryHelper.LoadBool(RegistryHelper.storeLocs.Settings, "ZohoExpungePermanently", false);
-            set => RegistryHelper.SaveBool(RegistryHelper.storeLocs.Settings, "ZohoExpungePermanently", value);
+            set
+            {
+                bool current = ExpungePermanently;
+                if (current != value)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"[SECURITY AUDIT] ZohoExpungePermanently changed from {current} to {value} by user '{Environment.UserName}' at {DateTime.UtcNow:O}");
+                    RegistryHelper.SaveBool(RegistryHelper.storeLocs.Settings, "ZohoExpungePermanently", value);
+                }
+            }
         }
 
         // How many times to wait for Zoho to create the Sent copy.

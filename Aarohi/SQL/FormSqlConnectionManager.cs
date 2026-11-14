@@ -1,4 +1,4 @@
-using Aarohi.Classes.Healper;
+﻿using Aarohi.Classes.Healper;
 using Aarohi.ExtendedUI;
 using DocumentFormat.OpenXml.Math;
 using Microsoft.Data.Sql;
@@ -448,12 +448,18 @@ namespace Aarohi.SQL
             {
                 var result = new List<string>();
 
-                bool trustCert = false;
+                bool isLocal = string.IsNullOrWhiteSpace(server) ||
+               string.Equals(server, "localhost", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(server, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+               server.StartsWith(".\\", StringComparison.OrdinalIgnoreCase) ||
+               server.StartsWith("(local)", StringComparison.OrdinalIgnoreCase);
+
+                bool trustCert = isLocal;
                 using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_regPath))
                 {
                     if (k != null)
                     {
-                        trustCert = k.GetValue("TrustServerCertificate", "0") as string == "1";
+                        trustCert = isLocal || (k.GetValue("TrustServerCertificate", "0") as string == "1");
                     }
                 }
 
