@@ -3,19 +3,22 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Aarohi.Globals;
 
 namespace Aarohi.Configuration;
 
 public static class MachineDbConfiguration
 {
-    private static readonly string FolderPath =
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Aarohi.MachineDbConfiguration.Entropy.V1");
+
+    private static string FolderPath =>
         Path.Combine(
             Environment.GetFolderPath(
                 Environment.SpecialFolder.CommonApplicationData),
             "Aarohi Embedded Systems Pvt Ltd",
-            "IMTS_Routine");
+            AGLobals.ValueHolders.currentApp);
 
-    private static readonly string FilePath =
+    private static string FilePath =>
         Path.Combine(
             FolderPath,
             "dbsettings.dat");
@@ -62,7 +65,7 @@ public static class MachineDbConfiguration
         byte[] encrypted =
             ProtectedData.Protect(
                 raw,
-                null,
+                Entropy,
                 DataProtectionScope.LocalMachine);
 
         File.WriteAllBytes(
@@ -82,8 +85,7 @@ public static class MachineDbConfiguration
 
         try
         {
-            if (!File.Exists(
-                    FilePath))
+            if (!File.Exists(FilePath))
             {
                 return false;
             }
@@ -92,11 +94,40 @@ public static class MachineDbConfiguration
                 File.ReadAllBytes(
                     FilePath);
 
-            byte[] raw =
-                ProtectedData.Unprotect(
+            byte[] raw;
+
+            try
+            {
+                // 1. Try with new V1 Entropy
+                raw = ProtectedData.Unprotect(
+                    encrypted,
+                    Entropy,
+                    DataProtectionScope.LocalMachine);
+            }
+            catch (CryptographicException)
+            {
+                // 2. Fallback to legacy unprotect without entropy for existing deployed files
+                raw = ProtectedData.Unprotect(
                     encrypted,
                     null,
                     DataProtectionScope.LocalMachine);
+
+                // Transparently migrate file to use new Entropy
+                try
+                {
+                    Directory.CreateDirectory(FolderPath);
+                    byte[] reEncrypted = ProtectedData.Protect(
+                        raw,
+                        Entropy,
+                        DataProtectionScope.LocalMachine);
+
+                    File.WriteAllBytes(FilePath, reEncrypted);
+                }
+                catch
+                {
+                    // Ignore write failures during read migration
+                }
+            }
 
             string json =
                 Encoding.UTF8.GetString(

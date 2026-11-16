@@ -98,6 +98,9 @@ namespace Aarohi.Networking
 
                 try
                 {
+                    if (!IPAddress.TryParse(IP, out _))
+                        return "Invalid IP format";
+
                     var process = new Process();
                     process.StartInfo.FileName = "arp";
                     process.StartInfo.Arguments = "-a " + IP;
