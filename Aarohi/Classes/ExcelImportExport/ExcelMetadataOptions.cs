@@ -17,7 +17,7 @@ namespace Aarohi.Classes.ExcelImportExport
         public bool ProtectWorkbookStructure { get; set; } = true;
 
         // Same password will be used for worksheet + workbook structure protection
-        public string ProtectionPassword { get; set; } = "Dev@Aarohi";
+        public string ProtectionPassword { get; set; } = string.Empty;
 
         // Performance settings
         public bool EnableDataValidation { get; set; } = true;

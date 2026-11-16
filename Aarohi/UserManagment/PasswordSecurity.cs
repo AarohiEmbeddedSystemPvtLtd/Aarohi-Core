@@ -126,6 +126,9 @@ namespace Aarohi.UserManagment
                     {
                         return VerificationResult.SuccessRehashNeeded;
                     }
+
+                    // Never fall through to the plaintext string check (prevents Pass-The-Hash).
+                    return VerificationResult.Failed;
                 }
                 catch
                 {
@@ -133,7 +136,7 @@ namespace Aarohi.UserManagment
                 }
             }
 
-            // 3. Legacy Migration Check: Plaintext string match
+            // 3. Legacy Migration Check: Plaintext string match (only for non-hash legacy accounts)
             byte[] enteredBytes = Encoding.UTF8.GetBytes(enteredPassword);
             byte[] storedBytes = Encoding.UTF8.GetBytes(storedHash);
             if (enteredBytes.Length == storedBytes.Length && CryptographicOperations.FixedTimeEquals(enteredBytes, storedBytes))

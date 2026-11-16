@@ -3,22 +3,32 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Aarohi.Globals;
 
 namespace Aarohi.Configuration;
 
 public static class MachineDbConfiguration
 {
-    private static readonly string FolderPath =
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Aarohi.MachineDbConfiguration.Entropy.V1");
+
+    private static string FolderPath =>
+        Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.CommonApplicationData),
+            "Aarohi Embedded Systems Pvt Ltd",
+            string.IsNullOrWhiteSpace(AGLobals.ValueHolders.currentApp) ? "Shared" : AGLobals.ValueHolders.currentApp);
+
+    private static string FilePath =>
+        Path.Combine(
+            FolderPath,
+            "dbsettings.dat");
+
+    private static string LegacyFolderPath =>
         Path.Combine(
             Environment.GetFolderPath(
                 Environment.SpecialFolder.CommonApplicationData),
             "Aarohi Embedded Systems Pvt Ltd",
             "IMTS_Routine");
-
-    private static readonly string FilePath =
-        Path.Combine(
-            FolderPath,
-            "dbsettings.dat");
 
     public static void Save(
         string centralConnectionString,
@@ -62,7 +72,7 @@ public static class MachineDbConfiguration
         byte[] encrypted =
             ProtectedData.Protect(
                 raw,
-                null,
+                Entropy,
                 DataProtectionScope.LocalMachine);
 
         File.WriteAllBytes(
@@ -82,21 +92,58 @@ public static class MachineDbConfiguration
 
         try
         {
-            if (!File.Exists(
-                    FilePath))
+            string targetFilePath = FilePath;
+            if (!File.Exists(targetFilePath))
             {
-                return false;
+                string legacyFilePath = Path.Combine(LegacyFolderPath, "dbsettings.dat");
+                if (File.Exists(legacyFilePath))
+                {
+                    targetFilePath = legacyFilePath;
+                }
+                else
+                {
+                    return false;
+                }
             }
 
             byte[] encrypted =
                 File.ReadAllBytes(
-                    FilePath);
+                    targetFilePath);
 
-            byte[] raw =
-                ProtectedData.Unprotect(
+            byte[] raw;
+
+            try
+            {
+                // 1. Try with new V1 Entropy
+                raw = ProtectedData.Unprotect(
+                    encrypted,
+                    Entropy,
+                    DataProtectionScope.LocalMachine);
+            }
+            catch (CryptographicException)
+            {
+                // 2. Fallback to legacy unprotect without entropy
+                raw = ProtectedData.Unprotect(
                     encrypted,
                     null,
                     DataProtectionScope.LocalMachine);
+
+                // Transparently migrate file to use new Entropy in current app folder
+                try
+                {
+                    Directory.CreateDirectory(FolderPath);
+                    byte[] reEncrypted = ProtectedData.Protect(
+                        raw,
+                        Entropy,
+                        DataProtectionScope.LocalMachine);
+
+                    File.WriteAllBytes(FilePath, reEncrypted);
+                }
+                catch
+                {
+                    // Ignore write failures during read migration
+                }
+            }
 
             string json =
                 Encoding.UTF8.GetString(
