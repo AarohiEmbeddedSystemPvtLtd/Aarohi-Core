@@ -69,6 +69,27 @@ public partial class ExtendedDataGridView : UserControl
             typeof(ExtendedDataGridView),
             new PropertyMetadata(true, OnShowPaginationChanged));
 
+    public static readonly DependencyProperty IsPaginationVisibleProperty =
+        DependencyProperty.Register(
+            nameof(IsPaginationVisible),
+            typeof(bool),
+            typeof(ExtendedDataGridView),
+            new PropertyMetadata(true, OnIsPaginationVisibleChanged));
+
+    public static readonly DependencyProperty PageSizeProperty =
+        DependencyProperty.Register(
+            nameof(PageSize),
+            typeof(int),
+            typeof(ExtendedDataGridView),
+            new PropertyMetadata(25, OnPageSizeChanged));
+
+    public static readonly DependencyProperty IsSearchBoxVisibleProperty =
+        DependencyProperty.Register(
+            nameof(IsSearchBoxVisible),
+            typeof(bool),
+            typeof(ExtendedDataGridView),
+            new PropertyMetadata(true, OnIsSearchBoxVisibleChanged));
+
     public static readonly DependencyProperty AutoGenerateColumnsProperty =
         DependencyProperty.Register(
             nameof(AutoGenerateColumns),
@@ -188,7 +209,7 @@ public partial class ExtendedDataGridView : UserControl
     private readonly Dictionary<string, ColumnFilter> lockedFilters = new(StringComparer.OrdinalIgnoreCase);
     private INotifyCollectionChanged? sourceCollection;
     private int currentPage = 1;
-    private int pageSize = 5;
+    private int pageSize = 25;
 
     public ObservableCollection<ColumnOption> ColumnOptions { get; } = new();
 
@@ -233,6 +254,24 @@ public partial class ExtendedDataGridView : UserControl
     {
         get { return (bool)GetValue(ShowPaginationProperty); }
         set { SetValue(ShowPaginationProperty, value); }
+    }
+
+    public bool IsPaginationVisible
+    {
+        get { return (bool)GetValue(IsPaginationVisibleProperty); }
+        set { SetValue(IsPaginationVisibleProperty, value); }
+    }
+
+    public int PageSize
+    {
+        get { return (int)GetValue(PageSizeProperty); }
+        set { SetValue(PageSizeProperty, value); }
+    }
+
+    public bool IsSearchBoxVisible
+    {
+        get { return (bool)GetValue(IsSearchBoxVisibleProperty); }
+        set { SetValue(IsSearchBoxVisibleProperty, value); }
     }
 
     public bool AutoGenerateColumns
@@ -485,9 +524,45 @@ public partial class ExtendedDataGridView : UserControl
     private static void OnShowPaginationChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
         ExtendedDataGridView gridView = (ExtendedDataGridView)dependencyObject;
+        if (e.NewValue is bool isVisible && gridView.IsPaginationVisible != isVisible)
+        {
+            gridView.IsPaginationVisible = isVisible;
+        }
         gridView.currentPage = 1;
         gridView.UpdatePaginationVisibility();
         gridView.RefreshPagedItems();
+    }
+
+    private static void OnIsPaginationVisibleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ExtendedDataGridView gridView && e.NewValue is bool isVisible)
+        {
+            if (gridView.ShowPagination != isVisible)
+            {
+                gridView.ShowPagination = isVisible;
+            }
+            gridView.UpdatePaginationVisibility();
+        }
+    }
+
+    private static void OnPageSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ExtendedDataGridView gridView && e.NewValue is int newSize && newSize > 0)
+        {
+            gridView.pageSize = newSize;
+            gridView.currentPage = 1;
+            gridView.SyncPageSizeComboBox(newSize);
+            gridView.ClampCurrentPage();
+            gridView.RefreshPagedItems();
+        }
+    }
+
+    private static void OnIsSearchBoxVisibleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ExtendedDataGridView gridView)
+        {
+            gridView.UpdateSearchBoxVisibility();
+        }
     }
 
     private static void OnActionColumnOptionsChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
@@ -874,8 +949,66 @@ public partial class ExtendedDataGridView : UserControl
 
     private void ExtendedDataGridView_Loaded(object sender, RoutedEventArgs e)
     {
+        pageSize = PageSize > 0 ? PageSize : 25;
         RefreshColumnHeaders();
         UpdateEmptyStateVisibility();
+        UpdatePaginationVisibility();
+        UpdateSearchBoxVisibility();
+        SyncPageSizeComboBox(pageSize);
+    }
+
+    private void SearchBoxTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        bool hasText = !string.IsNullOrEmpty(SearchBoxTextBox?.Text);
+        if (SearchPlaceholderText != null)
+        {
+            SearchPlaceholderText.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
+        }
+        if (ClearSearchButton != null)
+        {
+            ClearSearchButton.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void ClearSearchButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        SearchText = string.Empty;
+        if (SearchBoxTextBox != null)
+        {
+            SearchBoxTextBox.Text = string.Empty;
+            SearchBoxTextBox.Focus();
+        }
+    }
+
+    private void UpdateSearchBoxVisibility()
+    {
+        if (TopSearchBar is null)
+        {
+            return;
+        }
+
+        TopSearchBar.Visibility = IsSearchBoxVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SyncPageSizeComboBox(int size)
+    {
+        if (PageSizeComboBox is null)
+        {
+            return;
+        }
+
+        foreach (object item in PageSizeComboBox.Items)
+        {
+            if (item is ComboBoxItem cbi && int.TryParse(cbi.Content?.ToString(), out int val) && val == size)
+            {
+                PageSizeComboBox.SelectedItem = cbi;
+                return;
+            }
+        }
+
+        var customItem = new ComboBoxItem { Content = size.ToString() };
+        PageSizeComboBox.Items.Insert(0, customItem);
+        PageSizeComboBox.SelectedItem = customItem;
     }
 
     private void OnGlobalPermissionsChanged(object? sender, EventArgs e)
@@ -1074,11 +1207,19 @@ public partial class ExtendedDataGridView : UserControl
             return;
         }
 
-        if (int.TryParse(item.Content?.ToString(), out int selectedPageSize))
+        if (int.TryParse(item.Content?.ToString(), out int selectedPageSize) && selectedPageSize > 0)
         {
-            pageSize = selectedPageSize;
-            currentPage = 1;
-            RefreshPagedItems();
+            if (PageSize != selectedPageSize)
+            {
+                PageSize = selectedPageSize;
+            }
+            else
+            {
+                pageSize = selectedPageSize;
+                currentPage = 1;
+                ClampCurrentPage();
+                RefreshPagedItems();
+            }
         }
     }
 

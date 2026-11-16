@@ -544,11 +544,99 @@
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0"
+        <!-- Top Search Bar -->
+        <Grid x:Name="TopSearchBar"
+              Grid.Row="0"
+              Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Search box container (Right-aligned) -->
+            <Border Grid.Column="1"
+                    Width="240"
+                    Height="34"
+                    Background="{DynamicResource AppBrush.Control}"
+                    BorderBrush="{DynamicResource AppBrush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="28" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Search Icon (Magnifying Glass) -->
+                    <Path Grid.Column="0"
+                          Width="13"
+                          Height="13"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Data="M5.5,1.5 A4,4 0 1 1 5.5,9.5 A4,4 0 1 1 5.5,1.5 M8.5,8.5 L12,12"
+                          Stroke="{DynamicResource AppBrush.TextMuted}"
+                          StrokeThickness="1.6"
+                          StrokeEndLineCap="Round"
+                          Stretch="Fill" />
+
+                    <!-- Search Placeholder Text -->
+                    <TextBlock x:Name="SearchPlaceholderText"
+                               Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="2,0,0,0"
+                               IsHitTestVisible="False"
+                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                               FontSize="12"
+                               FontWeight="Normal"
+                               Foreground="{DynamicResource AppBrush.TextMuted}"
+                               Text="Search..." />
+
+                    <!-- Search TextBox -->
+                    <TextBox x:Name="SearchBoxTextBox"
+                             Grid.Column="1"
+                             VerticalAlignment="Center"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             FontFamily="Segoe UI Variable Text, Segoe UI"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource AppBrush.TextPrimary}"
+                             CaretBrush="{DynamicResource AppBrush.Primary}"
+                             TextChanged="SearchBoxTextBox_TextChanged"
+                             Text="{Binding SearchText, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <!-- Clear Button ('✕') -->
+                    <Button x:Name="ClearSearchButton"
+                            Grid.Column="2"
+                            Width="20"
+                            Height="20"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Focusable="False"
+                            Visibility="Collapsed"
+                            Click="ClearSearchButton_OnClick">
+                        <Path Width="8"
+                              Height="8"
+                              Data="M1,1 L7,7 M7,1 L1,7"
+                              Stroke="{DynamicResource AppBrush.TextMuted}"
+                              StrokeThickness="1.5"
+                              StrokeEndLineCap="Round"
+                              Stretch="Fill" />
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="1"
               SnapsToDevicePixels="True">
 
             <!-- This mask creates real rounded clipping for DataGrid content. -->
@@ -633,7 +721,7 @@
         </Grid>
 
         <Border x:Name="PaginationBar"
-                Grid.Row="1"
+                Grid.Row="2"
                 Margin="0,10,0,0"
                 Padding="12,10"
                 Background="{DynamicResource AppBrush.SurfaceAlt}"
@@ -671,11 +759,13 @@
                     <ComboBox x:Name="PageSizeComboBox"
                               Margin="8,0,0,0"
                               SelectionChanged="PageSizeComboBox_OnSelectionChanged"
-                              SelectedIndex="0"
+                              SelectedIndex="1"
                               Style="{StaticResource PaginationComboBoxStyle}">
-                        <ComboBoxItem Content="5" />
                         <ComboBoxItem Content="10" />
-                        <ComboBoxItem Content="20" />
+                        <ComboBoxItem Content="25" />
+                        <ComboBoxItem Content="50" />
+                        <ComboBoxItem Content="100" />
+                        <ComboBoxItem Content="200" />
                     </ComboBox>
                 </StackPanel>
 
