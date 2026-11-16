@@ -16,19 +16,12 @@ public static class MachineDbConfiguration
             Environment.GetFolderPath(
                 Environment.SpecialFolder.CommonApplicationData),
             "Aarohi Embedded Systems Pvt Ltd",
-            string.IsNullOrWhiteSpace(AGLobals.ValueHolders.currentApp) ? "Shared" : AGLobals.ValueHolders.currentApp);
+            AGLobals.ValueHolders.currentApp);
 
     private static string FilePath =>
         Path.Combine(
             FolderPath,
             "dbsettings.dat");
-
-    private static string LegacyFolderPath =>
-        Path.Combine(
-            Environment.GetFolderPath(
-                Environment.SpecialFolder.CommonApplicationData),
-            "Aarohi Embedded Systems Pvt Ltd",
-            "IMTS_Routine");
 
     public static void Save(
         string centralConnectionString,
@@ -92,23 +85,14 @@ public static class MachineDbConfiguration
 
         try
         {
-            string targetFilePath = FilePath;
-            if (!File.Exists(targetFilePath))
+            if (!File.Exists(FilePath))
             {
-                string legacyFilePath = Path.Combine(LegacyFolderPath, "dbsettings.dat");
-                if (File.Exists(legacyFilePath))
-                {
-                    targetFilePath = legacyFilePath;
-                }
-                else
-                {
-                    return false;
-                }
+                return false;
             }
 
             byte[] encrypted =
                 File.ReadAllBytes(
-                    targetFilePath);
+                    FilePath);
 
             byte[] raw;
 
@@ -122,13 +106,13 @@ public static class MachineDbConfiguration
             }
             catch (CryptographicException)
             {
-                // 2. Fallback to legacy unprotect without entropy
+                // 2. Fallback to legacy unprotect without entropy for existing deployed files
                 raw = ProtectedData.Unprotect(
                     encrypted,
                     null,
                     DataProtectionScope.LocalMachine);
 
-                // Transparently migrate file to use new Entropy in current app folder
+                // Transparently migrate file to use new Entropy
                 try
                 {
                     Directory.CreateDirectory(FolderPath);

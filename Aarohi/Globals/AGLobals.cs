@@ -77,9 +77,21 @@ namespace Aarohi.Globals
             { 
                 get 
                 { 
-                    return string.IsNullOrEmpty(_currentApp) 
-                        ? throw new Exception("Current App is not found!\nset current app using 'AGLobals.ValueHolders.currentAp'") 
-                        : _currentApp; 
+                    if (!string.IsNullOrWhiteSpace(_currentApp))
+                        return _currentApp;
+
+                    try
+                    {
+                        string? entryName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+                        if (!string.IsNullOrWhiteSpace(entryName))
+                        {
+                            _currentApp = entryName.Replace(" ", "_");
+                            return _currentApp;
+                        }
+                    }
+                    catch { }
+
+                    return "Shared";
                 } 
                 set => _currentApp = value;
             }
