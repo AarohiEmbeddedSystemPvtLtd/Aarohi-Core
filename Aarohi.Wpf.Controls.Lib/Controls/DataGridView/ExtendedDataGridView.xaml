@@ -1,0 +1,947 @@
+<UserControl x:Class="Aarohi.Wpf.Controls.Lib.Controls.DataGridView.ExtendedDataGridView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Aarohi.Wpf.Controls.Lib.Controls.DataGridView"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="420"
+             d:DesignWidth="900"
+             Background="Transparent"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Aarohi.Wpf.Controls.Lib;component/Themes/DefaultBrushes.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        <Style x:Key="ExtendedDataGridColumnHeaderStyle" TargetType="{x:Type DataGridColumnHeader}">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Padding" Value="14,0,8,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextSecondary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGridColumnHeader}">
+                        <Border x:Name="HeaderChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="34" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Margin="0,0,10,0"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           FontFamily="{TemplateBinding FontFamily}"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           FontWeight="{TemplateBinding FontWeight}"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           Text="{TemplateBinding Content}"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <Border Grid.Column="1"
+                                        Width="24"
+                                        Height="24"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource AppBrush.PrimarySubtle}"
+                                        CornerRadius="7"
+                                        IsHitTestVisible="False">
+
+                                    <Grid>
+                                        <Path Width="9"
+                                              Height="6"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M0,0 L4.5,5 L9,0"
+                                              Stretch="Fill"
+                                              Stroke="{DynamicResource AppBrush.Primary}"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"
+                                              StrokeThickness="1.6"
+                                              Visibility="{Binding Column.(controls:ExtendedDataGridView.DefaultFilterIconVisibility), RelativeSource={RelativeSource AncestorType={x:Type DataGridColumnHeader}}}" />
+                                        <Path Width="13"
+                                              Height="13"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M2,3 L11,3 L7.5,7 L7.5,11 L5.5,12 L5.5,7 Z"
+                                              Fill="{DynamicResource AppBrush.Primary}"
+                                              Stretch="Fill"
+                                              Visibility="{Binding Column.(controls:ExtendedDataGridView.UserFilterIconVisibility), RelativeSource={RelativeSource AncestorType={x:Type DataGridColumnHeader}}}" />
+                                        <Path Width="13"
+                                              Height="13"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M3,6 L3,12 L10,12 L10,6 Z M4.5,6 L4.5,4.5 C4.5,2.8 5.5,2 6.5,2 C7.5,2 8.5,2.8 8.5,4.5 L8.5,6"
+                                              Stretch="Fill"
+                                              Stroke="{DynamicResource AppBrush.Primary}"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"
+                                              StrokeThickness="1.4"
+                                              Visibility="{Binding Column.(controls:ExtendedDataGridView.LockedFilterIconVisibility), RelativeSource={RelativeSource AncestorType={x:Type DataGridColumnHeader}}}" />
+                                    </Grid>
+                                </Border>
+                                <Button Grid.Column="1"
+                                        Width="24"
+                                        Height="24"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Focusable="False"
+                                        Tag="{Binding Column, RelativeSource={RelativeSource AncestorType={x:Type DataGridColumnHeader}}}"
+                                        Click="FilterButton_OnClick" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HeaderChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                            <Trigger Property="SortDirection" Value="Ascending">
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                            <Trigger Property="SortDirection" Value="Descending">
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FilterPopupFieldStyle" TargetType="{x:Type Control}">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style x:Key="PaginationTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.SurfaceAlt}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CaretBrush" Value="{DynamicResource AppBrush.Primary}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <Border x:Name="TextBoxChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TextBoxChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter TargetName="TextBoxChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.BorderStrong}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="TextBoxChrome" Property="Background" Value="{DynamicResource AppBrush.Control}" />
+                                <Setter TargetName="TextBoxChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PaginationComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextSecondary}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="ItemChrome"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7"
+                                TextElement.Foreground="{TemplateBinding Foreground}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AppBrush.PrimarySubtle}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PaginationComboBoxStyle" TargetType="{x:Type ComboBox}">
+            <Setter Property="Width" Value="76" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="12,0,28,0" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource PaginationComboBoxItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid>
+                            <ToggleButton Background="Transparent"
+                                          BorderThickness="0"
+                                          ClickMode="Press"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <Border x:Name="ComboChrome"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="9"
+                                        TextElement.Foreground="{TemplateBinding Foreground}">
+                                    <Grid>
+                                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"
+                                                          Content="{TemplateBinding SelectionBoxItem}"
+                                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                                        <Path Width="8"
+                                              Height="5"
+                                              Margin="0,0,12,0"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Data="M0,0 L4,4 L8,0"
+                                              Stroke="{DynamicResource AppBrush.Primary}"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"
+                                              StrokeThickness="1.5"
+                                              Stretch="Fill" />
+                                    </Grid>
+                                </Border>
+                            </ToggleButton>
+                            <Popup AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Margin="0,6,0,0"
+                                        Padding="4"
+                                        Background="{DynamicResource AppBrush.Surface}"
+                                        BorderBrush="{DynamicResource AppBrush.BorderStrong}"
+                                        BorderThickness="1"
+                                        CornerRadius="9"
+                                        TextElement.Foreground="{DynamicResource AppBrush.TextPrimary}">
+                                    <ItemsPresenter />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ComboChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.BorderStrong}" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FilterPopupButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="MinWidth" Value="78" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextSecondary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="ButtonChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.BorderStrong}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource AppBrush.ControlPressed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FilterPopupPrimaryButtonStyle"
+               BasedOn="{StaticResource FilterPopupButtonStyle}"
+               TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Primary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Primary}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextOnAccent}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="ButtonChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource AppBrush.PrimaryHover}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.PrimaryHover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource AppBrush.PrimaryPressed}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.PrimaryPressed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FilterModeRadioStyle" TargetType="{x:Type RadioButton}">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextSecondary}" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RadioButton}">
+                        <Border x:Name="ModeChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse x:Name="Dot"
+                                         Width="7"
+                                         Height="7"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource AppBrush.TextMuted}"
+                                         Opacity="0.55" />
+                                <ContentPresenter Grid.Column="2"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ModeChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                                <Setter TargetName="ModeChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.BorderStrong}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ModeChrome" Property="Background" Value="{DynamicResource AppBrush.PrimarySubtle}" />
+                                <Setter TargetName="ModeChrome" Property="BorderBrush" Value="{DynamicResource AppBrush.Primary}" />
+                                <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource AppBrush.Primary}" />
+                                <Setter TargetName="Dot" Property="Opacity" Value="1" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ExtendedScrollBarThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="Background" Value="{DynamicResource AppBrush.BorderStrong}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="ThumbChrome"
+                                Margin="2"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Opacity="0.72" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbChrome" Property="Background" Value="{DynamicResource AppBrush.Primary}" />
+                                <Setter TargetName="ThumbChrome" Property="Opacity" Value="0.95" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbChrome" Property="Background" Value="{DynamicResource AppBrush.PrimaryPressed}" />
+                                <Setter TargetName="ThumbChrome" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ExtendedScrollBarPageButtonStyle" TargetType="{x:Type RepeatButton}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RepeatButton}">
+                        <Border Background="{TemplateBinding Background}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Width" Value="9" />
+            <Setter Property="MinWidth" Value="9" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Border x:Name="ScrollBarChrome"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4">
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True"
+                                   Focusable="False">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Style="{StaticResource ExtendedScrollBarPageButtonStyle}" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ExtendedScrollBarThumbStyle}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Style="{StaticResource ExtendedScrollBarPageButtonStyle}" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Width" Value="Auto" />
+                                <Setter Property="MinWidth" Value="0" />
+                                <Setter Property="Height" Value="9" />
+                                <Setter Property="MinHeight" Value="9" />
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ScrollBarChrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ExtendedDataGridCellStyle" TargetType="{x:Type DataGridCell}">
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGridCell}">
+                        <Border x:Name="CellChrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="CellChrome" Property="Background" Value="{DynamicResource AppBrush.PrimarySubtle}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ExtendedDataGridRowStyle" TargetType="{x:Type DataGridRow}">
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="Background" Value="{DynamicResource AppBrush.SurfaceAlt}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Style.Triggers>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="{DynamicResource AppBrush.Control}" />
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AppBrush.ControlHover}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0"
+              SnapsToDevicePixels="True">
+
+            <!-- This mask creates real rounded clipping for DataGrid content. -->
+            <Border x:Name="DataGridClipMask"
+                    Background="{DynamicResource AppBrush.SurfaceAlt}"
+                    CornerRadius="14"
+                    IsHitTestVisible="False" />
+
+            <!-- DataGrid content is clipped by the rounded mask. -->
+            <Grid>
+                <Grid.OpacityMask>
+                    <VisualBrush Visual="{Binding ElementName=DataGridClipMask}" />
+                </Grid.OpacityMask>
+
+                <Border Background="{DynamicResource AppBrush.SurfaceAlt}"
+                        CornerRadius="14">
+                    <Grid>
+                        <DataGrid x:Name="PART_DataGrid"
+                                  SelectionChanged="PART_DataGrid_SelectionChanged"
+                                  AlternationCount="2"
+                                  AutoGeneratedColumns="DataGrid_OnAutoGeneratedColumns"
+                                  AutoGeneratingColumn="DataGrid_OnAutoGeneratingColumn"
+                                  AutoGenerateColumns="{Binding AutoGenerateColumns, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  CanUserAddRows="{Binding CanUserAddRows, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  CanUserDeleteRows="{Binding CanUserDeleteRows, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  CanUserReorderColumns="True"
+                                  CanUserResizeColumns="True"
+                                  CellStyle="{StaticResource ExtendedDataGridCellStyle}"
+                                  ColumnHeaderStyle="{StaticResource ExtendedDataGridColumnHeaderStyle}"
+                                  Margin="0"
+                                  EnableColumnVirtualization="True"
+                                  EnableRowVirtualization="True"
+                                  FontFamily="Segoe UI Variable Text, Segoe UI"
+                                  FontSize="13"
+                                  FrozenColumnCount="{Binding FrozenColumnCount, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  Foreground="{DynamicResource AppBrush.TextPrimary}"
+                                  GridLinesVisibility="None"
+                                  HeadersVisibility="Column"
+                                  IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  ItemsSource="{Binding PagedItems, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  RowHeaderWidth="0"
+                                  RowStyle="{StaticResource ExtendedDataGridRowStyle}"
+                                  SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Mode=TwoWay}"
+                                  SelectionMode="{Binding SelectionMode, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  SelectionUnit="{Binding SelectionUnit, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                  VirtualizingPanel.ScrollUnit="{Binding ScrollUnit, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" />
+
+                        <!-- Empty state overlay -->
+                        <Border x:Name="EmptyStateOverlay"
+                                Background="{DynamicResource AppBrush.SurfaceAlt}"
+                                CornerRadius="14"
+                                Visibility="Collapsed"
+                                BorderThickness="0">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="📭"
+                                           FontSize="44"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="No Data Available"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="There is currently no information to display."
+                                           FontSize="11.5"
+                                           Foreground="{DynamicResource AppBrush.TextMuted}"
+                                           Margin="0,4,0,0"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Border is drawn above DataGrid, so rows/header cannot cut it. -->
+            <Border BorderBrush="{DynamicResource AppBrush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    IsHitTestVisible="False" />
+        </Grid>
+
+        <Border x:Name="PaginationBar"
+                Grid.Row="1"
+                Margin="0,10,0,0"
+                Padding="12,10"
+                Background="{DynamicResource AppBrush.SurfaceAlt}"
+                BorderBrush="{DynamicResource AppBrush.Border}"
+                BorderThickness="1"
+                CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                    <TextBlock x:Name="PaginationSummaryText"
+                               VerticalAlignment="Center"
+                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppBrush.TextSecondary}"
+                               Text="Showing 0 of 0" />
+
+                    <Border Width="1"
+                            Height="18"
+                            Margin="14,0"
+                            Background="{DynamicResource AppBrush.Border}" />
+
+                    <TextBlock VerticalAlignment="Center"
+                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AppBrush.TextMuted}"
+                               Text="Rows" />
+
+                    <ComboBox x:Name="PageSizeComboBox"
+                              Margin="8,0,0,0"
+                              SelectionChanged="PageSizeComboBox_OnSelectionChanged"
+                              SelectedIndex="0"
+                              Style="{StaticResource PaginationComboBoxStyle}">
+                        <ComboBoxItem Content="5" />
+                        <ComboBoxItem Content="10" />
+                        <ComboBoxItem Content="20" />
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                    <Button x:Name="FirstPageButton"
+                            Width="42"
+                            MinWidth="42"
+                            Style="{StaticResource FilterPopupButtonStyle}"
+                            Click="FirstPageButton_OnClick">
+                        <Path Width="16"
+                              Height="12"
+                              Data="M6,2 L2,6 L6,10 M14,2 L10,6 L14,10"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              StrokeThickness="1.8" />
+                    </Button>
+                    <Button x:Name="PreviousPageButton"
+                            Width="42"
+                            MinWidth="42"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource FilterPopupButtonStyle}"
+                            Click="PreviousPageButton_OnClick">
+                        <Path Width="8"
+                              Height="12"
+                              Data="M6,2 L2,6 L6,10"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              StrokeThickness="1.8" />
+                    </Button>
+                    <Border MinWidth="92"
+                            Height="36"
+                            Margin="8,0,0,0"
+                            Padding="10,0"
+                            Background="{DynamicResource AppBrush.Control}"
+                            BorderBrush="{DynamicResource AppBrush.Border}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                       Text="Page of" />
+                            <TextBox x:Name="PageNumberTextBox"
+                                     Margin="7,0"
+                                     KeyDown="PageNumberTextBox_OnKeyDown"
+                                     LostFocus="PageNumberTextBox_OnLostFocus"
+                                     Style="{StaticResource PaginationTextBoxStyle}"
+                                     Text="1" />
+                            <TextBlock x:Name="PaginationTotalPageText"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                       Text="/ 1" />
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="NextPageButton"
+                            Width="42"
+                            MinWidth="42"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource FilterPopupButtonStyle}"
+                            Click="NextPageButton_OnClick">
+                        <Path Width="8"
+                              Height="12"
+                              Data="M2,2 L6,6 L2,10"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              StrokeThickness="1.8" />
+                    </Button>
+                    <Button x:Name="LastPageButton"
+                            Width="42"
+                            MinWidth="42"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource FilterPopupButtonStyle}"
+                            Click="LastPageButton_OnClick">
+                        <Path Width="16"
+                              Height="12"
+                              Data="M2,2 L6,6 L2,10 M10,2 L14,6 L10,10"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              StrokeThickness="1.8" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Popup x:Name="FilterPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               Placement="Bottom"
+               PopupAnimation="Fade"
+               StaysOpen="False">
+            <Border Width="360"
+                    Margin="0,8,0,0"
+                    Padding="16"
+                    Background="{DynamicResource AppBrush.Surface}"
+                    BorderBrush="{DynamicResource AppBrush.BorderStrong}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24"
+                                      Direction="270"
+                                      Opacity="0.18"
+                                      ShadowDepth="10"
+                                      Color="#55000000" />
+                </Border.Effect>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="6" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="8" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="FilterColumnText"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource AppBrush.TextPrimary}"
+                                       Text="Filter" />
+                            <TextBlock Margin="0,3,0,0"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppBrush.TextMuted}"
+                                       Text="Choose a rule and manage visible columns" />
+                        </StackPanel>
+                        <Border Grid.Column="1"
+                                Width="34"
+                                Height="34"
+                                Background="{DynamicResource AppBrush.PrimarySubtle}"
+                                CornerRadius="10">
+                            <Path Width="15"
+                                  Height="15"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Data="M3,4 L12,4 L8.5,8 L8.5,12 L6.5,13 L6.5,8 Z"
+                                  Fill="{DynamicResource AppBrush.Primary}"
+                                  Stretch="Fill" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2"
+                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource AppBrush.TextSecondary}"
+                               Text="Filter Type" />
+
+                    <UniformGrid Grid.Row="4"
+                                 Columns="2"
+                                 Rows="4">
+                        <RadioButton Content="Contains"
+                                     GroupName="FilterModes"
+                                     IsChecked="True"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Contains Filter" />
+                        <RadioButton Content="Equals"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Equal Filter" />
+                        <RadioButton Content="Not Equal"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Not Equal Filter" />
+                        <RadioButton Content="Starts With"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Starts With Filter" />
+                        <RadioButton Content="Ends With"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Ends With Filter" />
+                        <RadioButton Content="Greater Than"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Greater Than Filter" />
+                        <RadioButton Content="Less Than"
+                                     GroupName="FilterModes"
+                                     Style="{StaticResource FilterModeRadioStyle}"
+                                     Tag="Less Than Filter" />
+                    </UniformGrid>
+
+                    <TextBlock Grid.Row="6"
+                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource AppBrush.TextSecondary}"
+                               Text="Value" />
+
+                    <TextBox x:Name="FilterValueTextBox"
+                             Grid.Row="8"
+                             Style="{StaticResource FilterPopupFieldStyle}"
+                             VerticalContentAlignment="Center" />
+
+                    <StackPanel Grid.Row="9"
+                                Margin="0,16,0,0">
+                        <TextBlock FontFamily="Segoe UI Variable Text, Segoe UI"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                   Text="Show Columns" />
+                        <Border Margin="0,8,0,0"
+                                Padding="8"
+                                Background="{DynamicResource AppBrush.Control}"
+                                BorderBrush="{DynamicResource AppBrush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                            <ListBox MaxHeight="150"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     ItemsSource="{Binding ColumnOptions, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Margin="4,5"
+                                                  Content="{Binding DisplayName}"
+                                                  FontFamily="Segoe UI Variable Text, Segoe UI"
+                                                  FontSize="12"
+                                                  FontWeight="SemiBold"
+                                                  Foreground="{DynamicResource AppBrush.TextPrimary}"
+                                                  IsChecked="{Binding IsVisible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+
+                        <StackPanel Margin="0,14,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button Style="{StaticResource FilterPopupButtonStyle}"
+                                    Content="Clear"
+                                    Click="ClearFilterButton_OnClick" />
+                            <Button Margin="8,0,0,0"
+                                    Style="{StaticResource FilterPopupPrimaryButtonStyle}"
+                                    Content="Apply"
+                                    Click="ApplyFilterButton_OnClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

@@ -1,0 +1,81 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Canonical Color Tokens (Clean Neutral Light Palette) -->
+    <Color x:Key="AppColor.Background">#F7F9FC</Color>
+    <Color x:Key="AppColor.Surface">#FFFFFFFF</Color>
+    <Color x:Key="AppColor.SurfaceAlt">#EEF3F8</Color>
+    <Color x:Key="AppColor.TileGlowOuter">#00F7F9FC</Color>
+    <Color x:Key="AppColor.TileHorizonClear">#00F7F9FC</Color>
+    <Color x:Key="AppColor.Control">#FFFFFFFF</Color>
+    <Color x:Key="AppColor.ControlHover">#E8F0FE</Color>
+    <Color x:Key="AppColor.ControlPressed">#DCE8FD</Color>
+    <Color x:Key="AppColor.Border">#D7DEE8</Color>
+    <Color x:Key="AppColor.BorderStrong">#AAB7C8</Color>
+    <Color x:Key="AppColor.TextPrimary">#142033</Color>
+    <Color x:Key="AppColor.TextSecondary">#4C5E73</Color>
+    <Color x:Key="AppColor.TextMuted">#76859A</Color>
+    <Color x:Key="AppColor.TextOnAccent">#FFFFFFFF</Color>
+    <Color x:Key="AppColor.TextHover">#000000</Color>
+    <Color x:Key="AppColor.Primary">#2563EB</Color>
+    <Color x:Key="AppColor.PrimaryHover">#1D4ED8</Color>
+    <Color x:Key="AppColor.PrimaryPressed">#1E40AF</Color>
+    <Color x:Key="AppColor.Secondary">#0F766E</Color>
+    <Color x:Key="AppColor.Accent">#E11D48</Color>
+    <Color x:Key="AppColor.Success">#15803D</Color>
+    <Color x:Key="AppColor.Warning">#B45309</Color>
+    <Color x:Key="AppColor.Danger">#DC2626</Color>
+    <Color x:Key="AppColor.Info">#0284C7</Color>
+    <Color x:Key="AppColor.Focus">#60A5FA</Color>
+    <Color x:Key="AppColor.Disabled">#CBD5E1</Color>
+    <Color x:Key="AppColor.Overlay">#660F172A</Color>
+    <Color x:Key="AppColor.PrimarySubtle">#EFF6FF</Color>
+    <Color x:Key="AppColor.SuccessSubtle">#F0FDF4</Color>
+    <Color x:Key="AppColor.WarningSubtle">#FFFBEB</Color>
+    <Color x:Key="AppColor.DangerSubtle">#FFF1F2</Color>
+
+    <!-- Canonical Brush Tokens -->
+    <SolidColorBrush x:Key="AppBrush.Background" Color="{StaticResource AppColor.Background}" />
+    <SolidColorBrush x:Key="AppBrush.Surface" Color="{StaticResource AppColor.Surface}" />
+    <SolidColorBrush x:Key="AppBrush.SurfaceAlt" Color="{StaticResource AppColor.SurfaceAlt}" />
+    <SolidColorBrush x:Key="AppBrush.Control" Color="{StaticResource AppColor.Control}" />
+    <SolidColorBrush x:Key="AppBrush.ControlHover" Color="{StaticResource AppColor.ControlHover}" />
+    <SolidColorBrush x:Key="AppBrush.ControlPressed" Color="{StaticResource AppColor.ControlPressed}" />
+    <SolidColorBrush x:Key="AppBrush.Border" Color="{StaticResource AppColor.Border}" />
+    <SolidColorBrush x:Key="AppBrush.BorderStrong" Color="{StaticResource AppColor.BorderStrong}" />
+    <SolidColorBrush x:Key="AppBrush.TextPrimary" Color="{StaticResource AppColor.TextPrimary}" />
+    <SolidColorBrush x:Key="AppBrush.TextSecondary" Color="{StaticResource AppColor.TextSecondary}" />
+    <SolidColorBrush x:Key="AppBrush.TextMuted" Color="{StaticResource AppColor.TextMuted}" />
+    <SolidColorBrush x:Key="AppBrush.TextOnAccent" Color="{StaticResource AppColor.TextOnAccent}" />
+    <SolidColorBrush x:Key="AppBrush.TextHover" Color="{StaticResource AppColor.TextHover}" />
+    <SolidColorBrush x:Key="AppBrush.Primary" Color="{StaticResource AppColor.Primary}" />
+    <SolidColorBrush x:Key="AppBrush.PrimaryHover" Color="{StaticResource AppColor.PrimaryHover}" />
+    <SolidColorBrush x:Key="AppBrush.PrimaryPressed" Color="{StaticResource AppColor.PrimaryPressed}" />
+    <SolidColorBrush x:Key="AppBrush.Secondary" Color="{StaticResource AppColor.Secondary}" />
+    <SolidColorBrush x:Key="AppBrush.Accent" Color="{StaticResource AppColor.Accent}" />
+    <SolidColorBrush x:Key="AppBrush.Success" Color="{StaticResource AppColor.Success}" />
+    <SolidColorBrush x:Key="AppBrush.Warning" Color="{StaticResource AppColor.Warning}" />
+    <SolidColorBrush x:Key="AppBrush.Danger" Color="{StaticResource AppColor.Danger}" />
+    <SolidColorBrush x:Key="AppBrush.Info" Color="{StaticResource AppColor.Info}" />
+    <SolidColorBrush x:Key="AppBrush.Focus" Color="{StaticResource AppColor.Focus}" />
+    <SolidColorBrush x:Key="AppBrush.Disabled" Color="{StaticResource AppColor.Disabled}" />
+    <SolidColorBrush x:Key="AppBrush.Overlay" Color="{StaticResource AppColor.Overlay}" />
+    <SolidColorBrush x:Key="AppBrush.PrimarySubtle" Color="{StaticResource AppColor.PrimarySubtle}" />
+    <SolidColorBrush x:Key="AppBrush.SectionPastel" Color="{StaticResource AppColor.PrimarySubtle}" Opacity="0.45" />
+    <SolidColorBrush x:Key="AppBrush.SuccessSubtle" Color="{StaticResource AppColor.SuccessSubtle}" />
+    <SolidColorBrush x:Key="AppBrush.WarningSubtle" Color="{StaticResource AppColor.WarningSubtle}" />
+    <SolidColorBrush x:Key="AppBrush.DangerSubtle" Color="{StaticResource AppColor.DangerSubtle}" />
+
+    <!-- Additional compatibility aliases -->
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource AppColor.TextPrimary}" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource AppColor.TextSecondary}" />
+    <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource AppColor.Control}" />
+    <SolidColorBrush x:Key="CardBgBrush" Color="{StaticResource AppColor.Surface}" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="{StaticResource AppColor.Border}" />
+    <SolidColorBrush x:Key="MenuHoverBrush" Color="{StaticResource AppColor.ControlHover}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AppColor.Primary}" />
+
+    <LinearGradientBrush x:Key="AppBrush.ChartArea" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#402563EB" Offset="0" />
+        <GradientStop Color="#002563EB" Offset="1" />
+    </LinearGradientBrush>
+</ResourceDictionary>
