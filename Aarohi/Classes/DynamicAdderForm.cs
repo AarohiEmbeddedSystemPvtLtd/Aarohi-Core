@@ -879,11 +879,20 @@ namespace Aarohi.Classes
                             var effType = SqlHealper.MapSqlToType(c);
                             DataInput di;
 
+                            //_InitVal ??= new Dictionary<string, object>();
+
+                            //if (_InitVal.TryGetValue(baseName, out object? value) && value is not null)
+                            //{
+                            //    c.DefaultValue = value;
+                            //}
+
                             _InitVal ??= new Dictionary<string, object>();
 
-                            if (_InitVal.TryGetValue(baseName, out object? value) && value is not null)
+                            object? initialFieldValue = c.DefaultValue;
+
+                            if (_InitVal.TryGetValue(baseName, out object? value))
                             {
-                                c.DefaultValue = value;
+                                initialFieldValue = value;
                             }
 
                             // Dropdown building
@@ -967,7 +976,8 @@ namespace Aarohi.Classes
                                 }
 
 
-                                string? initialValue = c.DefaultValue?.ToString();
+                                //string? initialValue = c.DefaultValue?.ToString();
+                                string? initialValue = initialFieldValue?.ToString();
 
                                 if (string.IsNullOrWhiteSpace(initialValue))
                                     initialValue = mappedDefaultValue;
@@ -977,7 +987,11 @@ namespace Aarohi.Classes
                             }
                             else
                             {
-                                di = new DataInput(baseName, effType, initialValue: c.DefaultValue, c.DisplayName)
+                                //di = new DataInput(baseName, effType, initialValue: c.DefaultValue, c.DisplayName)
+                                //{
+                                //    Margin = new Padding(0)
+                                //};
+                                di = new DataInput(baseName, effType, initialValue: initialFieldValue, c.DisplayName)
                                 {
                                     Margin = new Padding(0)
                                 };
