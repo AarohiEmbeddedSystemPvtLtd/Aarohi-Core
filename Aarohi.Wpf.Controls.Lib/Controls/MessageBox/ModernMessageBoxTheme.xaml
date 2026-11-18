@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Standalone defaults. The window replaces these with host AppBrush values when available. -->
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.SurfaceBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.SurfaceAltBrush" Color="#EEF3F8" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.ControlBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.ControlHoverBrush" Color="#E8F0FE" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.ControlPressedBrush" Color="#DCE8FD" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.BorderBrush" Color="#D7DEE8" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.BorderStrongBrush" Color="#AAB7C8" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.TextPrimaryBrush" Color="#142033" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.TextSecondaryBrush" Color="#4C5E73" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.TextOnAccentBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.PrimaryBrush" Color="#2563EB" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.PrimaryHoverBrush" Color="#1D4ED8" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.PrimaryPressedBrush" Color="#1E40AF" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.PrimarySubtleBrush" Color="#EFF6FF" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.SuccessBrush" Color="#15803D" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.SuccessSubtleBrush" Color="#F0FDF4" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.WarningBrush" Color="#B45309" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.WarningSubtleBrush" Color="#FFFBEB" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.DangerBrush" Color="#DC2626" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.DangerSubtleBrush" Color="#FFF1F2" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.ShadowBrush" Color="#111827" />
+    <SolidColorBrush x:Key="Aarohi.ModernMessageBox.FocusBrush" Color="#60A5FA" />
+</ResourceDictionary>
