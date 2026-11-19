@@ -7,6 +7,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Aarohi.Classes.Healper;
+using Microsoft.Data.SqlClient;
+using Microsoft.Win32;
 
 namespace Aarohi.SQL
 {
@@ -237,7 +240,13 @@ namespace Aarohi.SQL
             string database = key.GetValue("Database", "") as string ?? "";
             string authMode = key.GetValue("AuthMode", "Windows") as string ?? "Windows";
             string userName = key.GetValue("UserName", "") as string ?? "";
-            string password = key.GetValue("Password", "") as string ?? "";
+            //string password = key.GetValue("Password", "") as string ?? "";
+
+            bool useWindowsAuth = authMode.Equals("Windows", StringComparison.OrdinalIgnoreCase);
+            string encryptedPassword = key.GetValue("Password", "") as string ?? "";
+            string password = useWindowsAuth
+                                ? string.Empty
+                                : RegistryHelper.Decrypt(encryptedPassword);
 
             if (string.IsNullOrWhiteSpace(server) || string.IsNullOrWhiteSpace(database))
             {
@@ -245,7 +254,7 @@ namespace Aarohi.SQL
                 return false;
             }
 
-            bool useWindowsAuth = authMode.Equals("Windows", StringComparison.OrdinalIgnoreCase);
+            //bool useWindowsAuth = authMode.Equals("Windows", StringComparison.OrdinalIgnoreCase);
 
             bool isLocal = string.IsNullOrWhiteSpace(server) ||
                string.Equals(server, "localhost", StringComparison.OrdinalIgnoreCase) ||
