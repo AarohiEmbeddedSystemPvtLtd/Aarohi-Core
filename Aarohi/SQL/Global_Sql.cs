@@ -1,3 +1,4 @@
+using Aarohi.Classes.Healper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Win32;
 using System;
@@ -277,9 +278,22 @@ namespace Aarohi.SQL
                     return false;
                 }
 
+                string decryptedPassword = password;
+                if (!string.IsNullOrEmpty(password))
+                {
+                    try
+                    {
+                        string decrypted = RegistryHelper.Decrypt(password);
+                        decryptedPassword = string.IsNullOrEmpty(decrypted) ? password : decrypted;
+                    }
+                    catch
+                    {
+                        decryptedPassword = password;
+                    }
+                }
                 csBuilder.IntegratedSecurity = false;
                 csBuilder.UserID = userName;
-                csBuilder.Password = password ?? string.Empty;
+                csBuilder.Password = decryptedPassword ?? string.Empty;
             }
 
             connectionString = csBuilder.ConnectionString;
