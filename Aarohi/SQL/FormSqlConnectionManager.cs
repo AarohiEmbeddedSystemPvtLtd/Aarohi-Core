@@ -3,6 +3,7 @@ using Aarohi.ExtendedUI;
 using DocumentFormat.OpenXml.Math;
 using Microsoft.Data.Sql;
 using Microsoft.Data.SqlClient;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -28,9 +29,30 @@ namespace Aarohi.SQL
         private bool _isDatabaseLoading = false;
         private string _lastDatabaseLoadKey = "";
 
+        private bool _isLoadingTrustServerCertificate = false;
+        private string? _lastSuccessfulTestConnectionString;
+
         public FormSqlConnectionManager(string appName)
         {
             InitializeComponent();
+
+            comboBoxHostname.TextChanged += InvalidateTestedConnection;
+
+            comboBoxAuth.SelectedIndexChanged += InvalidateTestedConnection;
+
+            textBoxUserName.TextChanged += InvalidateTestedConnection;
+
+            textBoxPassword.TextChanged += InvalidateTestedConnection;
+
+            ComboboxDatabaseName.SelectedIndexChanged += InvalidateTestedConnection;
+
+            checkBoxTrustServerCertificate.CheckedChanged += InvalidateTestedConnection;
+
+            textBoxPassword.TextChanged += (s, e) =>
+            {
+                _lastDatabaseLoadKey = "";
+            };
+
             _appName = string.IsNullOrWhiteSpace(appName) ? "IPTS" : appName.Trim();
             LabelHeader.Text += $" ({_appName})";
             _regPath = $@"Software\Aarohi Embedded Systems Pvt Ltd\{_appName}\Database";
@@ -92,20 +114,27 @@ namespace Aarohi.SQL
             return true;
         }
 
-        private static void SaveSqlSettings(string regPath,
-            string server, string database, bool useWindowsAuth,
-            string userName, string password)
+
+        private static void SaveSqlSettings(string regPath, string server, string database, bool useWindowsAuth, string userName, string password, bool trustServerCertificate)
         {
-            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(regPath);
+            using var key = Registry.CurrentUser.CreateSubKey(regPath)
+                ?? throw new InvalidOperationException("Unable to open SQL settings Registry key.");
+
             key.SetValue("Server", server);
             key.SetValue("Database", database);
             key.SetValue("AuthMode", useWindowsAuth ? "Windows" : "SQL");
             key.SetValue("UserName", userName ?? "");
 
             string encryptedPassword = RegistryHelper.Encrypt(password ?? "");
-            key.SetValue("Password", encryptedPassword ?? "");
-        }
 
+            key.SetValue("Password", encryptedPassword ?? "");
+
+
+            key.SetValue(
+                "TrustServerCertificate",
+                trustServerCertificate ? "1" : "0",
+                RegistryValueKind.String);
+        }
 
         private async void FormSqlConnectionManager_Load(object sender, EventArgs e)
         {
@@ -115,6 +144,21 @@ namespace Aarohi.SQL
 
             comboBoxHostname.DropDownStyle = ComboBoxStyle.DropDown;
             ComboboxDatabaseName.DropDownStyle = ComboBoxStyle.DropDownList;
+
+            try
+            {
+                LoadTrustServerCertificateSetting();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Unable to load Trust Server Certificate setting:\n" +
+                    ex.Message,
+                    "Registry Warning",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
 
             await LoadSqlServersAsync();
 
@@ -135,7 +179,14 @@ namespace Aarohi.SQL
                     comboBoxAuth.SelectedIndex = useWindowsAuth ? 0 : 1;
 
                     if (!string.IsNullOrWhiteSpace(database))
-                        ComboboxDatabaseName.Text = database;
+                    {
+                        if (!ComboboxDatabaseName.Items.Contains(database))
+                        {
+                            ComboboxDatabaseName.Items.Add(database);
+                        }
+
+                        ComboboxDatabaseName.SelectedItem = database;
+                    }
 
                     textBoxUserName.Text = userName ?? string.Empty;
                     textBoxPassword.Text = password ?? string.Empty;
@@ -373,7 +424,9 @@ namespace Aarohi.SQL
                 }
             }
 
-            string loadKey = $"{server}|{useWindowsAuth}|{userName}";
+            string loadKey =
+                $"{server}|{useWindowsAuth}|{userName}|" +
+                $"{checkBoxTrustServerCertificate.Checked}";
 
             // Important:
             // If database list is already loaded for same server/auth,
@@ -386,6 +439,8 @@ namespace Aarohi.SQL
             try
             {
                 _isDatabaseLoading = true;
+
+                _lastDatabaseLoadKey = "";
 
                 ComboboxDatabaseName.Items.Clear();
                 ComboboxDatabaseName.Items.Add("Loading...");
@@ -441,27 +496,20 @@ namespace Aarohi.SQL
             }
         }
 
+        private void InvalidateTestedConnection(object? sender, EventArgs e)
+        {
+            _lastSuccessfulTestConnectionString = null;
+            ButtonSave.Enabled = false;
+        }
+
 
         private Task<List<string>> GetDatabaseListAsync(string server, bool useWindowsAuth, string userName, string password)
         {
+            bool trustCert = checkBoxTrustServerCertificate.Checked;
+
             return Task.Run(() =>
             {
                 var result = new List<string>();
-
-                bool isLocal = string.IsNullOrWhiteSpace(server) ||
-               string.Equals(server, "localhost", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(server, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-               server.StartsWith(".\\", StringComparison.OrdinalIgnoreCase) ||
-               server.StartsWith("(local)", StringComparison.OrdinalIgnoreCase);
-
-                bool trustCert = isLocal;
-                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_regPath))
-                {
-                    if (k != null)
-                    {
-                        trustCert = isLocal || (k.GetValue("TrustServerCertificate", "0") as string == "1");
-                    }
-                }
 
                 var csBuilder = new SqlConnectionStringBuilder
                 {
@@ -539,14 +587,7 @@ namespace Aarohi.SQL
             if (string.IsNullOrWhiteSpace(server))
                 throw new Exception("SQL Server host is empty.");
 
-            bool trustCert = false;
-            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_regPath))
-            {
-                if (k != null)
-                {
-                    trustCert = k.GetValue("TrustServerCertificate", "0") as string == "1";
-                }
-            }
+            bool trustCert = checkBoxTrustServerCertificate.Checked;
 
             var csBuilder = new SqlConnectionStringBuilder
             {
@@ -606,8 +647,26 @@ namespace Aarohi.SQL
 
             try
             {
-                SaveSqlSettings(_regPath, server, database, useWindowsAuth, userName, password);
-                SavedConnectionString = BuildConnectionString(useMasterDb: false);
+                string currentConnectionString = BuildConnectionString(useMasterDb: false);
+
+                if (string.IsNullOrEmpty(_lastSuccessfulTestConnectionString) ||
+                    !string.Equals(currentConnectionString, _lastSuccessfulTestConnectionString, StringComparison.Ordinal))
+                {
+                    ButtonSave.Enabled = false;
+
+                    MessageBox.Show(
+                        "SQL connection settings have changed.\n" +
+                        "Please test the connection again before saving.",
+                        "Connection Not Tested",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    return;
+                }
+
+                SaveSqlSettings(_regPath, server, database, useWindowsAuth, userName, password, checkBoxTrustServerCertificate.Checked);
+
+                SavedConnectionString = currentConnectionString;
 
                 //this.DialogResult = DialogResult.OK;
                 isClosedFromSave = true;
@@ -633,57 +692,79 @@ namespace Aarohi.SQL
         {
             ButtonTestConnection.Enabled = false;
             ButtonSave.Enabled = false;
+            _lastSuccessfulTestConnectionString = null;
 
-            string connString;
-            string DBName = ComboboxDatabaseName.Text.Trim();
-            if (!string.IsNullOrWhiteSpace(DBName))
+            try
             {
-                try
-                {
-                    connString = BuildConnectionString(useMasterDb: false);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Validation Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                string dbName = ComboboxDatabaseName.Text.Trim();
 
-                    ButtonTestConnection.Enabled = true;
+                if (string.IsNullOrWhiteSpace(dbName) ||
+                    dbName == "Loading..." ||
+                    dbName == "Error" ||
+                    dbName == "(No databases found)")
+                {
+                    MessageBox.Show(
+                        "Please select a valid SQL Server database.",
+                        "Validation",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
                     return;
                 }
 
-                try
-                {
-                    using var con = new SqlConnection(connString);
-                    await con.OpenAsync();
+                string connString = BuildConnectionString(
+                    useMasterDb: false);
 
-                    MessageBox.Show("Connection successful!", "SQL Connection",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                using var con = new SqlConnection(connString);
 
-                    ButtonSave.Enabled = true;
-                }
-                catch (SqlException ex)
-                {
-                    MessageBox.Show("Failed to connect to SQL Server.\n\n" +
-                        "Message: " + ex.Message,
-                        "SQL Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                }
-                catch (Exception ex)
+                await con.OpenAsync();
+
+                if (!string.Equals(
+                    connString,
+                    BuildConnectionString(useMasterDb: false),
+                    StringComparison.Ordinal))
                 {
                     MessageBox.Show(
-                        "Unexpected error while testing connection:\n" + ex.Message,
-                        "Error",
+                        "Connection settings changed during testing. " +
+                        "Please test the connection again.",
+                        "Connection Changed",
                         MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
+                        MessageBoxIcon.Warning);
+
+                    return;
                 }
-                finally
-                {
-                    ButtonTestConnection.Enabled = true;
-                }
+
+                _lastSuccessfulTestConnectionString = connString;
+
+                MessageBox.Show(
+                    "Connection successful!",
+                    "SQL Connection",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+
+                ButtonSave.Enabled = true;
             }
-            else
-                MessageBox.Show("Please select or enter SQL Server Database first.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            catch (SqlException ex)
+            {
+                MessageBox.Show(
+                    "Failed to connect to SQL Server.\n\n" +
+                    "Message: " + ex.Message,
+                    "SQL Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Unable to test SQL connection:\n" + ex.Message,
+                    "Connection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                ButtonTestConnection.Enabled = true;
+            }
         }
 
         private void FormSqlConnectionManager_FormClosing(object sender, FormClosingEventArgs e)
@@ -703,6 +784,94 @@ namespace Aarohi.SQL
         {
             await LoadSqlServersAsync();
         }
+
+
+        private void LoadTrustServerCertificateSetting()
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(_regPath)
+                ?? throw new InvalidOperationException(
+                    "Unable to open SQL settings Registry key.");
+
+            object? value = key.GetValue("TrustServerCertificate");
+
+            if (value == null)
+            {
+                key.SetValue(
+                    "TrustServerCertificate",
+                    "0",
+                    RegistryValueKind.String);
+
+                value = "0";
+            }
+
+            _isLoadingTrustServerCertificate = true;
+
+            try
+            {
+                checkBoxTrustServerCertificate.Checked =
+                    value.ToString() == "1";
+            }
+            finally
+            {
+                _isLoadingTrustServerCertificate = false;
+            }
+        }
+
+        private void checkBoxTrustServerCertificate_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_isLoadingTrustServerCertificate)
+                return;
+
+            try
+            {
+                using var key = Registry.CurrentUser.CreateSubKey(_regPath)
+                    ?? throw new InvalidOperationException("Unable to open SQL settings Registry key.");
+
+                string value = checkBoxTrustServerCertificate.Checked ? "1" : "0";
+
+                key.SetValue(
+                    "TrustServerCertificate",
+                    value,
+                    RegistryValueKind.String);
+
+                _lastDatabaseLoadKey = "";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Failed to save Trust Server Certificate setting:\n" +
+                    ex.Message,
+                    "Registry Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            // Ensure the Network Discovery panel is visible.
+            panelDiscovery.Visible = true;
+            panelDiscovery.Enabled = true;
+
+            // Ensure the toggle belongs to the correct panel.
+            if (toggleNetworkDiscovery.Parent != panelDiscovery)
+            {
+                panelDiscovery.Controls.Add(toggleNetworkDiscovery);
+            }
+
+            // Restore its visibility and interaction.
+            toggleNetworkDiscovery.Visible = true;
+            toggleNetworkDiscovery.Enabled = true;
+
+            panelDiscovery.BringToFront();
+            toggleNetworkDiscovery.BringToFront();
+
+            toggleNetworkDiscovery.Invalidate();
+        }
+
     }
 
     public class ToggleSwitch : CheckBox

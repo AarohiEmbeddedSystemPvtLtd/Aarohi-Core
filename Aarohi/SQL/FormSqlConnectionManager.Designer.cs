@@ -51,6 +51,7 @@ namespace Aarohi.SQL
             PanelFooter = new Aarohi.ExtendedUI.ExtendedPanel();
             panelDiscovery = new Panel();
             toggleNetworkDiscovery = new ToggleSwitch();
+            checkBoxTrustServerCertificate = new CheckBox();
             extendedPanel6 = new Aarohi.ExtendedUI.ExtendedPanel();
             ButtonTestConnection = new Aarohi.ExtendedUI.ExtendedButton();
             ButtonSave = new Aarohi.ExtendedUI.ExtendedButton();
@@ -345,10 +346,11 @@ namespace Aarohi.SQL
             // 
             panelDiscovery.BackColor = Color.Transparent;
             panelDiscovery.Controls.Add(toggleNetworkDiscovery);
+            panelDiscovery.Controls.Add(checkBoxTrustServerCertificate);
             panelDiscovery.Dock = DockStyle.Left;
             panelDiscovery.Location = new Point(18, 18);
             panelDiscovery.Name = "panelDiscovery";
-            panelDiscovery.Size = new Size(350, 69);
+            panelDiscovery.Size = new Size(551, 69);
             panelDiscovery.TabIndex = 6;
             // 
             // toggleNetworkDiscovery
@@ -356,13 +358,26 @@ namespace Aarohi.SQL
             toggleNetworkDiscovery.BackColor = Color.Transparent;
             toggleNetworkDiscovery.Font = new Font("Gadugi", 12F, FontStyle.Bold);
             toggleNetworkDiscovery.ForeColor = Color.MediumBlue;
-            toggleNetworkDiscovery.Location = new Point(10, 19);
+            toggleNetworkDiscovery.Location = new Point(19, 20);
             toggleNetworkDiscovery.Name = "toggleNetworkDiscovery";
             toggleNetworkDiscovery.Size = new Size(300, 30);
             toggleNetworkDiscovery.TabIndex = 0;
             toggleNetworkDiscovery.Text = "Network Server Discovery";
             toggleNetworkDiscovery.UseVisualStyleBackColor = true;
             toggleNetworkDiscovery.CheckedChanged += toggleNetworkDiscovery_CheckedChanged;
+            // 
+            // checkBoxTrustServerCertificate
+            // 
+            checkBoxTrustServerCertificate.BackColor = Color.Transparent;
+            checkBoxTrustServerCertificate.Font = new Font("Gadugi", 11F, FontStyle.Bold);
+            checkBoxTrustServerCertificate.ForeColor = Color.MediumBlue;
+            checkBoxTrustServerCertificate.Location = new Point(345, 22);
+            checkBoxTrustServerCertificate.Name = "checkBoxTrustServerCertificate";
+            checkBoxTrustServerCertificate.Size = new Size(191, 26);
+            checkBoxTrustServerCertificate.TabIndex = 1;
+            checkBoxTrustServerCertificate.Text = "Trust Server Certificate";
+            checkBoxTrustServerCertificate.UseVisualStyleBackColor = true;
+            checkBoxTrustServerCertificate.CheckedChanged += checkBoxTrustServerCertificate_CheckedChanged;
             // 
             // extendedPanel6
             // 
@@ -567,5 +582,6 @@ namespace Aarohi.SQL
         private Aarohi.ExtendedUI.ExtendedButton ButtonSave;
         private System.Windows.Forms.Panel panelDiscovery;
         private Aarohi.SQL.ToggleSwitch toggleNetworkDiscovery;
+        private CheckBox checkBoxTrustServerCertificate;
     }
 }
