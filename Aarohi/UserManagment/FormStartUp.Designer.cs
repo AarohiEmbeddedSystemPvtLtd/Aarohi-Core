@@ -359,17 +359,16 @@ namespace Aarohi.UserManagment
             PanelRememberMeWrapper.Controls.Add(checkBoxRememberMe);
             PanelRememberMeWrapper.DisplayMode = ExtendedUI.DisplayMode.Flex;
             PanelRememberMeWrapper.Dock = DockStyle.Bottom;
-            PanelRememberMeWrapper.JustifyContent = ExtendedUI.JustifyContent.Center;
             PanelRememberMeWrapper.Location = new Point(6, 105);
             PanelRememberMeWrapper.Name = "PanelRememberMeWrapper";
-            PanelRememberMeWrapper.Padding = new Padding(6);
+            PanelRememberMeWrapper.Padding = new Padding(140, 6, 6, 6);
             PanelRememberMeWrapper.Size = new Size(549, 30);
             PanelRememberMeWrapper.TabIndex = 1;
             // 
             // checkBoxRememberMe
             // 
             checkBoxRememberMe.AutoSize = true;
-            checkBoxRememberMe.Location = new Point(220, 6);
+            checkBoxRememberMe.Location = new Point(140, 6);
             checkBoxRememberMe.Margin = new Padding(0);
             checkBoxRememberMe.Name = "checkBoxRememberMe";
             checkBoxRememberMe.Size = new Size(109, 19);
