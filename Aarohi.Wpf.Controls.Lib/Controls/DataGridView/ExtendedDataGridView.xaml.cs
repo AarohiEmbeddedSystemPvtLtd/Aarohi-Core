@@ -493,6 +493,13 @@ public partial class ExtendedDataGridView : UserControl
         ResetSourceItems(ItemsSource);
     }
 
+    public void RefreshColumnLayout()
+    {
+        RefreshColumnHeaders();
+        RefreshPinnedColumns();
+        RefreshPagedItems();
+    }
+
     private static void OnItemsSourceChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
         ((ExtendedDataGridView)dependencyObject).ResetSourceItems(e.NewValue as IEnumerable);

@@ -1,0 +1,201 @@
+<Window x:Class="Aarohi.Wpf.Controls.Lib.Controls.Dialogs.StopCauseInputDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Stop Cause"
+        Width="560"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <Style x:Key="DialogButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="MinWidth" Value="92"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource AppBrush.Control}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBrush.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                CornerRadius="8"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource AppBrush.ControlPressed}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DialogCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppBrush.TextOnAccent}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                CornerRadius="15"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource AppBrush.ControlHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Border CornerRadius="18"
+                Background="{DynamicResource AppBrush.Surface}"
+                BorderBrush="{DynamicResource AppBrush.Border}"
+                BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect Color="#111827"
+                                  BlurRadius="32"
+                                  ShadowDepth="6"
+                                  Direction="270"
+                                  Opacity="0.3"/>
+            </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="60"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="64"/>
+                </Grid.RowDefinitions>
+
+                <Border Background="{DynamicResource AppBrush.Primary}"
+                        CornerRadius="18,18,0,0"
+                        MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                    <Grid Margin="20,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="Stop Cause"
+                                   FontFamily="Segoe UI Variable Display, Segoe UI"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppBrush.TextOnAccent}"
+                                   VerticalAlignment="Center"/>
+
+                        <Button Grid.Column="1"
+                                Width="30"
+                                Height="30"
+                                Style="{StaticResource DialogCloseButtonStyle}"
+                                ToolTip="Close"
+                                Click="Cancel_Click">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       Text="&#xE711;"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="1" Margin="20,16,20,0">
+                    <TextBlock Text="Enter the stop cause for this stopped test."
+                               Foreground="{DynamicResource AppBrush.TextSecondary}"
+                               FontSize="12"
+                               Margin="0,0,0,10"/>
+
+                    <Border BorderBrush="{DynamicResource AppBrush.Border}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Background="{DynamicResource AppBrush.Control}">
+                        <RichTextBox x:Name="StopCauseRichTextBox"
+                                     Margin="1"
+                                     Height="190"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Foreground="{DynamicResource AppBrush.TextPrimary}"
+                                     CaretBrush="{DynamicResource AppBrush.Primary}"
+                                     SelectionBrush="{DynamicResource AppBrush.Primary}"
+                                     VerticalScrollBarVisibility="Auto"
+                                     AcceptsTab="True"
+                                     SpellCheck.IsEnabled="True"
+                                     PreviewKeyDown="StopCauseRichTextBox_PreviewKeyDown"/>
+                    </Border>
+
+                    <Border Margin="0,10,0,12"
+                            Padding="12,10"
+                            CornerRadius="10"
+                            Background="{DynamicResource AppBrush.SurfaceAlt}"
+                            BorderBrush="{DynamicResource AppBrush.Border}"
+                            BorderThickness="1">
+                        <DockPanel LastChildFill="True">
+                            <Border Width="18"
+                                    Height="18"
+                                    CornerRadius="9"
+                                    Background="{DynamicResource AppBrush.Control}">
+                                <TextBlock Text="i"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <TextBlock Text="Rich text is supported. Use Ctrl+B, Ctrl+I, and Ctrl+U."
+                                       Margin="10,0,0,0"
+                                       Foreground="{DynamicResource AppBrush.TextSecondary}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Grid.Row="2"
+                        Background="{DynamicResource AppBrush.SurfaceAlt}"
+                        CornerRadius="0,0,18,18">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,18,0">
+                        <Button Content="Cancel"
+                                Style="{StaticResource DialogButtonStyle}"
+                                Click="Cancel_Click"/>
+                        <Button Content="Save"
+                                Style="{StaticResource DialogButtonStyle}"
+                                Background="{DynamicResource AppBrush.Primary}"
+                                Foreground="{DynamicResource AppBrush.TextOnAccent}"
+                                BorderThickness="0"
+                                Click="Save_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -35,7 +35,28 @@ public enum ModernMessageBoxIcon
     Success,
     Warning,
     Error,
-    Question
+    Question,
+    Info = Information
+}
+
+public static class ModernMessageBoxButtons
+{
+    public static List<string> OK => new() { "OK" };
+    public static List<string> OKCancel => new() { "Cancel", "OK" };
+    public static List<string> YesNo => new() { "No", "Yes" };
+    public static List<string> YesNoCancel => new() { "Cancel", "No", "Yes" };
+    public static List<string> Custom(params string[] buttons)
+        => buttons.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
+}
+
+public static class ModernMessageBoxResults
+{
+    public static List<string> OK => new() { "OK" };
+    public static List<string> OKCancel => new() { "Cancel", "OK" };
+    public static List<string> YesNo => new() { "No", "Yes" };
+    public static List<string> YesNoCancel => new() { "Cancel", "No", "Yes" };
+    public static List<string> Custom(params string[] results)
+        => results.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
 }
 
 /// <summary>Describes one button in a custom message box.</summary>
@@ -128,6 +149,43 @@ public static class ModernMessageBox
             DefaultResult = defaultResult
         });
     }
+
+    public static string Show(
+        string message,
+        string caption,
+        List<string> buttons,
+        List<string>? results = null,
+        ModernMessageBoxIcon icon = ModernMessageBoxIcon.Information,
+        UIElement? extraControl = null)
+    {
+        List<string> bList = buttons != null && buttons.Count > 0
+            ? buttons.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList()
+            : ModernMessageBoxButtons.OK;
+        List<string> rList = results != null && results.Count > 0
+            ? results.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList()
+            : new List<string>(bList);
+
+        var actions = new List<ModernMessageBoxAction>();
+        for (int i = 0; i < bList.Count; i++)
+        {
+            string btnText = bList[i];
+            string resKey = (rList.Count > i) ? rList[i] : btnText;
+            bool isDef = (i == bList.Count - 1);
+            bool isCanc = string.Equals(resKey, "Cancel", StringComparison.OrdinalIgnoreCase);
+            actions.Add(new ModernMessageBoxAction(btnText, resKey, isDefault: isDef, isCancel: isCanc));
+        }
+
+        return ShowCustom(message, caption, actions, icon, null, null, extraControl) ?? string.Empty;
+    }
+
+    public static string Show(
+        string message,
+        List<string>? buttons = null,
+        List<string>? results = null,
+        ModernMessageBoxIcon icon = ModernMessageBoxIcon.Information,
+        UIElement? extraControl = null,
+        string? title = null)
+        => Show(message, title ?? "Message", buttons ?? ModernMessageBoxButtons.OK, results, icon, extraControl);
 
     public static ModernMessageBoxResult Show(ModernMessageBoxOptions options)
     {

@@ -28,6 +28,7 @@ public sealed class TableColumnMetadata
     public string ReportUnit { get; set; } = string.Empty;
 
     public string LastUsedUnit { get; set; } = string.Empty;
+    public int? Order { get; set; }
 
     public bool IsPrimaryKey { get; set; }
 
